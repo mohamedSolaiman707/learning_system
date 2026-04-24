@@ -32,24 +32,20 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
   Future<void> _connectToRoom() async {
     try {
-      // 1. طلب التوكن من سوبابيس
       final token = await LiveKitService().getRoomToken(widget.roomName, widget.userName);
       
       if (token == null) {
         setState(() {
-          _errorMessage = "فشل في الحصول على توكن الدخول ";
+          _errorMessage = "فشل في الحصول على توكن الدخول";
           _isLoading = false;
         });
         return;
       }
 
-      // 2. الاتصال بسيرفر LiveKit
-      // ملاحظة: تأكد من إضافة LIVEKIT_URL في ملف الخدمة أو هنا
       const liveKitUrl = 'wss://learning-system-07wdu0v6.livekit.cloud';
       
       final room = Room();
-
-    await room.connect(liveKitUrl, token);
+      await room.connect(liveKitUrl, token);
       
       setState(() {
         _room = room;
@@ -58,7 +54,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       
     } catch (e) {
       setState(() {
-        _errorMessage = "حدث خطأ أثناء الاتصال: $e ";
+        _errorMessage = "حدث خطأ أثناء الاتصال: $e";
         _isLoading = false;
       });
     }
@@ -88,11 +84,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.white)))
             : Stack(
                 children: [
-                  // هنا نعرض فيديو المشاركين (المدرس)
                   if (_room != null)
                     ParticipantLoop(room: _room!),
                   
-                  // أزرار التحكم في الأسفل
                   Positioned(
                     bottom: 30,
                     left: 0,
@@ -142,16 +136,62 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 }
 
-// ويدجت بسيطة لعرض المشاركين
 class ParticipantLoop extends StatelessWidget {
   final Room room;
   const ParticipantLoop({super.key, required this.room});
 
   @override
   Widget build(BuildContext context) {
-    // هذه نسخة مبسطة جداً، LiveKit توفر ويدجت جاهزة مثل VideoTrackRenderer
-    return const Center(
-      child: Text("جاري عرض فيديو المدرس...", style: TextStyle(color: Colors.white)),
+    return ListenableBuilder(
+      listenable: room,
+      builder: (context, _) {
+        // نجمع كل المشاركين (المدرس والطلاب الآخرين)
+        final participants = room.remoteParticipants.values.toList();
+        
+        if (participants.isEmpty) {
+          return const Center(
+            child: Text("بانتظار دخول المدرس...", style: TextStyle(color: Colors.white54)),
+          );
+        }
+
+        return GridView.builder(
+          padding: const EdgeInsets.all(10),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 1, // عرض فيديو واحد كبير (للمدرس)
+            childAspectRatio: 16 / 9,
+          ),
+          itemCount: participants.length,
+          itemBuilder: (context, index) {
+            final participant = participants[index];
+            return Card(
+              color: Colors.grey[900],
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  // عرض فيديو المشارك
+                  VideoTrackRenderer(
+                    participant.videoTrackPublications.firstOrNull?.track as VideoTrack,
+                    fit: VideoViewFit.contain,
+                  ),
+                  // اسم المشارك في الأسفل
+                  Positioned(
+                    bottom: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      color: Colors.black54,
+                      child: Text(
+                        participant.identity ?? "مشارك",
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

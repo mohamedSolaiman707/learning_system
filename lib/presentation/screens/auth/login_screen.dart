@@ -28,22 +28,29 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
+      // 1. محاولة تسجيل الدخول
       final response = await supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (response.user != null) {
+        // 2. محاولة جلب البروفايل
         final userData = await supabase
             .from('profiles')
             .select('role')
             .eq('id', response.user!.id)
-            .single();
+            .maybeSingle(); // استخدام maybeSingle لتجنب الـ Exception
+
+        if (userData == null) {
+          throw 'لم يتم العثور على ملف شخصي لهذا الحساب. يرجى التواصل مع الإدارة.';
+        }
 
         final String role = userData['role'];
 
         if (!mounted) return;
 
+        // 3. التوجيه بناءً على الدور
         if (role == 'teacher') {
           Navigator.pushReplacementNamed(context, AppRoutes.teacherHome);
         } else if (role == 'admin') {
@@ -52,10 +59,15 @@ class _LoginScreenState extends State<LoginScreen> {
           Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
         }
       }
+    } on AuthApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في الدخول: ${e.message}')),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: البريد أو كلمة المرور غير صحيحة')),
+        SnackBar(content: Text(e.toString())),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);

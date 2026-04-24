@@ -36,21 +36,31 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (response.user != null) {
         // 2. محاولة جلب البروفايل
-        final userData = await supabase
+        var userData = await supabase
             .from('profiles')
             .select('role')
             .eq('id', response.user!.id)
-            .maybeSingle(); // استخدام maybeSingle لتجنب الـ Exception
+            .maybeSingle();
 
+        // 3. (حماية إضافية) إذا لم يجد البروفايل، نقوم بإنشائه الآن
         if (userData == null) {
-          throw 'لم يتم العثور على ملف شخصي لهذا الحساب. يرجى التواصل مع الإدارة.';
+          final String fullName = response.user!.userMetadata?['full_name'] ?? 'مستخدم';
+          final String role = response.user!.userMetadata?['role'] ?? 'student';
+          
+          await supabase.from('profiles').insert({
+            'id': response.user!.id,
+            'full_name': fullName,
+            'role': role,
+          });
+          
+          userData = {'role': role};
         }
 
         final String role = userData['role'];
 
         if (!mounted) return;
 
-        // 3. التوجيه بناءً على الدور
+        // 4. التوجيه بناءً على الدور
         if (role == 'teacher') {
           Navigator.pushReplacementNamed(context, AppRoutes.teacherHome);
         } else if (role == 'admin') {
@@ -62,12 +72,12 @@ class _LoginScreenState extends State<LoginScreen> {
     } on AuthApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ في الدخول: ${e.message}')),
+        SnackBar(content: Text('خطأ في الدخول: البريد أو كلمة المرور غير صحيحة')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(content: Text('حدث خطأ: ${e.toString()}')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -99,11 +109,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
               ),
               const SizedBox(height: 8),
-              Text(
+              const Text(
                 "سجل دخولك للمتابعة في EduConnect",
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.grey,
-                    ),
+                style: TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 40),
               TextField(

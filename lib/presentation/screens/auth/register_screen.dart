@@ -47,9 +47,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إنشاء الحساب بنجاح!')));
         Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
       }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: ${e.toString()}')));
+    }  on AuthApiException catch (e) {
+      // إذا كان الخطأ بسبب Rate Limit ولكن المستخدم تم إنشاؤه بالفعل
+      if (e.code == 'over_email_send_rate_limit' || e.message.contains('already registered')) {
+        // محاولة تسجيل الدخول مباشرة بما أن الحساب تم إنشاؤه
+        try {
+          await supabase.auth.signInWithPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
+          if (!mounted) return;
+          Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
+        } catch (signInError) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: ${e.message}')));
+        }
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: ${e.message}')));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/routes/app_routes.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -13,6 +14,48 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscureText = true;
+  bool _isLoading = false;
+
+  final supabase = Supabase.instance.client;
+
+  Future<void> _handleLogin() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await supabase.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      if (response.user != null) {
+        // جلب دور المستخدم من جدول profiles
+        final userData = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', response.user!.id)
+            .single();
+
+        final String role = userData['role'];
+
+        if (!mounted) return;
+
+        // التوجيه بناءً على الدور
+        if (role == 'teacher') {
+          Navigator.pushReplacementNamed(context, AppRoutes.teacherHome);
+        } else if (role == 'admin') {
+          Navigator.pushReplacementNamed(context, AppRoutes.adminHome);
+        } else {
+          Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في تسجيل الدخول: ${e.toString()}')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,37 +115,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () {},
-                  child: const Text("نسيت كلمة المرور؟"),
-                ),
-              ),
               const SizedBox(height: 32),
               ElevatedButton(
-                onPressed: () {
-                  // For demo, route to student home
-                  Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
-                },
-                child: const Text("دخول"),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("هل تريد الدخول كـ ؟"),
-                  TextButton(
-                    onPressed: () => Navigator.pushReplacementNamed(context, AppRoutes.teacherHome),
-                    child: const Text("مدرس"),
-                  ),
-                  const Text("|"),
-                  TextButton(
-                    onPressed: () => Navigator.pushReplacementNamed(context, AppRoutes.adminHome),
-                    child: const Text("مشرف"),
-                  ),
-                ],
+                onPressed: _isLoading ? null : _handleLogin,
+                child: _isLoading 
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text("دخول"),
               ),
             ],
           ),

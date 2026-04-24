@@ -46,9 +46,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         // تحديث أو إنشاء البروفايل (هنا نضع رقم الهاتف)
         await supabase.from('profiles').upsert({
           'id': response.user!.id,
-          'full_name': name,
-          'phone_number': phone, // نستخدم متغير phone الذي عرفناه في البداية
+          'full_name': name.toString(),
+          'phone_number': phone.toString(), // نستخدم متغير phone الذي عرفناه في البداية
           'role': 'student',
+          'created_at': DateTime.now().toIso8601String(),
         });
 
         if (!mounted) return;

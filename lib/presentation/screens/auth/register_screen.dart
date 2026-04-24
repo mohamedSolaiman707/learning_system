@@ -20,55 +20,87 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final supabase = Supabase.instance.client;
 
   Future<void> _handleRegister() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty || _nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى ملء جميع الحقول الأساسية')));
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final name = _nameController.text.trim();
+
+    if (email.isEmpty || password.isEmpty || name.isEmpty) {
+      _showErrorSnackBar('يرجى ملء جميع الحقول الأساسية');
       return;
     }
 
     setState(() => _isLoading = true);
+
     try {
-      // 1. إنشاء الحساب في Supabase Auth
+      // 1. محاولة إنشاء الحساب
       final response = await supabase.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        data: {
-          'full_name': _nameController.text.trim(),
-          'role': 'student', // القيمة الافتراضية دائماً طالب
-        },
+        email: email,
+        password: password,
+        data: {'full_name': name, 'role': 'student'},
       );
 
+      // 2. إذا نجح التسجيل أو استرجع بيانات المستخدم
       if (response.user != null) {
-        // 2. تحديث رقم الهاتف في البروفايل (الذي تم إنشاؤه تلقائياً بواسطة الـ Trigger)
-        await supabase.from('profiles').update({
+        // تحديث أو إنشاء البروفايل لضمان وجود البيانات
+        await supabase.from('profiles').upsert({
+          'id': response.user!.id,
+          'full_name': name,
           'phone_number': _phoneController.text.trim(),
-        }).eq('id', response.user!.id);
+          'role': 'student',
+        });
 
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إنشاء الحساب بنجاح!')));
-        Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
-      }
-    }  on AuthApiException catch (e) {
-      // إذا كان الخطأ بسبب Rate Limit ولكن المستخدم تم إنشاؤه بالفعل
-      if (e.code == 'over_email_send_rate_limit' || e.message.contains('already registered')) {
-        // محاولة تسجيل الدخول مباشرة بما أن الحساب تم إنشاؤه
-        try {
-          await supabase.auth.signInWithPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
-          if (!mounted) return;
+
+        // إذا حصلنا على جلسة (Session) فهذا يعني أن الدخول نجح فوراً
+        if (response.session != null) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إنشاء الحساب والدخول بنجاح!')));
           Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
-        } catch (signInError) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: ${e.message}')));
+        } else {
+          // إذا لم تكن هناك جلسة، فهذا يعني أن سوبابيس لا يزال يطلب التأكيد
+          _showInfoDialog("تم إنشاء الحساب! ولكن يبدو أن نظام التأكيد لا يزال مفعلاً في سوبابيس. يرجى تفعيل حسابك من الإيميل.");
+        }
+      }
+    } on AuthApiException catch (e) {
+      if (!mounted) return;
+
+      // إذا كان الحساب موجوداً بالفعل (ربما من تجربة سابقة)
+      if (e.message.contains('already registered')) {
+        try {
+          // نحاول تسجيل الدخول مباشرة بالبيانات التي أدخلها المستخدم
+          final loginRes = await supabase.auth.signInWithPassword(email: email, password: password);
+          if (loginRes.session != null) {
+            Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
+            return;
+          }
+        } catch (loginError) {
+          _showErrorSnackBar("هذا الحساب موجود بالفعل، ولكن كلمة المرور غير صحيحة أو الحساب غير مفعل.");
         }
       } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: ${e.message}')));
+        _showErrorSnackBar(e.message);
       }
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorSnackBar("حدث خطأ غير متوقع: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+  }
+
+  void _showInfoDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("تنبيه"),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("حسناً")),
+        ],
+      ),
+    );
   }
 
   @override
@@ -100,7 +132,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _phoneController,
-                decoration: const InputDecoration(hintText: "رقم الواتساب (مثال: 2010...)", prefixIcon: Icon(IconlyLight.call)),
+                decoration: const InputDecoration(hintText: "رقم الواتساب", prefixIcon: Icon(IconlyLight.call)),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -111,7 +143,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 32),
               ElevatedButton(
                 onPressed: _isLoading ? null : _handleRegister,
-                child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("إنشاء الحساب"),
+                child: _isLoading 
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                    : const Text("إنشاء الحساب"),
               ),
               const SizedBox(height: 16),
               Row(

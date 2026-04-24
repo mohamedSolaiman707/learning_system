@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/routes/app_routes.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -22,22 +23,30 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: Colors.white,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.school_rounded,
-              size: 100,
-              color: Colors.white,
+            SvgPicture.asset(
+              'assets/icons/logo.svg',
+              width: 120,
+              height: 120,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             Text(
-              "E-Learning System",
+              "EduConnect",
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: Colors.white,
+                    color: Theme.of(context).primaryColor,
                     fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "نظام الإدارة التعليمية المتكامل",
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.grey,
                   ),
             ),
           ],

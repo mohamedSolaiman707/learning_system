@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/models/session_model.dart';
 import '../widgets/teacher_stat_card.dart';
 import '../attendance/attendance_screen.dart';
-import '../../../core/models/session_model.dart';
 import '../../video_room/video_room_screen.dart';
 
 class TeacherHomeTab extends StatefulWidget {
@@ -41,15 +41,24 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
           .lte('start_time', '${today}T23:59:59')
           .order('start_time', ascending: true);
 
+      final List<dynamic> sessionsData = sessionsResponse as List;
+      
       // 2. حساب إجمالي الطلاب المسجلين في حصص اليوم
-      final enrollmentsResponse = await supabase
-          .from('enrollments')
-          .select('id', count: CountOption.exact)
-          .in_('session_id', (sessionsResponse as List).map((s) => s['id']).toList());
+      if (sessionsData.isNotEmpty) {
+        // تصحيح: استخدام inFilter بدلاً من in_
+        final enrollmentsRes = await supabase
+            .from('enrollments')
+            .select()
+            .inFilter('session_id', sessionsData.map((s) => s['id']).toList())
+            .count(CountOption.exact);
+        
+        setState(() {
+          _totalStudents = enrollmentsRes.count;
+        });
+      }
 
       setState(() {
-        _todaySessions = (sessionsResponse).map((s) => SessionModel.fromMap(s)).toList();
-        _totalStudents = enrollmentsResponse.count;
+        _todaySessions = sessionsData.map((s) => SessionModel.fromMap(s)).toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -126,7 +135,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                     ),
                     const SizedBox(height: 12),
                     ListTile(
-                      leading: const Icon(IconlyLight.user_3, color: Colors.orange),
+                      leading: const Icon(IconlyLight.user, color: Colors.orange),
                       title: const Text("تسجيل الحضور"),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: () {

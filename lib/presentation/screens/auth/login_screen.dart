@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/routes/app_routes.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -15,10 +16,16 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscureText = true;
   bool _isLoading = false;
-
   final supabase = Supabase.instance.client;
 
   Future<void> _handleLogin() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى إدخال البريد الإلكتروني وكلمة المرور')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       final response = await supabase.auth.signInWithPassword(
@@ -27,7 +34,6 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (response.user != null) {
-        // جلب دور المستخدم من جدول profiles
         final userData = await supabase
             .from('profiles')
             .select('role')
@@ -38,7 +44,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (!mounted) return;
 
-        // التوجيه بناءً على الدور
         if (role == 'teacher') {
           Navigator.pushReplacementNamed(context, AppRoutes.teacherHome);
         } else if (role == 'admin') {
@@ -50,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ في تسجيل الدخول: ${e.toString()}')),
+        SnackBar(content: Text('خطأ: البريد أو كلمة المرور غير صحيحة')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -68,10 +73,10 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const SizedBox(height: 50),
               Center(
-                child: Icon(
-                  Icons.school_rounded,
-                  size: 80,
-                  color: Theme.of(context).primaryColor,
+                child: SvgPicture.asset(
+                  'assets/icons/logo.svg',
+                  width: 80,
+                  height: 80,
                 ),
               ),
               const SizedBox(height: 32),
@@ -83,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                "سجل دخولك للمتابعة",
+                "سجل دخولك للمتابعة في EduConnect",
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.grey,
                     ),
@@ -104,14 +109,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   hintText: "كلمة المرور",
                   prefixIcon: const Icon(IconlyLight.lock),
                   suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureText ? IconlyLight.hide : IconlyLight.show,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscureText = !_obscureText;
-                      });
-                    },
+                    icon: Icon(_obscureText ? IconlyLight.hide : IconlyLight.show),
+                    onPressed: () => setState(() => _obscureText = !_obscureText),
                   ),
                 ),
               ),
@@ -119,8 +118,19 @@ class _LoginScreenState extends State<LoginScreen> {
               ElevatedButton(
                 onPressed: _isLoading ? null : _handleLogin,
                 child: _isLoading 
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Text("دخول"),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("ليس لديك حساب؟"),
+                  TextButton(
+                    onPressed: () => Navigator.pushNamed(context, AppRoutes.register),
+                    child: const Text("أنشئ حسابك الآن"),
+                  ),
+                ],
               ),
             ],
           ),

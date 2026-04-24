@@ -3,10 +3,10 @@ import 'package:iconly/iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/models/session_model.dart';
 import '../widgets/next_class_card.dart';
 import '../widgets/upcoming_class_item.dart';
 import '../../video_room/video_room_screen.dart';
-import '../../../core/models/session_model.dart';
 
 class StudentHomeTab extends StatefulWidget {
   const StudentHomeTab({super.key});

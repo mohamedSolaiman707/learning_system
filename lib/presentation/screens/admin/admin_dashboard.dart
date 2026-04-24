@@ -31,19 +31,38 @@ class _AdminDashboardState extends State<AdminDashboard> {
     try {
       final today = DateTime.now().toIso8601String().split('T')[0];
 
-      // جلب الإحصائيات بالتوازي لتسريع الأداء
-      final results = await Future.wait([
-        supabase.from('profiles').select('id', count: CountOption.exact).eq('role', 'student'),
-        supabase.from('profiles').select('id', count: CountOption.exact).eq('role', 'teacher'),
-        supabase.from('rooms').select('id', count: CountOption.exact).eq('is_active', true),
-        supabase.from('sessions').select('id', count: CountOption.exact).gte('start_time', '${today}T00:00:00'),
-      ]);
+      // جلب الإحصائيات باستخدام الطريقة الصحيحة في إصدار 2.x
+      // نستخدم .count() ونقوم بطلب الـ response بالكامل للحصول على الـ count
+      
+      final studentRes = await supabase
+          .from('profiles')
+          .select()
+          .eq('role', 'student')
+          .count(CountOption.exact);
+
+      final teacherRes = await supabase
+          .from('profiles')
+          .select()
+          .eq('role', 'teacher')
+          .count(CountOption.exact);
+
+      final roomRes = await supabase
+          .from('rooms')
+          .select()
+          .eq('is_active', true)
+          .count(CountOption.exact);
+
+      final sessionRes = await supabase
+          .from('sessions')
+          .select()
+          .gte('start_time', '${today}T00:00:00')
+          .count(CountOption.exact);
 
       setState(() {
-        _totalStudents = results[0].count;
-        _totalTeachers = results[1].count;
-        _activeRooms = results[2].count;
-        _todaySessions = results[3].count;
+        _totalStudents = studentRes.count;
+        _totalTeachers = teacherRes.count;
+        _activeRooms = roomRes.count;
+        _todaySessions = sessionRes.count;
         _isLoading = false;
       });
     } catch (e) {
@@ -62,7 +81,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         actions: [
           IconButton(
             onPressed: _loadStats,
-            icon: const Icon(IconlyLight.arrow_right_2), // Refresh icon
+            icon: const Icon(IconlyLight.arrow_right_2),
           ),
           IconButton(
             onPressed: () => supabase.auth.signOut().then((_) => Navigator.pushReplacementNamed(context, '/login')),
@@ -111,7 +130,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           AdminStatCard(
                             title: "إجمالي المعلمين",
                             value: _totalTeachers.toString(),
-                            icon: IconlyLight.user_3,
+                            icon: IconlyLight.user,
                             color: Colors.orange,
                           ),
                           AdminStatCard(

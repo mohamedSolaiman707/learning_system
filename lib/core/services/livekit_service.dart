@@ -1,14 +1,19 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class LiveKitService {
-  static String get supabaseUrl => dotenv.get('SUPABASE_URL', fallback: '');
-  static String get supabaseAnonKey => dotenv.get('SUPABASE_ANON_KEY', fallback: '');
-  static String get liveKitUrl => dotenv.get('LIVEKIT_URL', fallback: '');
+  // استخدام String.fromEnvironment بدلاً من dotenv لضمان عملها على الويب
+  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const String supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  static const String liveKitUrl = String.fromEnvironment('LIVEKIT_URL');
 
   Future<String?> getRoomToken(String roomName, String userName) async {
     try {
+      if (supabaseUrl.isEmpty) {
+        print('Error: SUPABASE_URL is not set.');
+        return null;
+      }
+
       final response = await http.post(
         Uri.parse('$supabaseUrl/functions/v1/get-livekit-token'),
         headers: {

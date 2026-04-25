@@ -85,6 +85,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   void _filterAndRefreshLocal() {
     final now = DateTime.now();
     setState(() {
+      // إظهار فقط الحصص التي لم تنتهِ بعد
       _sessions = _sessions.where((s) => s.endTime.isAfter(now)).toList()
         ..sort((a, b) => a.startTime.compareTo(b.startTime));
     });
@@ -136,7 +137,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     final user = supabase.auth.currentUser;
     final userName = user?.userMetadata?['full_name'] ?? "الطالب";
     
-    // جلب أول حصة لم تنتهِ بعد
+    // جلب أول حصة لم تنتهِ بعد (القادمة أو الحالية)
     final nextSession = _sessions.isNotEmpty ? _sessions.first : null;
 
     return Scaffold(
@@ -178,7 +179,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                       _buildEmptyState(),
 
                     const SizedBox(height: 30),
-                    const Text("حصص اليوم القادمة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text("حصصك القادمة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
                     if (_sessions.isEmpty)
                       const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("لا توجد حصص، انضم عبر كود الآن", style: TextStyle(color: Colors.grey))))

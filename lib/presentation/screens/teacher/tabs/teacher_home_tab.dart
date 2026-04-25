@@ -186,7 +186,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                 );
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(success ? "تم الرفع بنجاح" : "فشل الرفع")),
+                    SnackBar(content: Text(success != null ? "تم الرفع بنجاح" : "فشل الرفع")),
                   );
                 }
               },

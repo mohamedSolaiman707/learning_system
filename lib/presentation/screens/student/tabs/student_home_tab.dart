@@ -31,8 +31,8 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   void initState() {
     super.initState();
     _loadData();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (mounted) _filterAndRefreshLocal();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+      _loadData(showLoading: false);
     });
   }
 
@@ -47,6 +47,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     try {
       final userId = supabase.auth.currentUser!.id;
       
+      // جلب الحصص والمصادر في نفس الوقت
       final results = await Future.wait([
         supabase.from('enrollments').select('sessions(*, profiles:teacher_id(full_name), rooms(is_active))').eq('student_id', userId),
         supabase.from('resources').select().order('created_at', ascending: false),
@@ -199,14 +200,11 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                     if (_sessions.isEmpty)
                       const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("لا توجد حصص، انضم عبر كود الآن", style: TextStyle(color: Colors.grey))))
                     else
-                      ..._sessions.map((s) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: UpcomingClassItem(
-                          subject: s.subjectName,
-                          teacher: s.teacherName,
-                          time: DateFormat('hh:mm a').format(s.startTime),
-                          duration: "${s.endTime.difference(s.startTime).inMinutes} دقيقة",
-                        ),
+                      ..._sessions.map((s) => UpcomingClassItem(
+                        subject: s.subjectName,
+                        teacher: s.teacherName,
+                        time: DateFormat('hh:mm a').format(s.startTime),
+                        duration: "${s.endTime.difference(s.startTime).inMinutes} دقيقة",
                       )),
                   ],
                 ),
@@ -239,7 +237,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   }
 
   Widget _buildLoadingSkeleton() {
-    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: ListView.builder(padding: const EdgeInsets.all(20), itemCount: 3, itemBuilder: (_, __) => Container(height: 100, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)))));
+    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: Container());
   }
 
   Widget _buildEmptyState() {

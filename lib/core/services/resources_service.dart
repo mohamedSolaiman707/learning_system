@@ -21,34 +21,34 @@ class ResourcesService {
     }
   }
 
-  Future<bool> uploadResource({
+  // الآن تعيد String? (null يعني نجاح، والنص هو رسالة الخطأ)
+  Future<String?> uploadResource({
     required String sessionId,
     required String title,
     required PlatformFile pickerFile,
   }) async {
     try {
-      final userId = supabase.auth.currentUser!.id;
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) return "يجب تسجيل الدخول أولاً";
+
       final fileExt = pickerFile.extension ?? 'pdf';
-      final fileName = "${DateTime.now().millisecondsSinceEpoch}.${fileExt}";
-      // مسار الملف: معرف المدرس / اسم الملف
+      final fileName = "${DateTime.now().millisecondsSinceEpoch}.$fileExt";
       final filePath = '$userId/$fileName';
 
-      // تحديد الـ Content Type الصحيح لضمان فتح الملف في المتصفح
       String contentType = 'application/octet-stream';
       if (fileExt.toLowerCase() == 'pdf') contentType = 'application/pdf';
       if (['jpg', 'jpeg', 'png'].contains(fileExt.toLowerCase())) contentType = 'image/$fileExt';
 
-      debugPrint("Attempting to upload to path: $filePath with type: $contentType");
-
+      // 1. محاولة الرفع للتخزين
       if (kIsWeb) {
-        if (pickerFile.bytes == null) throw "File bytes are null";
+        if (pickerFile.bytes == null) return "لم يتم العثور على بيانات الملف";
         await supabase.storage.from('resources').uploadBinary(
           filePath,
           pickerFile.bytes!,
           fileOptions: FileOptions(contentType: contentType, upsert: true),
         );
       } else {
-        if (pickerFile.path == null) throw "File path is null";
+        if (pickerFile.path == null) return "مسار الملف غير صحيح";
         await supabase.storage.from('resources').upload(
           filePath,
           File(pickerFile.path!),
@@ -58,7 +58,7 @@ class ResourcesService {
 
       final String fileUrl = supabase.storage.from('resources').getPublicUrl(filePath);
 
-      // الخطوة الحاسمة: تسجيل الملف في قاعدة البيانات
+      // 2. محاولة التسجيل في جدول البيانات
       await supabase.from('resources').insert({
         'session_id': sessionId,
         'title': title,
@@ -67,12 +67,13 @@ class ResourcesService {
         'uploaded_by': userId,
       });
 
-      debugPrint("Upload process completed successfully!");
-      return true;
+      return null; // نجاح
+    } on StorageException catch (e) {
+      return "خطأ في التخزين: ${e.message}";
+    } on PostgrestException catch (e) {
+      return "خطأ في قاعدة البيانات: ${e.message}";
     } catch (e) {
-      // طباعة الخطأ الحقيقي في الـ Console لمعرفته
-      debugPrint("UPLOAD ERROR DETAILS: $e");
-      return false;
+      return "خطأ غير متوقع: $e";
     }
   }
 }

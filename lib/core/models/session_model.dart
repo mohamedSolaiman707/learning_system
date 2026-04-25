@@ -16,10 +16,10 @@ class SessionModel {
   });
 
   factory SessionModel.fromMap(Map<String, dynamic> map) {
-    final startTime = DateTime.parse(map['start_time'] ?? DateTime.now().toIso8601String());
-    final endTime = DateTime.parse(map['end_time'] ?? DateTime.now().add(const Duration(hours: 1)).toIso8601String());
+    // التأكد من تحويل الوقت القادم من UTC إلى وقت الجهاز المحلي (toLocal)
+    final startTime = DateTime.parse(map['start_time']).toLocal();
+    final endTime = DateTime.parse(map['end_time']).toLocal();
     
-    // جلب اسم المدرس بشكل آمن لتجنب الـ Null Check Error
     String teacherName = "مدرس غير معروف";
     if (map['profiles'] != null) {
       teacherName = map['profiles']['full_name'] ?? "مدرس";
@@ -31,7 +31,10 @@ class SessionModel {
       teacherName: teacherName,
       startTime: startTime,
       endTime: endTime,
-      isLive: false, // يتم تعيينها في الـ Tab بناءً على جدول rooms
+      isLive: false,
     );
   }
+
+  // دالة ذكية للتحقق هل الحصة انتهت فعلياً أم لا
+  bool get hasEnded => DateTime.now().isAfter(endTime);
 }

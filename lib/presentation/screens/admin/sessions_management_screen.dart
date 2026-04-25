@@ -87,6 +87,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
   void _showSessionSheet({Map<String, dynamic>? session}) {
     final isEditing = session != null;
     final subjectController = TextEditingController(text: session?['subject_name']);
+    final codeController = TextEditingController(text: session?['class_code']);
     String? selectedTeacherId = session?['teacher_id'];
     DateTime selectedDate = isEditing ? DateTime.parse(session['start_time']) : DateTime.now();
     TimeOfDay selectedTime = isEditing ? TimeOfDay.fromDateTime(DateTime.parse(session['start_time'])) : TimeOfDay.now();
@@ -107,6 +108,11 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               TextField(
                 controller: subjectController,
                 decoration: const InputDecoration(labelText: "اسم المادة", prefixIcon: Icon(IconlyLight.document)),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: codeController,
+                decoration: const InputDecoration(labelText: "كود الحصة (اختياري)", hintText: "مثلاً: MATH101", prefixIcon: Icon(IconlyLight.password)),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
@@ -150,9 +156,10 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                     id: session?['id'],
                     data: {
                       'subject_name': subjectController.text,
+                      'class_code': codeController.text.trim().toUpperCase(),
                       'teacher_id': selectedTeacherId,
                       'start_time': startDateTime.toIso8601String(),
-                      'end_time': startDateTime.add(const Duration(hours: 1)).toIso8601String(), // افتراضياً ساعة واحدة
+                      'end_time': startDateTime.add(const Duration(hours: 1)).toIso8601String(),
                     },
                   );
                   Navigator.pop(context);
@@ -185,6 +192,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                   final session = _sessions[index];
                   final startTime = DateTime.parse(session['start_time']);
                   final teacherName = session['profiles']?['full_name'] ?? 'غير معروف';
+                  final classCode = session['class_code'] ?? '---';
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 16),
@@ -197,7 +205,14 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                         child: const Icon(IconlyLight.video, color: Colors.blue),
                       ),
                       title: Text(session['subject_name'] ?? 'بدون عنوان', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      subtitle: Text("المدرس: $teacherName\nالموعد: ${DateFormat('yyyy/MM/dd - hh:mm a').format(startTime)}"),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("المدرس: $teacherName"),
+                          Text("الكود: $classCode", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                          Text("الموعد: ${DateFormat('yyyy/MM/dd - hh:mm a').format(startTime)}"),
+                        ],
+                      ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [

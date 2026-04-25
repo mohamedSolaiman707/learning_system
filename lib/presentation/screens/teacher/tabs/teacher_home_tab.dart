@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:iconly/iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
@@ -18,6 +19,7 @@ class TeacherHomeTab extends StatefulWidget {
 class _TeacherHomeTabState extends State<TeacherHomeTab> {
   final supabase = Supabase.instance.client;
   bool _isLoading = true;
+  List<Map<String, dynamic>> _todaySessionsRaw = [];
   List<SessionModel> _todaySessions = [];
   int _totalStudents = 0;
 
@@ -34,7 +36,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       final teacherId = supabase.auth.currentUser!.id;
       final today = DateTime.now().toIso8601String().split('T')[0];
 
-      // 1. جلب حصص اليوم
       final sessionsResponse = await supabase
           .from('sessions')
           .select('*, profiles:teacher_id(full_name)')
@@ -43,11 +44,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
           .lte('start_time', '${today}T23:59:59')
           .order('start_time', ascending: true);
 
-      final List<dynamic> sessionsData = sessionsResponse as List;
+      _todaySessionsRaw = List<Map<String, dynamic>>.from(sessionsResponse);
       
-      // 2. حساب إجمالي الطلاب المسجلين في حصص اليوم
-      if (sessionsData.isNotEmpty) {
-        final List<String> sessionIds = sessionsData.map((s) => s['id'].toString()).toList();
+      if (_todaySessionsRaw.isNotEmpty) {
+        final List<String> sessionIds = _todaySessionsRaw.map((s) => s['id'].toString()).toList();
         final enrollmentsRes = await supabase
             .from('enrollments')
             .select()
@@ -60,7 +60,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       }
 
       setState(() {
-        _todaySessions = sessionsData.map((s) => SessionModel.fromMap(s)).toList();
+        _todaySessions = _todaySessionsRaw.map((s) => SessionModel.fromMap(s)).toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -100,6 +100,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   @override
   Widget build(BuildContext context) {
     final currentSession = _todaySessions.isNotEmpty ? _todaySessions.first : null;
+    final currentSessionRaw = _todaySessionsRaw.isNotEmpty ? _todaySessionsRaw.first : null;
     final teacherName = supabase.auth.currentUser?.userMetadata?['full_name'] ?? "المدرس";
 
     return Scaffold(
@@ -122,9 +123,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                     const Text("الحصة القادمة", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     if (currentSession != null)
-                      _buildAnimatedCard(
-                        child: _buildCurrentSessionCard(currentSession),
-                      )
+                      _buildCurrentSessionCard(currentSession, currentSessionRaw?['class_code'])
                     else
                       _buildEmptyState(),
                     const SizedBox(height: 32),
@@ -142,7 +141,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     return AppBar(
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
-      title: const Text("لوحة المدرس"),
+      title: const Text("EduConnect Teacher", style: TextStyle(fontWeight: FontWeight.bold)),
       actions: [
         IconButton(
           onPressed: () => supabase.auth.signOut().then((_) => Navigator.pushReplacementNamed(context, '/login')),
@@ -154,68 +153,72 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   }
 
   Widget _buildHeader(String name) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text("أهلاً بك، 👋", style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
-        Text("أ. $name", style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-      ],
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text("أهلاً بك، 👋", style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
+      Text("أ. $name", style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+    ]);
   }
 
   Widget _buildStatsRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: TeacherStatCard(
-            title: "إجمالي الطلاب",
-            value: _totalStudents.toString(),
-            icon: IconlyLight.user_1,
-            color: Colors.blue,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: TeacherStatCard(
-            title: "حصص اليوم",
-            value: _todaySessions.length.toString(),
-            icon: IconlyLight.video,
-            color: Colors.orange,
-          ),
-        ),
-      ],
-    );
+    return Row(children: [
+      Expanded(child: TeacherStatCard(title: "إجمالي الطلاب", value: _totalStudents.toString(), icon: IconlyLight.user_1, color: Colors.blue)),
+      const SizedBox(width: 16),
+      Expanded(child: TeacherStatCard(title: "حصص اليوم", value: _todaySessions.length.toString(), icon: IconlyLight.video, color: Colors.orange)),
+    ]);
   }
 
-  Widget _buildCurrentSessionCard(SessionModel session) {
+  Widget _buildCurrentSessionCard(SessionModel session, String? classCode) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: [Colors.blue.shade700, Colors.blue.shade500]),
         borderRadius: BorderRadius.circular(28),
+        boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              const Icon(IconlyLight.video, color: Colors.white, size: 28),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(session.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    Text("${DateFormat('hh:mm a').format(session.startTime)} - ${DateFormat('hh:mm a').format(session.endTime)}", style: TextStyle(color: Colors.white.withOpacity(0.8))),
-                  ],
-                ),
+          Row(children: [
+            const Icon(IconlyLight.video, color: Colors.white, size: 28),
+            const SizedBox(width: 16),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(session.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              Text("${DateFormat('hh:mm a').format(session.startTime)} - ${DateFormat('hh:mm a').format(session.endTime)}", style: TextStyle(color: Colors.white.withOpacity(0.8))),
+            ])),
+          ]),
+          if (classCode != null && classCode.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text("كود انضمام الطلاب", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    Text(classCode, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                  ]),
+                  IconButton(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: classCode));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ الكود! أرسله لطلابك الآن.")));
+                    },
+                    icon: const Icon(Icons.copy_all_rounded, color: Colors.white),
+                    tooltip: "نسخ الكود",
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () => _handleStartSession(session),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.blue.shade700),
-            child: const Text("بدء البث المباشر الآن"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.blue.shade700,
+              minimumSize: const Size(double.infinity, 56),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            ),
+            child: const Text("بدء البث المباشر الآن", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -224,9 +227,13 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
 
   Widget _buildQuickActions(SessionModel? currentSession) {
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20)],
+      ),
       child: ListTile(
-        leading: const Icon(IconlyLight.user, color: Colors.orange),
+        leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: const Icon(IconlyLight.user, color: Colors.orange)),
         title: const Text("تسجيل الحضور والغياب", style: TextStyle(fontWeight: FontWeight.bold)),
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: () {
@@ -239,15 +246,11 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   }
 
   Widget _buildLoadingSkeleton() {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey.shade300,
-      highlightColor: Colors.grey.shade100,
-      child: Container(),
-    );
+    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: Container());
   }
 
   Widget _buildEmptyState() {
-    return const Center(child: Text("لا توجد حصص مجدولة"));
+    return const Center(child: Text("لا توجد حصص مجدولة لليوم"));
   }
 
   Widget _buildAnimatedCard({required Widget child}) {

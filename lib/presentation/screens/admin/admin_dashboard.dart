@@ -3,6 +3,7 @@ import 'package:iconly/iconly.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shimmer/shimmer.dart';
+import 'admin_settings_screen.dart';
 import 'widgets/admin_stat_card.dart';
 import 'users_management_screen.dart';
 import 'sessions_management_screen.dart';
@@ -230,7 +231,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         _buildSidebarItem(IconlyBold.chart, "لوحة التحكم", true, () {}),
         _buildSidebarItem(IconlyLight.user_1, "إدارة المستخدمين", false, () => Navigator.push(context, MaterialPageRoute(builder: (context) => const UsersManagementScreen()))),
         _buildSidebarItem(IconlyLight.video, "الجلسات والحصص", false, () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SessionsManagementScreen()))),
-        _buildSidebarItem(IconlyLight.setting, "الإعدادات", false, () {}),
+        _buildSidebarItem(IconlyLight.setting, "الإعدادات", false, () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminSettingsScreen()))),
         const Spacer(),
         _buildSidebarItem(IconlyLight.logout, "تسجيل الخروج", false, () => supabase.auth.signOut().then((_) => Navigator.pushReplacementNamed(context, '/login')), isDestructive: true),
         const SizedBox(height: 20),

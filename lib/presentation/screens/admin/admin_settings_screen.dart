@@ -40,7 +40,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 (val) => setState(() => _maintenanceMode = val),
               ),
               _buildSwitchItem(
-                IconlyLight.user_plus,
+                IconlyLight.add_user,
                 "تسجيل الطلاب الجدد",
                 "السماح بإنشاء حسابات طلاب جديدة",
                 _allowGuestRegistration,

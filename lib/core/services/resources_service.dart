@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 class ResourcesService {
   final supabase = Supabase.instance.client;
 
-  // 1. جلب المصادر الخاصة بحصة معينة
   Future<List<ResourceModel>> getResources(String sessionId) async {
     try {
       final response = await supabase
@@ -22,7 +21,6 @@ class ResourcesService {
     }
   }
 
-  // 2. منطق رفع ملف جديد
   Future<bool> uploadResource({
     required String sessionId,
     required String title,
@@ -30,39 +28,47 @@ class ResourcesService {
   }) async {
     try {
       final userId = supabase.auth.currentUser!.id;
-      final fileName = "${DateTime.now().millisecondsSinceEpoch}_${pickerFile.name}";
-      final filePath = 'resources/$fileName';
+      // توليد اسم فريد للملف لتجنب التضارب
+      final fileExt = pickerFile.extension ?? 'pdf';
+      final fileName = "${DateTime.now().millisecondsSinceEpoch}.${fileExt}";
+      final filePath = '$userId/$fileName'; // تنظيم الملفات داخل مجلدات باسم المدرس
 
-      // رفع الملف إلى Supabase Storage
+      debugPrint("Starting upload for: $filePath");
+
       if (kIsWeb) {
+        if (pickerFile.bytes == null) {
+          debugPrint("Error: File bytes are null on web");
+          return false;
+        }
         await supabase.storage.from('resources').uploadBinary(
           filePath,
           pickerFile.bytes!,
-          fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+          fileOptions: FileOptions(contentType: 'application/$fileExt', upsert: true),
         );
       } else {
         await supabase.storage.from('resources').upload(
           filePath,
           File(pickerFile.path!),
-          fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+          fileOptions: FileOptions(contentType: 'application/$fileExt', upsert: true),
         );
       }
 
-      // الحصول على الرابط العام للملف
+      // الحصول على الرابط
       final String fileUrl = supabase.storage.from('resources').getPublicUrl(filePath);
+      debugPrint("File uploaded successfully. URL: $fileUrl");
 
-      // تسجيل بيانات الملف في جدول resources
+      // ربط الملف بالحصّة في جدول الداتابيز
       await supabase.from('resources').insert({
         'session_id': sessionId,
         'title': title,
         'file_url': fileUrl,
-        'file_type': pickerFile.extension ?? 'pdf',
+        'file_type': fileExt,
         'uploaded_by': userId,
       });
 
       return true;
     } catch (e) {
-      debugPrint("Upload error: $e");
+      debugPrint("CRITICAL UPLOAD ERROR: $e");
       return false;
     }
   }

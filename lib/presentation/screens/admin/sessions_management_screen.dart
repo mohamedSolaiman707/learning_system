@@ -96,9 +96,9 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
     final subjectController = TextEditingController(text: session?['subject_name']);
     final codeController = TextEditingController(text: session?['class_code']);
     String? selectedTeacherId = session?['teacher_id'];
-    DateTime selectedDate = isEditing ? DateTime.parse(session['start_time']) : DateTime.now();
-    TimeOfDay selectedTime = isEditing ? TimeOfDay.fromDateTime(DateTime.parse(session['start_time'])) : TimeOfDay.now();
-    int selectedDuration = 60; // المدة الافتراضية بالدقائق
+    DateTime selectedDate = isEditing ? DateTime.parse(session['start_time']).toLocal() : DateTime.now();
+    TimeOfDay selectedTime = isEditing ? TimeOfDay.fromDateTime(DateTime.parse(session['start_time']).toLocal()) : TimeOfDay.now();
+    int selectedDuration = 60;
 
     showModalBottomSheet(
       context: context,
@@ -142,7 +142,6 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                 decoration: const InputDecoration(labelText: "مدة الحصة", prefixIcon: Icon(IconlyLight.time_circle)),
                 items: const [
                   DropdownMenuItem(value: 30, child: Text("30 دقيقة")),
-                  DropdownMenuItem(value: 45, child: Text("45 دقيقة")),
                   DropdownMenuItem(value: 60, child: Text("ساعة واحدة")),
                   DropdownMenuItem(value: 90, child: Text("ساعة ونصف")),
                   DropdownMenuItem(value: 120, child: Text("ساعتين")),
@@ -179,15 +178,18 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               ElevatedButton(
                 onPressed: () {
                   if (subjectController.text.isEmpty || selectedTeacherId == null) return;
-                  final startDateTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute);
+                  // تحويل الوقت المختار إلى UTC قبل الحفظ لضمان الدقة
+                  final startLocal = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute);
+                  final endLocal = startLocal.add(Duration(minutes: selectedDuration));
+                  
                   _saveSession(
                     id: session?['id'],
                     data: {
                       'subject_name': subjectController.text,
                       'class_code': codeController.text.trim().toUpperCase(),
                       'teacher_id': selectedTeacherId,
-                      'start_time': startDateTime.toIso8601String(),
-                      'end_time': startDateTime.add(Duration(minutes: selectedDuration)).toIso8601String(),
+                      'start_time': startLocal.toUtc().toIso8601String(),
+                      'end_time': endLocal.toUtc().toIso8601String(),
                     },
                   );
                   Navigator.pop(context);
@@ -216,8 +218,8 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               itemCount: _sessions.length,
               itemBuilder: (context, index) {
                 final session = _sessions[index];
-                final startTime = DateTime.parse(session['start_time']);
-                final endTime = DateTime.parse(session['end_time']);
+                final startTime = DateTime.parse(session['start_time']).toLocal();
+                final endTime = DateTime.parse(session['end_time']).toLocal();
                 final duration = endTime.difference(startTime).inMinutes;
 
                 return Card(

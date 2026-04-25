@@ -27,12 +27,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   }
 
   Future<void> _loadTeacherData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final teacherId = supabase.auth.currentUser!.id;
       final today = DateTime.now().toIso8601String().split('T')[0];
 
-      // 1. جلب حصص اليوم
       final sessionsResponse = await supabase
           .from('sessions')
           .select('*, profiles:teacher_id(full_name)')
@@ -43,9 +43,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
 
       final List<dynamic> sessionsData = sessionsResponse as List;
       
-      // 2. حساب إجمالي الطلاب المسجلين في حصص اليوم
       if (sessionsData.isNotEmpty) {
-        // تصحيح: استخدام inFilter بدلاً من in_
         final enrollmentsRes = await supabase
             .from('enrollments')
             .select()
@@ -63,7 +61,38 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       });
     } catch (e) {
       print("Error loading teacher data: $e");
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // دالة بدء الحصة تقنياً
+  Future<void> _handleStartSession(SessionModel session) async {
+    setState(() => _isLoading = true);
+    try {
+      // استدعاء دالة SQL لإنشاء الغرفة
+      await supabase.rpc('start_teacher_session', params: {
+        'p_session_id': session.id,
+      });
+
+      if (!mounted) return;
+
+      // الانتقال لغرفة الفيديو
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VideoRoomScreen(
+            title: "بث مباشر: ${session.subjectName}",
+            roomName: "room_${session.id}",
+            userName: "Teacher_${session.teacherName}",
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("خطأ في بدء الحصة: $e")),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -135,7 +164,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                     ),
                     const SizedBox(height: 12),
                     ListTile(
-                      leading: const Icon(IconlyLight.user, color: Colors.orange),
+                      leading: const Icon(IconlyLight.user_3, color: Colors.orange),
                       title: const Text("تسجيل الحضور"),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: () {
@@ -203,18 +232,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
           ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => VideoRoomScreen(
-                    title: "بث: ${session.subjectName}",
-                    roomName: "room_${session.id}",
-                    userName: "Teacher_${session.teacherName}",
-                  ),
-                ),
-              );
-            },
+            onPressed: () => _handleStartSession(session),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
             child: const Text("بدء البث الآن"),
           ),

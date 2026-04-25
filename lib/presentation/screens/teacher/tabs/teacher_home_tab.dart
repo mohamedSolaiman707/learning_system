@@ -4,7 +4,9 @@ import 'package:iconly/iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../../core/models/session_model.dart';
+import '../../../../core/services/resources_service.dart';
 import '../widgets/teacher_stat_card.dart';
 import '../attendance/attendance_screen.dart';
 import '../../video_room/video_room_screen.dart';
@@ -18,6 +20,7 @@ class TeacherHomeTab extends StatefulWidget {
 
 class _TeacherHomeTabState extends State<TeacherHomeTab> {
   final supabase = Supabase.instance.client;
+  final _resourcesService = ResourcesService();
   bool _isLoading = true;
   List<Map<String, dynamic>> _todaySessionsRaw = [];
   List<SessionModel> _todaySessions = [];
@@ -89,7 +92,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       });
 
       if (!mounted) return;
-      await _loadTeacherData(); // تحديث الحالة لرؤية زر "إنهاء"
+      await _loadTeacherData();
       
       Navigator.push(
         context,
@@ -111,7 +114,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   Future<void> _handleEndSession(String sessionId) async {
     setState(() => _isLoading = true);
     try {
-      // إغلاق الغرفة في الداتابيز
       await supabase.from('rooms').update({'is_active': false}).eq('session_id', sessionId);
       await _loadTeacherData();
       if (!mounted) return;
@@ -121,6 +123,63 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showUploadDialog(String sessionId) async {
+    final titleController = TextEditingController();
+    PlatformFile? pickedFile;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text("رفع ملف جديد"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(labelText: "عنوان الملف"),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final result = await FilePicker.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png'],
+                  );
+                  if (result != null) {
+                    setDialogState(() => pickedFile = result.files.first);
+                  }
+                },
+                icon: const Icon(IconlyLight.upload),
+                label: Text(pickedFile?.name ?? "اختر ملفاً"),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+            ElevatedButton(
+              onPressed: pickedFile == null ? null : () async {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("جاري الرفع...")));
+                final success = await _resourcesService.uploadResource(
+                  sessionId: sessionId,
+                  title: titleController.text,
+                  pickerFile: pickedFile!,
+                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(success ? "تم الرفع بنجاح" : "فشل الرفع")),
+                  );
+                }
+              },
+              child: const Text("رفع الآن"),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -272,17 +331,41 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   }
 
   Widget _buildQuickActions(SessionModel? currentSession) {
+    return Column(
+      children: [
+        _buildActionCard(
+          icon: IconlyLight.user_1,
+          color: Colors.orange,
+          title: "تسجيل الحضور والغياب",
+          onTap: () {
+            if (currentSession != null) {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: currentSession.id, subjectName: currentSession.subjectName)));
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        _buildActionCard(
+          icon: IconlyLight.folder,
+          color: Colors.blue,
+          title: "إدارة المصادر والملفات",
+          onTap: () {
+            if (currentSession != null) {
+              _showUploadDialog(currentSession.id);
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionCard({required IconData icon, required Color color, required String title, required VoidCallback onTap}) {
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20)]),
       child: ListTile(
-        leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: const Icon(IconlyLight.user_1, color: Colors.orange)),
-        title: const Text("تسجيل الحضور والغياب", style: TextStyle(fontWeight: FontWeight.bold)),
+        leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: () {
-          if (currentSession != null) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: currentSession.id, subjectName: currentSession.subjectName)));
-          }
-        },
+        onTap: onTap,
       ),
     );
   }
@@ -302,10 +385,14 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   }
 
   Widget _buildLoadingSkeleton() {
-    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: ListView.builder(padding: const EdgeInsets.all(20), itemCount: 3, itemBuilder: (_, __) => Container(height: 120, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)))));
+    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: Container());
   }
 
   Widget _buildEmptyState() {
-    return Container(width: double.infinity, padding: const EdgeInsets.all(40), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)), child: const Column(children: [Icon(IconlyLight.calendar, size: 64, color: Colors.grey), SizedBox(height: 16), Text("لا توجد حصص مجدولة", style: TextStyle(color: Colors.grey))]));
+    return const Center(child: Text("لا توجد حصص مجدولة"));
+  }
+
+  Widget _buildAnimatedCard({required Widget child}) {
+    return child;
   }
 }

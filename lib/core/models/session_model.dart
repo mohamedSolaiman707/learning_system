@@ -16,20 +16,22 @@ class SessionModel {
   });
 
   factory SessionModel.fromMap(Map<String, dynamic> map) {
-    final startTime = DateTime.parse(map['start_time']);
-    final endTime = DateTime.parse(map['end_time']);
-    final now = DateTime.now();
+    final startTime = DateTime.parse(map['start_time'] ?? DateTime.now().toIso8601String());
+    final endTime = DateTime.parse(map['end_time'] ?? DateTime.now().add(const Duration(hours: 1)).toIso8601String());
     
-    // الحصة تكون مباشرة إذا كان الوقت الحالي بين وقت البدء والانتهاء
-    final isLive = now.isAfter(startTime) && now.isBefore(endTime);
+    // جلب اسم المدرس بشكل آمن لتجنب الـ Null Check Error
+    String teacherName = "مدرس غير معروف";
+    if (map['profiles'] != null) {
+      teacherName = map['profiles']['full_name'] ?? "مدرس";
+    }
 
     return SessionModel(
       id: map['id'],
-      subjectName: map['subject_name'],
-      teacherName: map['profiles']['full_name'], // جلب اسم المدرس من العلاقة
+      subjectName: map['subject_name'] ?? 'بدون عنوان',
+      teacherName: teacherName,
       startTime: startTime,
       endTime: endTime,
-      isLive: isLive,
+      isLive: false, // يتم تعيينها في الـ Tab بناءً على جدول rooms
     );
   }
 }

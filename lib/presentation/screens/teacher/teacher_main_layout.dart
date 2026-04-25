@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 import 'tabs/teacher_home_tab.dart';
-import '../student/tabs/student_schedule_tab.dart'; // Reusing schedule for now or create a specific one
+import 'tabs/teacher_schedule_tab.dart'; // استدعاء ملف جدول المدرس الجديد
 import '../profile/profile_screen.dart';
 
 class TeacherMainLayout extends StatefulWidget {
@@ -16,14 +16,17 @@ class _TeacherMainLayoutState extends State<TeacherMainLayout> {
 
   final List<Widget> _tabs = [
     const TeacherHomeTab(),
-    const StudentScheduleTab(), // Reusing the UI for simplicity
+    const TeacherScheduleTab(), // تم التغيير هنا لاستخدام كلاس المدرس
     const ProfileScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _tabs[_selectedIndex],
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _tabs,
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {

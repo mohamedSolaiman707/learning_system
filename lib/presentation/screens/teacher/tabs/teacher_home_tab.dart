@@ -50,18 +50,17 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     try {
       final teacherId = supabase.auth.currentUser!.id;
       
-      // جلب جميع حصص المدرس المستقبلية أو حصص اليوم
+      // جلب جميع حصص المدرس التي لم تنتهِ بعد
       final response = await supabase
           .from('sessions')
           .select('*, profiles:teacher_id(full_name), rooms(is_active)')
           .eq('teacher_id', teacherId)
-          .gte('end_time', DateTime.now().toIso8601String()) // نجلب فقط الحصص التي لم تنتهِ بعد
+          .gte('end_time', DateTime.now().toIso8601String())
           .order('start_time', ascending: true);
 
       _allSessionsRaw = List<Map<String, dynamic>>.from(response);
       _filterAndRefreshSessions();
       
-      // حساب إجمالي الطلاب (للحصص غير المنتهية)
       if (_allSessionsRaw.isNotEmpty) {
         final List<String> sessionIds = _allSessionsRaw.map((s) => s['id'].toString()).toList();
         final enrollmentsRes = await supabase
@@ -96,7 +95,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
           endTime: session.endTime,
           isLive: hasActiveRoom,
         );
-      }).where((s) => s.endTime.isAfter(now)).toList(); // فلترة إضافية في الواجهة لضمان الدقة اللحظية
+      }).where((s) => s.endTime.isAfter(now)).toList();
     });
   }
 
@@ -149,13 +148,14 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text("رفع ملف جديد"),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: titleController,
-                decoration: const InputDecoration(labelText: "عنوان الملف"),
+                decoration: const InputDecoration(labelText: "عنوان الملف", prefixIcon: Icon(IconlyLight.document)),
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
@@ -200,9 +200,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    // جلب أول حصة لم تنتهِ بعد لتكون هي المعروضة في الكارت الرئيسي
     final currentSession = _sessions.isNotEmpty ? _sessions.first : null;
-    // الحصول على الكود الخام للحصة الحالية من البيانات الأصلية
     final String? currentClassCode = currentSession == null ? null : 
         _allSessionsRaw.firstWhere((s) => s['id'] == currentSession.id)['class_code'];
 
@@ -319,10 +317,14 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
               ),
               if (session.isLive) ...[
                 const SizedBox(width: 12),
-                IconButton.filled(
+                IconButton(
                   onPressed: () => _showEndDialog(session.id),
-                  icon: const Icon(IconlyBold.close_square),
-                  style: IconButton.styleFrom(backgroundColor: Colors.white24, foregroundColor: Colors.white, minimumSize: const Size(56, 56)),
+                  icon: const Icon(IconlyBold.close_square, color: Colors.white),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white24,
+                    minimumSize: const Size(56, 56),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
                 ),
               ]
             ],
@@ -410,10 +412,14 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   }
 
   Widget _buildLoadingSkeleton() {
-    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: ListView.builder(padding: const EdgeInsets.all(20), itemCount: 3, itemBuilder: (_, __) => Container(height: 120, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)))));
+    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: Container());
   }
 
   Widget _buildEmptyState() {
     return Container(width: double.infinity, padding: const EdgeInsets.all(40), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)), child: const Column(children: [Icon(IconlyLight.calendar, size: 64, color: Colors.grey), SizedBox(height: 16), Text("لا توجد حصص مجدولة", style: TextStyle(color: Colors.grey))]));
+  }
+
+  Widget _buildAnimatedCard({required Widget child}) {
+    return child;
   }
 }

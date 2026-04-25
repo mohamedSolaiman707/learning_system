@@ -13,29 +13,61 @@ class SessionsManagementScreen extends StatefulWidget {
 class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
   final supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _sessions = [];
+  List<Map<String, dynamic>> _teachers = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchSessions();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    await Future.wait([_fetchSessions(), _fetchTeachers()]);
+    setState(() => _isLoading = false);
   }
 
   Future<void> _fetchSessions() async {
-    setState(() => _isLoading = true);
     try {
       final response = await supabase
           .from('sessions')
           .select('*, profiles:teacher_id(full_name)')
           .order('start_time', ascending: false);
-      
-      setState(() {
-        _sessions = List<Map<String, dynamic>>.from(response);
-        _isLoading = false;
-      });
+      _sessions = List<Map<String, dynamic>>.from(response);
     } catch (e) {
       debugPrint('Error fetching sessions: $e');
-      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchTeachers() async {
+    try {
+      final response = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .eq('role', 'teacher');
+      _teachers = List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error fetching teachers: $e');
+    }
+  }
+
+  Future<void> _saveSession({String? id, required Map<String, dynamic> data}) async {
+    try {
+      if (id == null) {
+        await supabase.from('sessions').insert(data);
+      } else {
+        await supabase.from('sessions').update(data).eq('id', id);
+      }
+      _fetchSessions();
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(id == null ? 'تمت إضافة الحصة بنجاح' : 'تم تحديث الحصة بنجاح')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
     }
   }
 
@@ -44,15 +76,95 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
       await supabase.from('sessions').delete().eq('id', id);
       _fetchSessions();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حذف الحصة بنجاح')),
-        );
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الحصة بنجاح')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ أثناء الحذف: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ أثناء الحذف: $e')));
     }
+  }
+
+  void _showSessionSheet({Map<String, dynamic>? session}) {
+    final isEditing = session != null;
+    final subjectController = TextEditingController(text: session?['subject_name']);
+    String? selectedTeacherId = session?['teacher_id'];
+    DateTime selectedDate = isEditing ? DateTime.parse(session['start_time']) : DateTime.now();
+    TimeOfDay selectedTime = isEditing ? TimeOfDay.fromDateTime(DateTime.parse(session['start_time'])) : TimeOfDay.now();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(isEditing ? "تعديل الحصة" : "إضافة حصة جديدة", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              TextField(
+                controller: subjectController,
+                decoration: const InputDecoration(labelText: "اسم المادة", prefixIcon: Icon(IconlyLight.document)),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: selectedTeacherId,
+                decoration: const InputDecoration(labelText: "اختر المدرس", prefixIcon: Icon(IconlyLight.user_1)),
+                items: _teachers.map((t) => DropdownMenuItem(value: t['id'].toString(), child: Text(t['full_name']))).toList(),
+                onChanged: (val) => setSheetState(() => selectedTeacherId = val),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final date = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
+                        if (date != null) setSheetState(() => selectedDate = date);
+                      },
+                      icon: const Icon(IconlyLight.calendar),
+                      label: Text(DateFormat('yyyy/MM/dd').format(selectedDate)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final time = await showTimePicker(context: context, initialTime: selectedTime);
+                        if (time != null) setSheetState(() => selectedTime = time);
+                      },
+                      icon: const Icon(IconlyLight.time_circle),
+                      label: Text(selectedTime.format(context)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () {
+                  if (subjectController.text.isEmpty || selectedTeacherId == null) return;
+                  final startDateTime = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute);
+                  _saveSession(
+                    id: session?['id'],
+                    data: {
+                      'subject_name': subjectController.text,
+                      'teacher_id': selectedTeacherId,
+                      'start_time': startDateTime.toIso8601String(),
+                      'end_time': startDateTime.add(const Duration(hours: 1)).toIso8601String(), // افتراضياً ساعة واحدة
+                    },
+                  );
+                  Navigator.pop(context);
+                },
+                child: Text(isEditing ? "تحديث البيانات" : "إنشاء الحصة الآن"),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -60,9 +172,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("إدارة الحصص والجلسات"),
-        actions: [
-          IconButton(onPressed: _fetchSessions, icon: const Icon(IconlyLight.swap)),
-        ],
+        actions: [IconButton(onPressed: _fetchData, icon: const Icon(IconlyLight.swap))],
       ),
       body: _isLoading 
           ? const Center(child: CircularProgressIndicator())
@@ -83,37 +193,16 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                       contentPadding: const EdgeInsets.all(16),
                       leading: Container(
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
+                        decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
                         child: const Icon(IconlyLight.video, color: Colors.blue),
                       ),
-                      title: Text(
-                        session['subject_name'] ?? 'بدون عنوان',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 4),
-                          Text("المدرس: $teacherName"),
-                          Text("الموعد: ${DateFormat('yyyy/MM/dd - hh:mm a').format(startTime)}"),
-                        ],
-                      ),
+                      title: Text(session['subject_name'] ?? 'بدون عنوان', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      subtitle: Text("المدرس: $teacherName\nالموعد: ${DateFormat('yyyy/MM/dd - hh:mm a').format(startTime)}"),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            icon: const Icon(IconlyLight.edit, color: Colors.blue),
-                            onPressed: () {
-                              // هنا يمكن إضافة واجهة لتعديل الحصة
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(IconlyLight.delete, color: Colors.red),
-                            onPressed: () => _showDeleteDialog(session['id'], session['subject_name']),
-                          ),
+                          IconButton(icon: const Icon(IconlyLight.edit, color: Colors.blue), onPressed: () => _showSessionSheet(session: session)),
+                          IconButton(icon: const Icon(IconlyLight.delete, color: Colors.red), onPressed: () => _showDeleteDialog(session['id'], session['subject_name'])),
                         ],
                       ),
                     ),
@@ -121,9 +210,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                 },
               ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // هنا يمكن إضافة واجهة لإنشاء حصة جديدة
-        },
+        onPressed: () => _showSessionSheet(),
         label: const Text("إضافة حصة جديدة"),
         icon: const Icon(Icons.add),
       ),
@@ -138,13 +225,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
         content: Text("هل أنت متأكد من حذف حصة $title؟"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _deleteSession(id);
-            },
-            child: const Text("حذف", style: TextStyle(color: Colors.red)),
-          ),
+          TextButton(onPressed: () { Navigator.pop(context); _deleteSession(id); }, child: const Text("حذف", style: TextStyle(color: Colors.red))),
         ],
       ),
     );

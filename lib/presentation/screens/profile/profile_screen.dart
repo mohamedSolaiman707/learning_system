@@ -1,12 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/routes/app_routes.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final supabase = Supabase.instance.client;
+  
+  String _getUserRoleLabel(String? role) {
+    if (role == 'teacher') return 'مدرس';
+    if (role == 'admin') return 'مسؤول النظام';
+    return 'طالب';
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = supabase.auth.currentUser;
+    final String fullName = user?.userMetadata?['full_name'] ?? 'مستخدم';
+    final String role = user?.userMetadata?['role'] ?? 'student';
+    final String email = user?.email ?? '';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("الملف الشخصي"),
@@ -17,16 +36,21 @@ class ProfileScreen extends StatelessWidget {
           children: [
             const CircleAvatar(
               radius: 50,
-              backgroundImage: NetworkImage('https://via.placeholder.com/150'),
+              backgroundColor: Colors.blue,
+              child: Icon(IconlyBold.profile, size: 50, color: Colors.white),
             ),
             const SizedBox(height: 16),
-            const Text(
-              "أحمد محمد",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            Text(
+              fullName,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
-            const Text(
-              "طالب - الصف الثالث الثانوي",
-              style: TextStyle(color: Colors.grey),
+            Text(
+              _getUserRoleLabel(role),
+              style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              email,
+              style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 32),
             _buildProfileItem(
@@ -49,7 +73,9 @@ class ProfileScreen extends StatelessWidget {
               icon: IconlyLight.logout,
               title: "تسجيل الخروج",
               color: Colors.red,
-              onTap: () {
+              onTap: () async {
+                await supabase.auth.signOut();
+                if (!mounted) return;
                 Navigator.pushReplacementNamed(context, AppRoutes.login);
               },
             ),

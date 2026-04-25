@@ -145,7 +145,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           children: [
             AdminStatCard(title: "إجمالي الطلاب", value: _totalStudents.toString(), icon: IconlyLight.user_1, color: Colors.blue),
             AdminStatCard(title: "الغرف النشطة", value: _activeRooms.toString(), icon: IconlyLight.video, color: Colors.green),
-            AdminStatCard(title: "إجمالي المعلمين", value: _totalTeachers.toString(), icon: IconlyLight.user, color: Colors.orange),
+            AdminStatCard(title: "إجمالي المعلمين", value: _totalTeachers.toString(), icon: IconlyLight.user_1, color: Colors.orange),
             AdminStatCard(title: "حصص اليوم", value: _todaySessions.toString(), icon: IconlyLight.calendar, color: Colors.purple),
           ],
         );
@@ -179,6 +179,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     isCurved: true,
                     color: Colors.blue,
                     barWidth: 4,
+                    isStrokeCapRound: true,
                     dotData: const FlDotData(show: true),
                     belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.05)),
                   ),

@@ -38,7 +38,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
 
       final sessionsResponse = await supabase
           .from('sessions')
-          .select('*, profiles:teacher_id(full_name)')
+          .select('*, profiles:teacher_id(full_name), rooms(is_active)')
           .eq('teacher_id', teacherId)
           .gte('start_time', '${today}T00:00:00')
           .lte('start_time', '${today}T23:59:59')
@@ -60,11 +60,23 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       }
 
       setState(() {
-        _todaySessions = _todaySessionsRaw.map((s) => SessionModel.fromMap(s)).toList();
+        _todaySessions = _todaySessionsRaw.map((data) {
+          final rooms = data['rooms'] as List?;
+          final bool hasActiveRoom = rooms != null && rooms.any((r) => r['is_active'] == true);
+          final session = SessionModel.fromMap(data);
+          return SessionModel(
+            id: session.id,
+            subjectName: session.subjectName,
+            teacherName: session.teacherName,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            isLive: hasActiveRoom,
+          );
+        }).toList();
         _isLoading = false;
       });
     } catch (e) {
-      print("Error loading teacher data: $e");
+      debugPrint("Error loading teacher data: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -77,7 +89,8 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       });
 
       if (!mounted) return;
-
+      await _loadTeacherData(); // تحديث الحالة لرؤية زر "إنهاء"
+      
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -89,9 +102,22 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("خطأ في بدء الحصة: $e")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في بدء الحصة: $e")));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleEndSession(String sessionId) async {
+    setState(() => _isLoading = true);
+    try {
+      // إغلاق الغرفة في الداتابيز
+      await supabase.from('rooms').update({'is_active': false}).eq('session_id', sessionId);
+      await _loadTeacherData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم إنهاء الحصة بنجاح")));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في إنهاء الحصة: $e")));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -105,7 +131,19 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      appBar: _buildAppBar(),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: const Text("EduConnect Teacher", style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            onPressed: () => supabase.auth.signOut().then((_) => Navigator.pushReplacementNamed(context, '/login')),
+            icon: const Icon(IconlyLight.logout),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: _isLoading && _todaySessions.isEmpty
           ? _buildLoadingSkeleton()
           : RefreshIndicator(
@@ -137,21 +175,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      surfaceTintColor: Colors.transparent,
-      title: const Text("EduConnect Teacher", style: TextStyle(fontWeight: FontWeight.bold)),
-      actions: [
-        IconButton(
-          onPressed: () => supabase.auth.signOut().then((_) => Navigator.pushReplacementNamed(context, '/login')),
-          icon: const Icon(IconlyLight.logout),
-        ),
-        const SizedBox(width: 8),
-      ],
-    );
-  }
-
   Widget _buildHeader(String name) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text("أهلاً بك، 👋", style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
@@ -171,9 +194,15 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.blue.shade700, Colors.blue.shade500]),
+        gradient: LinearGradient(
+          colors: session.isLive 
+              ? [Colors.red.shade700, Colors.red.shade500] 
+              : [Colors.blue.shade700, Colors.blue.shade500],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(28),
-        boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+        boxShadow: [BoxShadow(color: (session.isLive ? Colors.red : Colors.blue).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
       ),
       child: Column(
         children: [
@@ -187,38 +216,55 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
           ]),
           if (classCode != null && classCode.isNotEmpty) ...[
             const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text("كود انضمام الطلاب", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    Text(classCode, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                  ]),
-                  IconButton(
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: classCode));
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ الكود! أرسله لطلابك الآن.")));
-                    },
-                    icon: const Icon(Icons.copy_all_rounded, color: Colors.white),
-                    tooltip: "نسخ الكود",
-                  ),
-                ],
-              ),
-            ),
+            _buildCodePanel(classCode),
           ],
           const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () => _handleStartSession(session),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.blue.shade700,
-              minimumSize: const Size(double.infinity, 56),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-            ),
-            child: const Text("بدء البث المباشر الآن", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _handleStartSession(session),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: session.isLive ? Colors.red.shade700 : Colors.blue.shade700,
+                    minimumSize: const Size(double.infinity, 56),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  ),
+                  child: Text(session.isLive ? "العودة للبث" : "بدء البث المباشر", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              if (session.isLive) ...[
+                const SizedBox(width: 12),
+                IconButton.filled(
+                  onPressed: () => _showEndDialog(session.id),
+                  icon: const Icon(IconlyBold.close_square),
+                  style: IconButton.styleFrom(backgroundColor: Colors.white24, foregroundColor: Colors.white, minimumSize: const Size(56, 56)),
+                ),
+              ]
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCodePanel(String code) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text("كود انضمام الطلاب", style: TextStyle(color: Colors.white70, fontSize: 12)),
+            Text(code, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2)),
+          ]),
+          IconButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: code));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ الكود!")));
+            },
+            icon: const Icon(Icons.copy_all_rounded, color: Colors.white),
           ),
         ],
       ),
@@ -227,13 +273,9 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
 
   Widget _buildQuickActions(SessionModel? currentSession) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20)],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20)]),
       child: ListTile(
-        leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: const Icon(IconlyLight.user, color: Colors.orange)),
+        leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: const Icon(IconlyLight.user_1, color: Colors.orange)),
         title: const Text("تسجيل الحضور والغياب", style: TextStyle(fontWeight: FontWeight.bold)),
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: () {
@@ -245,15 +287,25 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     );
   }
 
+  void _showEndDialog(String sessionId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("إنهاء الحصة"),
+        content: const Text("هل أنت متأكد من إنهاء البث المباشر وإغلاق الغرفة؟"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          TextButton(onPressed: () { Navigator.pop(context); _handleEndSession(sessionId); }, child: const Text("إنهاء الآن", style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLoadingSkeleton() {
-    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: Container());
+    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: ListView.builder(padding: const EdgeInsets.all(20), itemCount: 3, itemBuilder: (_, __) => Container(height: 120, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)))));
   }
 
   Widget _buildEmptyState() {
-    return const Center(child: Text("لا توجد حصص مجدولة لليوم"));
-  }
-
-  Widget _buildAnimatedCard({required Widget child}) {
-    return child;
+    return Container(width: double.infinity, padding: const EdgeInsets.all(40), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)), child: const Column(children: [Icon(IconlyLight.calendar, size: 64, color: Colors.grey), SizedBox(height: 16), Text("لا توجد حصص مجدولة", style: TextStyle(color: Colors.grey))]));
   }
 }

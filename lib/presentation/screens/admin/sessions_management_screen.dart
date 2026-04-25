@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -50,6 +51,12 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
     } catch (e) {
       debugPrint('Error fetching teachers: $e');
     }
+  }
+
+  String _generateRandomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final rnd = Random();
+    return String.fromCharCodes(Iterable.generate(6, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
   }
 
   Future<void> _saveSession({String? id, required Map<String, dynamic> data}) async {
@@ -112,7 +119,19 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: codeController,
-                decoration: const InputDecoration(labelText: "كود الحصة (اختياري)", hintText: "مثلاً: MATH101", prefixIcon: Icon(IconlyLight.password)),
+                decoration: InputDecoration(
+                  labelText: "كود الحصة", 
+                  prefixIcon: const Icon(IconlyLight.password),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.bolt, color: Colors.orange),
+                    tooltip: "توليد كود تلقائي",
+                    onPressed: () {
+                      setSheetState(() {
+                        codeController.text = _generateRandomCode();
+                      });
+                    },
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(

@@ -28,7 +28,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   void initState() {
     super.initState();
     _loadData();
-    // إعداد مؤقت لتحديث البيانات تلقائياً كل 15 ثانية (بديل للـ Realtime)
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       _loadData(showLoading: false);
     });
@@ -36,7 +35,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
 
   @override
   void dispose() {
-    _refreshTimer?.cancel(); // إيقاف المؤقت عند الخروج من الصفحة
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -44,8 +43,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     if (showLoading) setState(() => _isLoading = true);
     try {
       final userId = supabase.auth.currentUser!.id;
-      
-      // جلب الحصص مع حالة الغرفة النشطة واسم المدرس
       final response = await supabase
           .from('enrollments')
           .select('sessions(*, profiles:teacher_id(full_name), rooms(is_active))')
@@ -116,7 +113,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                     backgroundColor: result['success'] ? Colors.green : Colors.orange,
                   ));
                   
-                  if (result['success']) _loadData(); // تحديث فوري عند النجاح
+                  if (result['success']) _loadData();
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e"), backgroundColor: Colors.red));
                 } finally {
@@ -142,6 +139,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         title: const Text("EduConnect Pro", style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(onPressed: _showJoinCodeDialog, icon: const Icon(Icons.add_box_rounded, color: Colors.blue, size: 28)),
@@ -177,7 +175,12 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                       _buildEmptyState(),
 
                     const SizedBox(height: 30),
-                    const Text("حصصك القادمة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text("إحصائياتي", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    _buildStatsGrid(),
+                    
+                    const SizedBox(height: 30),
+                    const Text("حصص اليوم", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
                     if (_sessions.isEmpty)
                       const Center(child: Padding(
@@ -185,15 +188,18 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                         child: Text("لا توجد حصص، انضم عبر كود الآن", style: TextStyle(color: Colors.grey)),
                       ))
                     else
-                      ..._sessions.map((s) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: UpcomingClassItem(
-                          subject: s.subjectName,
-                          teacher: s.teacherName,
-                          time: DateFormat('hh:mm a').format(s.startTime),
-                          duration: "60 دقيقة",
-                        ),
-                      )),
+                      ..._sessions.map((s) {
+                        final duration = s.endTime.difference(s.startTime).inMinutes;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: UpcomingClassItem(
+                            subject: s.subjectName,
+                            teacher: s.teacherName,
+                            time: DateFormat('hh:mm a').format(s.startTime),
+                            duration: "$duration دقيقة", // تم تعديلها لتظهر المدة الحقيقية
+                          ),
+                        );
+                      }),
                   ],
                 ),
               ),
@@ -215,5 +221,25 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
 
   Widget _buildAnimatedCard({required Widget child}) {
     return TweenAnimationBuilder(tween: Tween<double>(begin: 0, end: 1), duration: const Duration(milliseconds: 600), builder: (context, double value, child) => Opacity(opacity: value, child: Transform.translate(offset: Offset(0, 20 * (1 - value)), child: child)), child: child);
+  }
+
+  Widget _buildStatsGrid() {
+    return Row(children: [
+      Expanded(child: _buildProgressCard("الحضور", 0.85, Colors.blue)),
+      const SizedBox(width: 16),
+      Expanded(child: _buildProgressCard("المهام", 0.60, Colors.orange)),
+    ]);
+  }
+
+  Widget _buildProgressCard(String title, double percent, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20)]),
+      child: Column(children: [
+        CircularPercentIndicator(radius: 45.0, lineWidth: 8.0, percent: percent, center: Text("${(percent * 100).toInt()}%"), progressColor: color, backgroundColor: color.withOpacity(0.1), circularStrokeCap: CircularStrokeCap.round, animation: true),
+        const SizedBox(height: 12),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ]),
+    );
   }
 }

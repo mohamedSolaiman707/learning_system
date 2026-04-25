@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconly/iconly.dart';
@@ -22,14 +23,25 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   final supabase = Supabase.instance.client;
   final _resourcesService = ResourcesService();
   bool _isLoading = true;
-  List<Map<String, dynamic>> _todaySessionsRaw = [];
-  List<SessionModel> _todaySessions = [];
+  List<Map<String, dynamic>> _allSessionsRaw = [];
+  List<SessionModel> _sessions = [];
   int _totalStudents = 0;
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadTeacherData();
+    // تحديث الواجهة كل 30 ثانية للتأكد من مواعيد انتهاء الحصص
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) _filterAndRefreshSessions();
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadTeacherData() async {
@@ -37,20 +49,21 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     setState(() => _isLoading = true);
     try {
       final teacherId = supabase.auth.currentUser!.id;
-      final today = DateTime.now().toIso8601String().split('T')[0];
-
-      final sessionsResponse = await supabase
+      
+      // جلب جميع حصص المدرس المستقبلية أو حصص اليوم
+      final response = await supabase
           .from('sessions')
           .select('*, profiles:teacher_id(full_name), rooms(is_active)')
           .eq('teacher_id', teacherId)
-          .gte('start_time', '${today}T00:00:00')
-          .lte('start_time', '${today}T23:59:59')
+          .gte('end_time', DateTime.now().toIso8601String()) // نجلب فقط الحصص التي لم تنتهِ بعد
           .order('start_time', ascending: true);
 
-      _todaySessionsRaw = List<Map<String, dynamic>>.from(sessionsResponse);
+      _allSessionsRaw = List<Map<String, dynamic>>.from(response);
+      _filterAndRefreshSessions();
       
-      if (_todaySessionsRaw.isNotEmpty) {
-        final List<String> sessionIds = _todaySessionsRaw.map((s) => s['id'].toString()).toList();
+      // حساب إجمالي الطلاب (للحصص غير المنتهية)
+      if (_allSessionsRaw.isNotEmpty) {
+        final List<String> sessionIds = _allSessionsRaw.map((s) => s['id'].toString()).toList();
         final enrollmentsRes = await supabase
             .from('enrollments')
             .select()
@@ -61,27 +74,30 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
           _totalStudents = enrollmentsRes.count;
         });
       }
-
-      setState(() {
-        _todaySessions = _todaySessionsRaw.map((data) {
-          final rooms = data['rooms'] as List?;
-          final bool hasActiveRoom = rooms != null && rooms.any((r) => r['is_active'] == true);
-          final session = SessionModel.fromMap(data);
-          return SessionModel(
-            id: session.id,
-            subjectName: session.subjectName,
-            teacherName: session.teacherName,
-            startTime: session.startTime,
-            endTime: session.endTime,
-            isLive: hasActiveRoom,
-          );
-        }).toList();
-        _isLoading = false;
-      });
     } catch (e) {
       debugPrint("Error loading teacher data: $e");
+    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _filterAndRefreshSessions() {
+    final now = DateTime.now();
+    setState(() {
+      _sessions = _allSessionsRaw.map((data) {
+        final rooms = data['rooms'] as List?;
+        final bool hasActiveRoom = rooms != null && rooms.any((r) => r['is_active'] == true);
+        final session = SessionModel.fromMap(data);
+        return SessionModel(
+          id: session.id,
+          subjectName: session.subjectName,
+          teacherName: session.teacherName,
+          startTime: session.startTime,
+          endTime: session.endTime,
+          isLive: hasActiveRoom,
+        );
+      }).where((s) => s.endTime.isAfter(now)).toList(); // فلترة إضافية في الواجهة لضمان الدقة اللحظية
+    });
   }
 
   Future<void> _handleStartSession(SessionModel session) async {
@@ -184,8 +200,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final currentSession = _todaySessions.isNotEmpty ? _todaySessions.first : null;
-    final currentSessionRaw = _todaySessionsRaw.isNotEmpty ? _todaySessionsRaw.first : null;
+    // جلب أول حصة لم تنتهِ بعد لتكون هي المعروضة في الكارت الرئيسي
+    final currentSession = _sessions.isNotEmpty ? _sessions.first : null;
+    // الحصول على الكود الخام للحصة الحالية من البيانات الأصلية
+    final String? currentClassCode = currentSession == null ? null : 
+        _allSessionsRaw.firstWhere((s) => s['id'] == currentSession.id)['class_code'];
+
     final teacherName = supabase.auth.currentUser?.userMetadata?['full_name'] ?? "المدرس";
 
     return Scaffold(
@@ -203,7 +223,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
           const SizedBox(width: 8),
         ],
       ),
-      body: _isLoading && _todaySessions.isEmpty
+      body: _isLoading && _sessions.isEmpty
           ? _buildLoadingSkeleton()
           : RefreshIndicator(
               onRefresh: _loadTeacherData,
@@ -217,10 +237,15 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                     const SizedBox(height: 24),
                     _buildStatsRow(),
                     const SizedBox(height: 32),
-                    const Text("الحصة القادمة", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    Text(
+                      currentSession != null && currentSession.startTime.isBefore(DateTime.now()) 
+                        ? "الحصة الحالية" 
+                        : "الحصة القادمة", 
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)
+                    ),
                     const SizedBox(height: 16),
                     if (currentSession != null)
-                      _buildCurrentSessionCard(currentSession, currentSessionRaw?['class_code'])
+                      _buildCurrentSessionCard(currentSession, currentClassCode)
                     else
                       _buildEmptyState(),
                     const SizedBox(height: 32),
@@ -245,7 +270,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     return Row(children: [
       Expanded(child: TeacherStatCard(title: "إجمالي الطلاب", value: _totalStudents.toString(), icon: IconlyLight.user_1, color: Colors.blue)),
       const SizedBox(width: 16),
-      Expanded(child: TeacherStatCard(title: "حصص اليوم", value: _todaySessions.length.toString(), icon: IconlyLight.video, color: Colors.orange)),
+      Expanded(child: TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: IconlyLight.video, color: Colors.orange)),
     ]);
   }
 
@@ -385,14 +410,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   }
 
   Widget _buildLoadingSkeleton() {
-    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: Container());
+    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: ListView.builder(padding: const EdgeInsets.all(20), itemCount: 3, itemBuilder: (_, __) => Container(height: 120, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)))));
   }
 
   Widget _buildEmptyState() {
-    return const Center(child: Text("لا توجد حصص مجدولة"));
-  }
-
-  Widget _buildAnimatedCard({required Widget child}) {
-    return child;
+    return Container(width: double.infinity, padding: const EdgeInsets.all(40), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)), child: const Column(children: [Icon(IconlyLight.calendar, size: 64, color: Colors.grey), SizedBox(height: 16), Text("لا توجد حصص مجدولة", style: TextStyle(color: Colors.grey))]));
   }
 }

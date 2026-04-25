@@ -91,61 +91,6 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
     }
   }
 
-  // --- ميزة إدارة الطلاب المسجلين ---
-  void _showEnrolledStudents(String sessionId, String subjectName) async {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) => FutureBuilder(
-          future: supabase.from('enrollments').select('student_id, profiles:student_id(full_name, phone_number)').eq('session_id', sessionId),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-            final students = snapshot.data as List? ?? [];
-
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text("الطلاب المسجلون في $subjectName", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
-                Expanded(
-                  child: students.isEmpty 
-                    ? const Center(child: Text("لا يوجد طلاب مسجلون حالياً"))
-                    : ListView.separated(
-                        controller: scrollController,
-                        itemCount: students.length,
-                        separatorBuilder: (_, __) => const Divider(),
-                        itemBuilder: (context, index) {
-                          final student = students[index]['profiles'];
-                          return ListTile(
-                            leading: const CircleAvatar(child: Icon(IconlyLight.user_1)),
-                            title: Text(student['full_name'] ?? 'بدون اسم'),
-                            subtitle: Text(student['phone_number'] ?? 'لا يوجد رقم'),
-                            trailing: IconButton(
-                              icon: const Icon(IconlyLight.delete, color: Colors.red),
-                              onPressed: () async {
-                                await supabase.from('enrollments').delete().eq('session_id', sessionId).eq('student_id', students[index]['student_id']);
-                                Navigator.pop(context);
-                                _showEnrolledStudents(sessionId, subjectName); // تحديث القائمة
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
   void _showSessionSheet({Map<String, dynamic>? session}) {
     final isEditing = session != null;
     final subjectController = TextEditingController(text: session?['subject_name']);
@@ -153,6 +98,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
     String? selectedTeacherId = session?['teacher_id'];
     DateTime selectedDate = isEditing ? DateTime.parse(session['start_time']) : DateTime.now();
     TimeOfDay selectedTime = isEditing ? TimeOfDay.fromDateTime(DateTime.parse(session['start_time'])) : TimeOfDay.now();
+    int selectedDuration = 60; // المدة الافتراضية بالدقائق
 
     showModalBottomSheet(
       context: context,
@@ -179,12 +125,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                   prefixIcon: const Icon(IconlyLight.password),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.bolt, color: Colors.orange),
-                    tooltip: "توليد كود تلقائي",
-                    onPressed: () {
-                      setSheetState(() {
-                        codeController.text = _generateRandomCode();
-                      });
-                    },
+                    onPressed: () => setSheetState(() => codeController.text = _generateRandomCode()),
                   ),
                 ),
               ),
@@ -194,6 +135,19 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                 decoration: const InputDecoration(labelText: "اختر المدرس", prefixIcon: Icon(IconlyLight.user_1)),
                 items: _teachers.map((t) => DropdownMenuItem(value: t['id'].toString(), child: Text(t['full_name']))).toList(),
                 onChanged: (val) => setSheetState(() => selectedTeacherId = val),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: selectedDuration,
+                decoration: const InputDecoration(labelText: "مدة الحصة", prefixIcon: Icon(IconlyLight.time_circle)),
+                items: const [
+                  DropdownMenuItem(value: 30, child: Text("30 دقيقة")),
+                  DropdownMenuItem(value: 45, child: Text("45 دقيقة")),
+                  DropdownMenuItem(value: 60, child: Text("ساعة واحدة")),
+                  DropdownMenuItem(value: 90, child: Text("ساعة ونصف")),
+                  DropdownMenuItem(value: 120, child: Text("ساعتين")),
+                ],
+                onChanged: (val) => setSheetState(() => selectedDuration = val!),
               ),
               const SizedBox(height: 16),
               Row(
@@ -233,7 +187,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                       'class_code': codeController.text.trim().toUpperCase(),
                       'teacher_id': selectedTeacherId,
                       'start_time': startDateTime.toIso8601String(),
-                      'end_time': startDateTime.add(const Duration(hours: 1)).toIso8601String(),
+                      'end_time': startDateTime.add(Duration(minutes: selectedDuration)).toIso8601String(),
                     },
                   );
                   Navigator.pop(context);
@@ -257,52 +211,38 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
       ),
       body: _isLoading 
           ? const Center(child: CircularProgressIndicator())
-          : _sessions.isEmpty
-            ? const Center(child: Text("لا توجد حصص مسجلة حالياً"))
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _sessions.length,
-                itemBuilder: (context, index) {
-                  final session = _sessions[index];
-                  final startTime = DateTime.parse(session['start_time']);
-                  final teacherName = session['profiles']?['full_name'] ?? 'غير معروف';
-                  final classCode = session['class_code'] ?? '---';
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _sessions.length,
+              itemBuilder: (context, index) {
+                final session = _sessions[index];
+                final startTime = DateTime.parse(session['start_time']);
+                final endTime = DateTime.parse(session['end_time']);
+                final duration = endTime.difference(startTime).inMinutes;
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(16),
-                      leading: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
-                        child: const Icon(IconlyLight.video, color: Colors.blue),
-                      ),
-                      title: Text(session['subject_name'] ?? 'بدون عنوان', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("المدرس: $teacherName"),
-                          Text("الكود: $classCode", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-                          Text("الموعد: ${DateFormat('yyyy/MM/dd - hh:mm a').format(startTime)}"),
-                        ],
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(IconlyLight.user_1, color: Colors.green), 
-                            onPressed: () => _showEnrolledStudents(session['id'], session['subject_name']),
-                            tooltip: "إدارة الطلاب",
-                          ),
-                          IconButton(icon: const Icon(IconlyLight.edit, color: Colors.blue), onPressed: () => _showSessionSheet(session: session)),
-                          IconButton(icon: const Icon(IconlyLight.delete, color: Colors.red), onPressed: () => _showDeleteDialog(session['id'], session['subject_name'])),
-                        ],
-                      ),
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(16),
+                    leading: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
+                      child: const Icon(IconlyLight.video, color: Colors.blue),
                     ),
-                  );
-                },
-              ),
+                    title: Text(session['subject_name'] ?? 'بدون عنوان', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    subtitle: Text("المدرس: ${session['profiles']?['full_name']}\nالمدة: $duration دقيقة\nالموعد: ${DateFormat('hh:mm a').format(startTime)}"),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(icon: const Icon(IconlyLight.edit, color: Colors.blue), onPressed: () => _showSessionSheet(session: session)),
+                        IconButton(icon: const Icon(IconlyLight.delete, color: Colors.red), onPressed: () => _showDeleteDialog(session['id'], session['subject_name'])),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showSessionSheet(),
         label: const Text("إضافة حصة جديدة"),

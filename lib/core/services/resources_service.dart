@@ -21,7 +21,6 @@ class ResourcesService {
     }
   }
 
-  // الآن تعيد String? (null يعني نجاح، والنص هو رسالة الخطأ)
   Future<String?> uploadResource({
     required String sessionId,
     required String title,
@@ -31,24 +30,26 @@ class ResourcesService {
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) return "يجب تسجيل الدخول أولاً";
 
+      // 1. توليد اسم ملف بسيط لسهولة التتبع في الـ Dashboard
       final fileExt = pickerFile.extension ?? 'pdf';
-      final fileName = "${DateTime.now().millisecondsSinceEpoch}.$fileExt";
-      final filePath = '$userId/$fileName';
+      final fileName = "file_${DateTime.now().millisecondsSinceEpoch}.$fileExt";
+      
+      // سنرفع الملف في الجذر مباشرة (بدون مجلدات) للتأكد من ظهوره
+      final filePath = fileName; 
 
-      String contentType = 'application/octet-stream';
-      if (fileExt.toLowerCase() == 'pdf') contentType = 'application/pdf';
+      String contentType = 'application/pdf'; // الافتراضي
       if (['jpg', 'jpeg', 'png'].contains(fileExt.toLowerCase())) contentType = 'image/$fileExt';
 
-      // 1. محاولة الرفع للتخزين
+      // 2. محاولة الرفع للتخزين
       if (kIsWeb) {
-        if (pickerFile.bytes == null) return "لم يتم العثور على بيانات الملف";
+        if (pickerFile.bytes == null) return "لم يتم العثور على بيانات الملف (Web Bytes missing)";
         await supabase.storage.from('resources').uploadBinary(
           filePath,
           pickerFile.bytes!,
           fileOptions: FileOptions(contentType: contentType, upsert: true),
         );
       } else {
-        if (pickerFile.path == null) return "مسار الملف غير صحيح";
+        if (pickerFile.path == null) return "مسار الملف غير صحيح (Mobile Path missing)";
         await supabase.storage.from('resources').upload(
           filePath,
           File(pickerFile.path!),
@@ -56,9 +57,10 @@ class ResourcesService {
         );
       }
 
+      // 3. الحصول على الرابط العام
       final String fileUrl = supabase.storage.from('resources').getPublicUrl(filePath);
 
-      // 2. محاولة التسجيل في جدول البيانات
+      // 4. التسجيل في جدول البيانات
       await supabase.from('resources').insert({
         'session_id': sessionId,
         'title': title,
@@ -67,13 +69,13 @@ class ResourcesService {
         'uploaded_by': userId,
       });
 
-      return null; // نجاح
+      return null; // نجاح كامل
     } on StorageException catch (e) {
-      return "خطأ في التخزين: ${e.message}";
+      return "خطأ التخزين: ${e.message}";
     } on PostgrestException catch (e) {
-      return "خطأ في قاعدة البيانات: ${e.message}";
+      return "خطأ الداتابيز: ${e.message}";
     } catch (e) {
-      return "خطأ غير متوقع: $e";
+      return "خطأ عام: $e";
     }
   }
 }

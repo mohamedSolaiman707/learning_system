@@ -269,7 +269,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                   final classCode = session['class_code'] ?? '---';
 
                   return Card(
-                    margin: const EdgeInsets.bottom(16),
+                    margin: const EdgeInsets.only(bottom: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: ListTile(
                       contentPadding: const EdgeInsets.all(16),

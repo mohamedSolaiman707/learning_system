@@ -5,10 +5,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
-import '../../../../core/models/session_model.dart';
 import '../widgets/next_class_card.dart';
 import '../widgets/upcoming_class_item.dart';
 import '../../video_room/video_room_screen.dart';
+import '../../../core/models/session_model.dart';
 
 class StudentHomeTab extends StatefulWidget {
   const StudentHomeTab({super.key});
@@ -28,8 +28,9 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   void initState() {
     super.initState();
     _loadData();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
-      _loadData(showLoading: false);
+    // تحديث الواجهة كل 10 ثوانٍ لضمان اختفاء الحصص المنتهية فوراً
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) _filterAndRefreshLocal();
     });
   }
 
@@ -43,6 +44,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     if (showLoading) setState(() => _isLoading = true);
     try {
       final userId = supabase.auth.currentUser!.id;
+      
       final response = await supabase
           .from('enrollments')
           .select('sessions(*, profiles:teacher_id(full_name), rooms(is_active))')
@@ -64,18 +66,28 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
           endTime: session.endTime,
           isLive: isLiveNow,
         );
-      }).toList()..sort((a, b) => a.startTime.compareTo(b.startTime));
+      }).toList();
 
       if (mounted) {
         setState(() {
           _sessions = loadedSessions;
           _isLoading = false;
+          _filterAndRefreshLocal(); // فلترة فورية بعد التحميل
         });
       }
     } catch (e) {
       debugPrint("Error fetching sessions: $e");
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // فلترة الحصص المنتهية بناءً على توقيت الجهاز الحالي
+  void _filterAndRefreshLocal() {
+    final now = DateTime.now();
+    setState(() {
+      _sessions = _sessions.where((s) => s.endTime.isAfter(now)).toList()
+        ..sort((a, b) => a.startTime.compareTo(b.startTime));
+    });
   }
 
   void _showJoinCodeDialog() {
@@ -88,11 +100,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
           title: const Text("انضم لمادة جديدة"),
           content: TextField(
             controller: codeController,
-            decoration: const InputDecoration(
-              hintText: "أدخل كود المادة",
-              prefixIcon: Icon(IconlyLight.password),
-              filled: true,
-            ),
+            decoration: const InputDecoration(hintText: "أدخل كود المادة", prefixIcon: Icon(IconlyLight.password)),
             textCapitalization: TextCapitalization.characters,
           ),
           actions: [
@@ -107,12 +115,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                   });
                   if (!mounted) return;
                   Navigator.pop(context);
-                  
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(result['message']),
-                    backgroundColor: result['success'] ? Colors.green : Colors.orange,
-                  ));
-                  
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: result['success'] ? Colors.green : Colors.orange));
                   if (result['success']) _loadData();
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e"), backgroundColor: Colors.red));
@@ -120,7 +123,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                   setDialogState(() => _isJoining = false);
                 }
               },
-              child: _isJoining ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text("انضمام"),
+              child: const Text("انضمام"),
             ),
           ],
         ),
@@ -132,18 +135,18 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
     final userName = user?.userMetadata?['full_name'] ?? "الطالب";
-    final nextSession = _sessions.where((s) => s.endTime.isAfter(DateTime.now())).firstOrNull;
+    
+    // جلب أول حصة لم تنتهِ بعد
+    final nextSession = _sessions.isNotEmpty ? _sessions.first : null;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        surfaceTintColor: Colors.transparent,
         title: const Text("EduConnect Pro", style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(onPressed: _showJoinCodeDialog, icon: const Icon(Icons.add_box_rounded, color: Colors.blue, size: 28)),
-          IconButton(onPressed: () => _loadData(), icon: const Icon(IconlyLight.notification)),
           const SizedBox(width: 8),
         ],
       ),
@@ -175,18 +178,10 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                       _buildEmptyState(),
 
                     const SizedBox(height: 30),
-                    const Text("إحصائياتي", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    _buildStatsGrid(),
-                    
-                    const SizedBox(height: 30),
-                    const Text("حصص اليوم", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text("حصص اليوم القادمة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
                     if (_sessions.isEmpty)
-                      const Center(child: Padding(
-                        padding: EdgeInsets.all(40.0),
-                        child: Text("لا توجد حصص، انضم عبر كود الآن", style: TextStyle(color: Colors.grey)),
-                      ))
+                      const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("لا توجد حصص، انضم عبر كود الآن", style: TextStyle(color: Colors.grey))))
                     else
                       ..._sessions.map((s) {
                         final duration = s.endTime.difference(s.startTime).inMinutes;
@@ -196,7 +191,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                             subject: s.subjectName,
                             teacher: s.teacherName,
                             time: DateFormat('hh:mm a').format(s.startTime),
-                            duration: "$duration دقيقة", // تم تعديلها لتظهر المدة الحقيقية
+                            duration: "$duration دقيقة",
                           ),
                         );
                       }),
@@ -212,7 +207,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   }
 
   Widget _buildLoadingSkeleton() {
-    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: ListView.builder(padding: const EdgeInsets.all(20), itemCount: 3, itemBuilder: (_, __) => Container(height: 100, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)))));
+    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: ListView.builder(padding: const EdgeInsets.all(20), itemCount: 3, itemBuilder: (_, __) => Container(height: 100, margin: const EdgeInsets.bottom(20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)))));
   }
 
   Widget _buildEmptyState() {
@@ -221,25 +216,5 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
 
   Widget _buildAnimatedCard({required Widget child}) {
     return TweenAnimationBuilder(tween: Tween<double>(begin: 0, end: 1), duration: const Duration(milliseconds: 600), builder: (context, double value, child) => Opacity(opacity: value, child: Transform.translate(offset: Offset(0, 20 * (1 - value)), child: child)), child: child);
-  }
-
-  Widget _buildStatsGrid() {
-    return Row(children: [
-      Expanded(child: _buildProgressCard("الحضور", 0.85, Colors.blue)),
-      const SizedBox(width: 16),
-      Expanded(child: _buildProgressCard("المهام", 0.60, Colors.orange)),
-    ]);
-  }
-
-  Widget _buildProgressCard(String title, double percent, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20)]),
-      child: Column(children: [
-        CircularPercentIndicator(radius: 45.0, lineWidth: 8.0, percent: percent, center: Text("${(percent * 100).toInt()}%"), progressColor: color, backgroundColor: color.withOpacity(0.1), circularStrokeCap: CircularStrokeCap.round, animation: true),
-        const SizedBox(height: 12),
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-      ]),
-    );
   }
 }

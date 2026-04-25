@@ -91,6 +91,61 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
     }
   }
 
+  // --- ميزة إدارة الطلاب المسجلين ---
+  void _showEnrolledStudents(String sessionId, String subjectName) async {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => FutureBuilder(
+          future: supabase.from('enrollments').select('student_id, profiles:student_id(full_name, phone_number)').eq('session_id', sessionId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            final students = snapshot.data as List? ?? [];
+
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text("الطلاب المسجلون في $subjectName", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+                Expanded(
+                  child: students.isEmpty 
+                    ? const Center(child: Text("لا يوجد طلاب مسجلون حالياً"))
+                    : ListView.separated(
+                        controller: scrollController,
+                        itemCount: students.length,
+                        separatorBuilder: (_, __) => const Divider(),
+                        itemBuilder: (context, index) {
+                          final student = students[index]['profiles'];
+                          return ListTile(
+                            leading: const CircleAvatar(child: Icon(IconlyLight.user_1)),
+                            title: Text(student['full_name'] ?? 'بدون اسم'),
+                            subtitle: Text(student['phone_number'] ?? 'لا يوجد رقم'),
+                            trailing: IconButton(
+                              icon: const Icon(IconlyLight.delete, color: Colors.red),
+                              onPressed: () async {
+                                await supabase.from('enrollments').delete().eq('session_id', sessionId).eq('student_id', students[index]['student_id']);
+                                Navigator.pop(context);
+                                _showEnrolledStudents(sessionId, subjectName); // تحديث القائمة
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   void _showSessionSheet({Map<String, dynamic>? session}) {
     final isEditing = session != null;
     final subjectController = TextEditingController(text: session?['subject_name']);
@@ -214,7 +269,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                   final classCode = session['class_code'] ?? '---';
 
                   return Card(
-                    margin: const EdgeInsets.only(bottom: 16),
+                    margin: const EdgeInsets.bottom(16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: ListTile(
                       contentPadding: const EdgeInsets.all(16),
@@ -235,6 +290,11 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          IconButton(
+                            icon: const Icon(IconlyLight.user_1, color: Colors.green), 
+                            onPressed: () => _showEnrolledStudents(session['id'], session['subject_name']),
+                            tooltip: "إدارة الطلاب",
+                          ),
                           IconButton(icon: const Icon(IconlyLight.edit, color: Colors.blue), onPressed: () => _showSessionSheet(session: session)),
                           IconButton(icon: const Icon(IconlyLight.delete, color: Colors.red), onPressed: () => _showDeleteDialog(session['id'], session['subject_name'])),
                         ],

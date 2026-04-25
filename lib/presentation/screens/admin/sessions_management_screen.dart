@@ -121,7 +121,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               TextField(
                 controller: codeController,
                 decoration: InputDecoration(
-                  labelText: "كود الحصة", 
+                  labelText: "كود الحصة",
                   prefixIcon: const Icon(IconlyLight.password),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.bolt, color: Colors.orange),
@@ -181,7 +181,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                   // تحويل الوقت المختار إلى UTC قبل الحفظ لضمان الدقة
                   final startLocal = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute);
                   final endLocal = startLocal.add(Duration(minutes: selectedDuration));
-                  
+
                   _saveSession(
                     id: session?['id'],
                     data: {
@@ -211,40 +211,40 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
         title: const Text("إدارة الحصص والجلسات"),
         actions: [IconButton(onPressed: _fetchData, icon: const Icon(IconlyLight.swap))],
       ),
-      body: _isLoading 
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _sessions.length,
-              itemBuilder: (context, index) {
-                final session = _sessions[index];
-                final startTime = DateTime.parse(session['start_time']).toLocal();
-                final endTime = DateTime.parse(session['end_time']).toLocal();
-                final duration = endTime.difference(startTime).inMinutes;
+        padding: const EdgeInsets.all(16),
+        itemCount: _sessions.length,
+        itemBuilder: (context, index) {
+          final session = _sessions[index];
+          final startTime = DateTime.parse(session['start_time']).toLocal();
+          final endTime = DateTime.parse(session['end_time']).toLocal();
+          final duration = endTime.difference(startTime).inMinutes;
 
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
-                      child: const Icon(IconlyLight.video, color: Colors.blue),
-                    ),
-                    title: Text(session['subject_name'] ?? 'بدون عنوان', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                    subtitle: Text("المدرس: ${session['profiles']?['full_name']}\nالمدة: $duration دقيقة\nالموعد: ${DateFormat('hh:mm a').format(startTime)}"),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(icon: const Icon(IconlyLight.edit, color: Colors.blue), onPressed: () => _showSessionSheet(session: session)),
-                        IconButton(icon: const Icon(IconlyLight.delete, color: Colors.red), onPressed: () => _showDeleteDialog(session['id'], session['subject_name'])),
-                      ],
-                    ),
-                  ),
-                );
-              },
+          return Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(16),
+              leading: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(IconlyLight.video, color: Colors.blue),
+              ),
+              title: Text(session['subject_name'] ?? 'بدون عنوان', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              subtitle: Text("المدرس: ${session['profiles']?['full_name']}\nالمدة: $duration دقيقة\nالموعد: ${DateFormat('hh:mm a').format(startTime)}"),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(icon: const Icon(IconlyLight.edit, color: Colors.blue), onPressed: () => _showSessionSheet(session: session)),
+                  IconButton(icon: const Icon(IconlyLight.delete, color: Colors.red), onPressed: () => _showDeleteDialog(session['id'], session['subject_name'])),
+                ],
+              ),
             ),
+          );
+        },
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showSessionSheet(),
         label: const Text("إضافة حصة جديدة"),

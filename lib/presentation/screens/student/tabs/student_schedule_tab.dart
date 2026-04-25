@@ -48,14 +48,14 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
           .eq('student_id', userId);
 
       final List<dynamic> data = response as List;
-      
+
       if (mounted) {
         setState(() {
           _allSessions = data.map((item) {
             final sessionData = item['sessions'];
             final rooms = sessionData['rooms'] as List?;
             final bool isLiveNow = rooms != null && rooms.any((r) => r['is_active'] == true);
-            
+
             final session = SessionModel.fromMap(sessionData);
             return SessionModel(
               id: session.id,
@@ -103,12 +103,12 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
-              children: [
-                _buildCalendar(),
-                const SizedBox(height: 16),
-                Expanded(child: _buildSessionsList(sessionsForSelectedDay)),
-              ],
-            ),
+        children: [
+          _buildCalendar(),
+          const SizedBox(height: 16),
+          Expanded(child: _buildSessionsList(sessionsForSelectedDay)),
+        ],
+      ),
     );
   }
 
@@ -169,12 +169,12 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                isLive ? Icons.sensors : (isEnded ? Icons.history : Icons.book), 
+                isLive ? Icons.sensors : (isEnded ? Icons.history : Icons.book),
                 color: isLive ? Colors.red : (isEnded ? Colors.grey : Colors.blue),
               ),
             ),
             title: Text(
-              session.subjectName, 
+              session.subjectName,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 decoration: isEnded ? TextDecoration.lineThrough : null,
@@ -182,9 +182,9 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
               ),
             ),
             subtitle: Text("${DateFormat('hh:mm a').format(session.startTime)} - ${session.teacherName}"),
-            trailing: isLive 
-              ? _buildLiveBadge()
-              : (isEnded ? const Text("منتهية", style: TextStyle(color: Colors.grey, fontSize: 12)) : const Icon(Icons.arrow_forward_ios, size: 14)),
+            trailing: isLive
+                ? _buildLiveBadge()
+                : (isEnded ? const Text("منتهية", style: TextStyle(color: Colors.grey, fontSize: 12)) : const Icon(Icons.arrow_forward_ios, size: 14)),
             onTap: isLive ? () => _joinSession(session) : null,
           ),
         );

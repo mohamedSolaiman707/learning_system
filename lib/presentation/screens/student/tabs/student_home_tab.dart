@@ -46,7 +46,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     if (showLoading) setState(() => _isLoading = true);
     try {
       final userId = supabase.auth.currentUser!.id;
-      
+
       // جلب الحصص والمصادر في نفس الوقت
       final results = await Future.wait([
         supabase.from('enrollments').select('sessions(*, profiles:teacher_id(full_name), rooms(is_active))').eq('student_id', userId),
@@ -55,7 +55,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
 
       final List<dynamic> sessionData = results[0] as List;
       final List<dynamic> resourceData = results[1] as List;
-      
+
       final List<SessionModel> loadedSessions = sessionData.map((item) {
         final sData = item['sessions'];
         final rooms = sData['rooms'] as List?;
@@ -158,58 +158,58 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
       body: _isLoading && _sessions.isEmpty
           ? _buildLoadingSkeleton()
           : RefreshIndicator(
-              onRefresh: () => _loadData(),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("مرحباً بك، 👋", style: TextStyle(color: Colors.grey.shade600)),
-                    Text(userName, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 24),
-                    if (nextSession != null)
-                      NextClassCard(
-                        subject: nextSession.subjectName,
-                        teacher: nextSession.teacherName,
-                        startTime: DateFormat('hh:mm a').format(nextSession.startTime),
-                        isLive: nextSession.isLive,
-                        onJoin: () => _navigateToVideoRoom(nextSession, userName),
-                      )
-                    else
-                      _buildEmptyState(),
-                    const SizedBox(height: 32),
-                    if (_resources.isNotEmpty) ...[
-                      const Text("أحدث المصادر والملفات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 100,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _resources.length,
-                          itemBuilder: (context, index) {
-                            final res = _resources[index];
-                            return _buildResourceCard(res);
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                    ],
-                    const Text("حصص اليوم القادمة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    if (_sessions.isEmpty)
-                      const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("لا توجد حصص، انضم عبر كود الآن", style: TextStyle(color: Colors.grey))))
-                    else
-                      ..._sessions.map((s) => UpcomingClassItem(
-                        subject: s.subjectName,
-                        teacher: s.teacherName,
-                        time: DateFormat('hh:mm a').format(s.startTime),
-                        duration: "${s.endTime.difference(s.startTime).inMinutes} دقيقة",
-                      )),
-                  ],
+        onRefresh: () => _loadData(),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("مرحباً بك، 👋", style: TextStyle(color: Colors.grey.shade600)),
+              Text(userName, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
+              if (nextSession != null)
+                NextClassCard(
+                  subject: nextSession.subjectName,
+                  teacher: nextSession.teacherName,
+                  startTime: DateFormat('hh:mm a').format(nextSession.startTime),
+                  isLive: nextSession.isLive,
+                  onJoin: () => _navigateToVideoRoom(nextSession, userName),
+                )
+              else
+                _buildEmptyState(),
+              const SizedBox(height: 32),
+              if (_resources.isNotEmpty) ...[
+                const Text("أحدث المصادر والملفات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 100,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _resources.length,
+                    itemBuilder: (context, index) {
+                      final res = _resources[index];
+                      return _buildResourceCard(res);
+                    },
+                  ),
                 ),
-              ),
-            ),
+                const SizedBox(height: 32),
+              ],
+              const Text("حصص اليوم القادمة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              if (_sessions.isEmpty)
+                const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("لا توجد حصص، انضم عبر كود الآن", style: TextStyle(color: Colors.grey))))
+              else
+                ..._sessions.map((s) => UpcomingClassItem(
+                  subject: s.subjectName,
+                  teacher: s.teacherName,
+                  time: DateFormat('hh:mm a').format(s.startTime),
+                  duration: "${s.endTime.difference(s.startTime).inMinutes} دقيقة",
+                )),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

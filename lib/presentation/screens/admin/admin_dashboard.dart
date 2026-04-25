@@ -49,7 +49,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         });
       }
     } catch (e) {
-      print("Error loading admin stats: $e");
+      debugPrint("Error loading admin stats: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -145,7 +145,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           children: [
             AdminStatCard(title: "إجمالي الطلاب", value: _totalStudents.toString(), icon: IconlyLight.user_1, color: Colors.blue),
             AdminStatCard(title: "الغرف النشطة", value: _activeRooms.toString(), icon: IconlyLight.video, color: Colors.green),
-            AdminStatCard(title: "إجمالي المعلمين", value: _totalTeachers.toString(), icon: IconlyLight.user, color: Colors.orange),
+            AdminStatCard(title: "إجمالي المعلمين", value: _totalTeachers.toString(), icon: IconlyLight.user_3, color: Colors.orange),
             AdminStatCard(title: "حصص اليوم", value: _todaySessions.toString(), icon: IconlyLight.calendar, color: Colors.purple),
           ],
         );
@@ -170,7 +170,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             height: 300,
             child: LineChart(
               LineChartData(
-                gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.shade100, strokeWidth: 1)),
+                gridData: const FlGridData(show: true, drawVerticalLine: false),
                 titlesData: const FlTitlesData(show: true, rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false))),
                 borderData: FlBorderData(show: false),
                 lineBarsData: [
@@ -179,7 +179,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     isCurved: true,
                     color: Colors.blue,
                     barWidth: 4,
-                    isStrokeCapRound: true,
                     dotData: const FlDotData(show: true),
                     belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.05)),
                   ),

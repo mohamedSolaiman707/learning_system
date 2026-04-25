@@ -42,11 +42,18 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         return;
       }
 
-      const liveKitUrl = 'wss://learning-system-07wdu0v6.livekit.cloud';
+      final liveKitUrl = LiveKitService.liveKitUrl.isNotEmpty 
+          ? LiveKitService.liveKitUrl 
+          : 'wss://learning-system-07wdu0v6.livekit.cloud';
       
       final room = Room();
       await room.connect(liveKitUrl, token);
       
+      if (widget.userName.contains('Teacher')) {
+        await room.localParticipant?.setCameraEnabled(true);
+        await room.localParticipant?.setMicrophoneEnabled(true);
+      }
+
       setState(() {
         _room = room;
         _isLoading = false;
@@ -85,7 +92,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             : Stack(
                 children: [
                   if (_room != null)
-                    ParticipantLoop(room: _room!),
+                    ParticipantGrid(room: _room!),
                   
                   Positioned(
                     bottom: 30,
@@ -105,13 +112,21 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         _buildControlButton(
           icon: IconlyBold.voice,
           color: Colors.white24,
-          onPressed: () => _room?.localParticipant?.setMicrophoneEnabled(true),
+          onPressed: () {
+            final isEnabled = _room?.localParticipant?.isMicrophoneEnabled() ?? false;
+            _room?.localParticipant?.setMicrophoneEnabled(!isEnabled);
+            setState(() {});
+          },
         ),
         const SizedBox(width: 16),
         _buildControlButton(
           icon: IconlyBold.video,
           color: Colors.white24,
-          onPressed: () => _room?.localParticipant?.setCameraEnabled(true),
+          onPressed: () {
+            final isEnabled = _room?.localParticipant?.isCameraEnabled() ?? false;
+            _room?.localParticipant?.setCameraEnabled(!isEnabled);
+            setState(() {});
+          },
         ),
         const SizedBox(width: 32),
         _buildControlButton(
@@ -136,44 +151,50 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 }
 
-class ParticipantLoop extends StatelessWidget {
+class ParticipantGrid extends StatelessWidget {
   final Room room;
-  const ParticipantLoop({super.key, required this.room});
+  const ParticipantGrid({super.key, required this.room});
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: room,
       builder: (context, _) {
-        // نجمع كل المشاركين (المدرس والطلاب الآخرين)
-        final participants = room.remoteParticipants.values.toList();
-        
-        if (participants.isEmpty) {
-          return const Center(
-            child: Text("بانتظار دخول المدرس...", style: TextStyle(color: Colors.white54)),
-          );
-        }
+        // تعريف القائمة بنوع Participant صريح وتصفية القيم الفارغة
+        final List<Participant> allParticipants = [
+          ?room.localParticipant,
+          ...room.remoteParticipants.values,
+        ];
 
         return GridView.builder(
           padding: const EdgeInsets.all(10),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 1, // عرض فيديو واحد كبير (للمدرس)
+            crossAxisCount: 1,
             childAspectRatio: 16 / 9,
+            mainAxisSpacing: 10,
           ),
-          itemCount: participants.length,
+          itemCount: allParticipants.length,
           itemBuilder: (context, index) {
-            final participant = participants[index];
+            final participant = allParticipants[index];
+            
+            // جلب أول تراك فيديو متاح
+            final videoTrack = participant.videoTrackPublications.isEmpty 
+                ? null 
+                : participant.videoTrackPublications.first.track as VideoTrack?;
+
             return Card(
               color: Colors.grey[900],
               clipBehavior: Clip.antiAlias,
               child: Stack(
                 children: [
-                  // عرض فيديو المشارك
-                  VideoTrackRenderer(
-                    participant.videoTrackPublications.firstOrNull?.track as VideoTrack,
-                    fit: VideoViewFit.contain,
-                  ),
-                  // اسم المشارك في الأسفل
+                  if (videoTrack != null)
+                    VideoTrackRenderer(
+                      videoTrack,
+                      fit: VideoViewFit.contain,
+                    )
+                  else
+                    const Center(child: Icon(IconlyBold.profile, size: 64, color: Colors.white24)),
+                  
                   Positioned(
                     bottom: 10,
                     left: 10,
@@ -181,7 +202,9 @@ class ParticipantLoop extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       color: Colors.black54,
                       child: Text(
-                        participant.identity ?? "مشارك",
+                        participant.identity == room.localParticipant?.identity
+                            ? "${participant.identity} (أنت)" 
+                            : (participant.identity.isNotEmpty ? participant.identity : "مشارك"),
                         style: const TextStyle(color: Colors.white, fontSize: 12),
                       ),
                     ),

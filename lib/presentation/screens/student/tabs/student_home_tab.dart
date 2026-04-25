@@ -18,118 +18,129 @@ class StudentHomeTab extends StatefulWidget {
 
 class _StudentHomeTabState extends State<StudentHomeTab> {
   final supabase = Supabase.instance.client;
-  late Future<List<SessionModel>> _sessionsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _sessionsFuture = _fetchSessions();
+  
+  // دالة لجلب الحصص ومراقبة الغرف النشطة في نفس الوقت
+  Stream<List<Map<String, dynamic>>> _getLiveSessionsStream() {
+    final userId = supabase.auth.currentUser!.id;
+    
+    // مراقبة جدول enrollments و sessions و rooms معاً
+    return supabase
+        .from('sessions')
+        .stream(primaryKey: ['id'])
+        .order('start_time', ascending: true);
   }
 
-  Future<List<SessionModel>> _fetchSessions() async {
+  Future<List<SessionModel>> _fetchSessionsData() async {
     final userId = supabase.auth.currentUser!.id;
     final response = await supabase
         .from('sessions')
-        .select('*, profiles:teacher_id(full_name), enrollments!inner(student_id)')
+        .select('*, profiles:teacher_id(full_name), enrollments!inner(student_id), rooms(is_active)')
         .eq('enrollments.student_id', userId)
         .order('start_time', ascending: true);
 
-    return (response as List).map((data) => SessionModel.fromMap(data)).toList();
+    return (response as List).map((data) {
+      // نتحقق إذا كانت هناك غرفة نشطة لهذه الحصة
+      final rooms = data['rooms'] as List?;
+      final bool hasActiveRoom = rooms != null && rooms.any((r) => r['is_active'] == true);
+      
+      final session = SessionModel.fromMap(data);
+      return SessionModel(
+        id: session.id,
+        subjectName: session.subjectName,
+        teacherName: session.teacherName,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        isLive: hasActiveRoom, // الحصة "مباشرة" فقط إذا فتح المدرس الغرفة
+      );
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
-    final userName = user?.userMetadata?['full_name'] ?? "أحمد";
+    final userName = user?.userMetadata?['full_name'] ?? "الطالب";
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: _buildAppBar(),
-      body: FutureBuilder<List<SessionModel>>(
-        future: _sessionsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildLoadingSkeleton();
-          }
+      body: StreamBuilder(
+        // نقوم بتحديث الواجهة كلما حدث تغيير في قاعدة البيانات
+        stream: supabase.from('rooms').stream(primaryKey: ['id']),
+        builder: (context, _) {
+          return FutureBuilder<List<SessionModel>>(
+            future: _fetchSessionsData(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return _buildLoadingSkeleton();
+              }
 
-          final sessions = snapshot.data ?? [];
-          final nextSession = sessions.isNotEmpty ? sessions.first : null;
+              final sessions = snapshot.data ?? [];
+              final nextSession = sessions.isNotEmpty ? sessions.first : null;
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              setState(() {
-                _sessionsFuture = _fetchSessions();
-              });
+              return RefreshIndicator(
+                onRefresh: () async => setState(() {}),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(userName),
+                      const SizedBox(height: 20),
+                      
+                      if (nextSession != null)
+                        _buildAnimatedCard(
+                          child: NextClassCard(
+                            subject: nextSession.subjectName,
+                            teacher: nextSession.teacherName,
+                            startTime: DateFormat('hh:mm a').format(nextSession.startTime),
+                            isLive: nextSession.isLive, // ستتغير فوراً عندما يفتح المدرس البث
+                            onJoin: nextSession.isLive 
+                              ? () => _navigateToVideoRoom(nextSession, userName)
+                              : null, // الزر سيكون معطلاً حتى يبدأ المدرس
+                          ),
+                        )
+                      else
+                        _buildEmptyState(),
+
+                      const SizedBox(height: 30),
+                      _buildSectionTitle("إحصائياتي"),
+                      const SizedBox(height: 16),
+                      _buildStatsGrid(),
+                      
+                      const SizedBox(height: 30),
+                      _buildSectionTitle("حصص اليوم"),
+                      const SizedBox(height: 12),
+                      
+                      ...sessions.map((session) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: UpcomingClassItem(
+                          subject: session.subjectName,
+                          teacher: session.teacherName,
+                          time: DateFormat('hh:mm a').format(session.startTime),
+                          duration: "${session.endTime.difference(session.startTime).inMinutes} دقيقة",
+                        ),
+                      )),
+                    ],
+                  ),
+                ),
+              );
             },
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(userName),
-                  const SizedBox(height: 20),
-                  
-                  if (nextSession != null)
-                    _buildAnimatedCard(
-                      child: NextClassCard(
-                        subject: nextSession.subjectName,
-                        teacher: nextSession.teacherName,
-                        startTime: DateFormat('hh:mm a').format(nextSession.startTime),
-                        isLive: nextSession.isLive,
-                        onJoin: () => _navigateToVideoRoom(nextSession, userName),
-                      ),
-                    )
-                  else
-                    _buildEmptyState(),
-
-                  const SizedBox(height: 30),
-                  _buildSectionTitle("إحصائياتي"),
-                  const SizedBox(height: 16),
-                  _buildStatsGrid(),
-                  
-                  const SizedBox(height: 30),
-                  _buildSectionTitle("حصص اليوم"),
-                  const SizedBox(height: 12),
-                  
-                  ...sessions.map((session) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: UpcomingClassItem(
-                      subject: session.subjectName,
-                      teacher: session.teacherName,
-                      time: DateFormat('hh:mm a').format(session.startTime),
-                      duration: "${session.endTime.difference(session.startTime).inMinutes} دقيقة",
-                    ),
-                  )),
-                ],
-              ),
-            ),
           );
         },
       ),
     );
   }
 
+  // بقية الـ Widgets (AppBar, Header, Stats, etc.) تبقى كما هي مع تحسينات بسيطة
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: Colors.white,
+      elevation: 0,
       surfaceTintColor: Colors.transparent,
-      title: const Text("EduConnect Pro"),
+      title: const Text("EduConnect Pro", style: TextStyle(fontWeight: FontWeight.bold)),
       actions: [
-        Stack(
-          children: [
-            IconButton(onPressed: () {}, icon: const Icon(IconlyLight.notification)),
-            Positioned(
-              right: 12,
-              top: 12,
-              child: Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(color: Colors.red, border: Border.all(color: Colors.white, width: 2), shape: BoxShape.circle),
-              ),
-            )
-          ],
-        ),
+        IconButton(onPressed: () {}, icon: const Icon(IconlyLight.notification)),
         const SizedBox(width: 8),
       ],
     );
@@ -139,29 +150,14 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "مرحباً بك، 👋",
-          style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
-        ),
-        Text(
-          name,
-          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E)),
-        ),
+        Text("مرحباً بك، 👋", style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
+        Text(name, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
       ],
     );
   }
 
   Widget _buildSectionTitle(String title) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E)),
-        ),
-        TextButton(onPressed: () {}, child: const Text("مشاهدة الكل")),
-      ],
-    );
+    return Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold));
   }
 
   Widget _buildStatsGrid() {
@@ -180,7 +176,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 10))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20)],
       ),
       child: Column(
         children: [
@@ -188,15 +184,14 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
             radius: 45.0,
             lineWidth: 8.0,
             percent: percent,
-            center: Text("${(percent * 100).toInt()}%", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            center: Text("${(percent * 100).toInt()}%"),
             progressColor: color,
             backgroundColor: color.withOpacity(0.1),
             circularStrokeCap: CircularStrokeCap.round,
             animation: true,
-            animationDuration: 1500,
           ),
           const SizedBox(height: 12),
-          Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -208,11 +203,8 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
       highlightColor: Colors.grey.shade100,
       child: ListView.builder(
         padding: const EdgeInsets.all(20),
-        itemCount: 4,
-        itemBuilder: (_, __) => Padding(
-          padding: const EdgeInsets.only(bottom: 20),
-          child: Container(height: 100, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20))),
-        ),
+        itemCount: 3,
+        itemBuilder: (_, __) => Container(height: 100, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20))),
       ),
     );
   }
@@ -221,13 +213,12 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(30),
-      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.blue.withOpacity(0.1))),
+      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(24)),
       child: const Column(
         children: [
           Icon(IconlyLight.calendar, size: 50, color: Colors.blue),
           SizedBox(height: 16),
-          Text("لا توجد حصص مجدولة الآن", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          Text("استرخِ قليلاً، سنخبرك عند إضافة دروس جديدة", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+          Text("لا توجد حصص مجدولة الآن", style: TextStyle(fontWeight: FontWeight.bold)),
         ],
       ),
     );

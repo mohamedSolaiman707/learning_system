@@ -28,36 +28,37 @@ class ResourcesService {
   }) async {
     try {
       final userId = supabase.auth.currentUser!.id;
-      // توليد اسم فريد للملف لتجنب التضارب
       final fileExt = pickerFile.extension ?? 'pdf';
       final fileName = "${DateTime.now().millisecondsSinceEpoch}.${fileExt}";
-      final filePath = '$userId/$fileName'; // تنظيم الملفات داخل مجلدات باسم المدرس
+      // مسار الملف: معرف المدرس / اسم الملف
+      final filePath = '$userId/$fileName';
 
-      debugPrint("Starting upload for: $filePath");
+      // تحديد الـ Content Type الصحيح لضمان فتح الملف في المتصفح
+      String contentType = 'application/octet-stream';
+      if (fileExt.toLowerCase() == 'pdf') contentType = 'application/pdf';
+      if (['jpg', 'jpeg', 'png'].contains(fileExt.toLowerCase())) contentType = 'image/$fileExt';
+
+      debugPrint("Attempting to upload to path: $filePath with type: $contentType");
 
       if (kIsWeb) {
-        if (pickerFile.bytes == null) {
-          debugPrint("Error: File bytes are null on web");
-          return false;
-        }
+        if (pickerFile.bytes == null) throw "File bytes are null";
         await supabase.storage.from('resources').uploadBinary(
           filePath,
           pickerFile.bytes!,
-          fileOptions: FileOptions(contentType: 'application/$fileExt', upsert: true),
+          fileOptions: FileOptions(contentType: contentType, upsert: true),
         );
       } else {
+        if (pickerFile.path == null) throw "File path is null";
         await supabase.storage.from('resources').upload(
           filePath,
           File(pickerFile.path!),
-          fileOptions: FileOptions(contentType: 'application/$fileExt', upsert: true),
+          fileOptions: FileOptions(contentType: contentType, upsert: true),
         );
       }
 
-      // الحصول على الرابط
       final String fileUrl = supabase.storage.from('resources').getPublicUrl(filePath);
-      debugPrint("File uploaded successfully. URL: $fileUrl");
 
-      // ربط الملف بالحصّة في جدول الداتابيز
+      // الخطوة الحاسمة: تسجيل الملف في قاعدة البيانات
       await supabase.from('resources').insert({
         'session_id': sessionId,
         'title': title,
@@ -66,9 +67,11 @@ class ResourcesService {
         'uploaded_by': userId,
       });
 
+      debugPrint("Upload process completed successfully!");
       return true;
     } catch (e) {
-      debugPrint("CRITICAL UPLOAD ERROR: $e");
+      // طباعة الخطأ الحقيقي في الـ Console لمعرفته
+      debugPrint("UPLOAD ERROR DETAILS: $e");
       return false;
     }
   }

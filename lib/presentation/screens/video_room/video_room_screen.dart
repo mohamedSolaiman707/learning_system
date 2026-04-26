@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
@@ -28,15 +29,23 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   
   bool _isMicEnabled = false;
   bool _isCamEnabled = false;
-  bool _isHandRaised = false;
   bool _isChatOpen = false;
+  
   final _messageController = TextEditingController();
+  final _chatScrollController = ScrollController();
   final supabase = Supabase.instance.client;
+  
+  List<Map<String, dynamic>> _messages = [];
+  Timer? _chatTimer;
 
   @override
   void initState() {
     super.initState();
     _connectToRoom();
+    // بدء تحديث الشات كل 3 ثوانٍ لضمان التفاعل اللحظي (Polling)
+    _chatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (_isChatOpen) _fetchMessages(showLoading: false);
+    });
   }
 
   Future<void> _connectToRoom() async {
@@ -70,46 +79,55 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     }
   }
 
+  Future<void> _fetchMessages({bool showLoading = true}) async {
+    try {
+      final response = await supabase
+          .from('messages')
+          .select()
+          .eq('room_name', widget.roomName)
+          .order('created_at', ascending: true);
+      
+      if (mounted) {
+        setState(() {
+          _messages = List<Map<String, dynamic>>.from(response);
+        });
+        // النزول لآخر رسالة تلقائياً
+        if (_chatScrollController.hasClients) {
+          _chatScrollController.animateTo(
+            _chatScrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Chat fetch error: $e");
+    }
+  }
+
   void _sendMessage() async {
     if (_messageController.text.isEmpty) return;
     final content = _messageController.text;
     _messageController.clear();
-    await supabase.from('messages').insert({
-      'room_name': widget.roomName,
-      'user_name': widget.userName,
-      'content': content,
-    });
-  }
-
-  void _toggleMic() async {
-    if (_room == null) return;
-    final newState = !_isMicEnabled;
-    await _room!.localParticipant?.setMicrophoneEnabled(newState);
-    setState(() => _isMicEnabled = newState);
-  }
-
-  void _toggleCamera() async {
-    if (_room == null) return;
-    final newState = !_isCamEnabled;
-    await _room!.localParticipant?.setCameraEnabled(newState);
-    setState(() => _isCamEnabled = newState);
-  }
-
-  void _toggleHandRaise() {
-    setState(() => _isHandRaised = !_isHandRaised);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isHandRaised ? "قمت برفع يدك للمشاركة ✋" : "أنزلت يدك"),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 1),
-      ),
-    );
+    
+    try {
+      await supabase.from('messages').insert({
+        'room_name': widget.roomName,
+        'user_name': widget.userName,
+        'content': content,
+      });
+      _fetchMessages(showLoading: false); // تحديث فوري بعد الإرسال
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل إرسال الرسالة")));
+    }
   }
 
   @override
   void dispose() {
     _room?.disconnect();
+    _chatTimer?.cancel();
     _messageController.dispose();
+    _chatScrollController.dispose();
     super.dispose();
   }
 
@@ -119,19 +137,17 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       backgroundColor: const Color(0xFF0F1014),
       body: _isLoading 
           ? _buildModernLoading()
-          : _errorMessage != null
-            ? _buildErrorView()
-            : Stack(
-                children: [
-                  if (_room != null) ParticipantGrid(room: _room!),
-                  
-                  if (_isChatOpen) _buildChatPanel(),
+          : Stack(
+              children: [
+                if (_room != null) ParticipantGrid(room: _room!),
+                
+                if (_isChatOpen) _buildChatPanel(),
 
-                  _buildTopBar(),
+                _buildTopBar(),
 
-                  _buildBottomControls(),
-                ],
-              ),
+                _buildBottomControls(),
+              ],
+            ),
     );
   }
 
@@ -143,21 +159,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
           const CircularProgressIndicator(color: Colors.blue, strokeWidth: 2),
           const SizedBox(height: 24),
           Text("جاري تحضير القاعة التعليمية...", style: TextStyle(color: Colors.blue.shade100, letterSpacing: 1.2)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(IconlyBold.danger, color: Colors.red, size: 60),
-          const SizedBox(height: 16),
-          Text(_errorMessage!, style: const TextStyle(color: Colors.white)),
-          const SizedBox(height: 24),
-          ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text("العودة للرئيسية"))
         ],
       ),
     );
@@ -175,6 +176,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.06),
               border: Border.all(color: Colors.white.withOpacity(0.1)),
+              borderRadius: BorderRadius.circular(24),
             ),
             child: Row(
               children: [
@@ -185,9 +187,15 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 ),
                 IconButton(
                   icon: Icon(IconlyLight.chat, color: _isChatOpen ? Colors.blue : Colors.white70),
-                  onPressed: () => setState(() => _isChatOpen = !_isChatOpen),
+                  onPressed: () {
+                    setState(() => _isChatOpen = !_isChatOpen);
+                    if (_isChatOpen) _fetchMessages();
+                  },
                 ),
-                IconButton(icon: const Icon(Icons.close, color: Colors.white70), onPressed: () => Navigator.pop(context)),
+                IconButton(
+                  icon: const Icon(Icons.logout_rounded, color: Colors.white70),
+                  onPressed: () => Navigator.pop(context),
+                )
               ],
             ),
           ),
@@ -208,19 +216,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         ),
         child: Column(
           children: [
-            const Padding(padding: EdgeInsets.all(16), child: Text("الدردشة الحية", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text("الدردشة الحية", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
             Expanded(
-              child: StreamBuilder(
-                stream: supabase.from('messages').stream(primaryKey: ['id']).eq('room_name', widget.roomName).order('created_at', ascending: true),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const SizedBox();
-                  final messages = snapshot.data!;
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: messages.length,
-                    itemBuilder: (context, i) => _buildMessageBubble(messages[i]),
-                  );
-                },
+              child: ListView.builder(
+                controller: _chatScrollController,
+                padding: const EdgeInsets.all(12),
+                itemCount: _messages.length,
+                itemBuilder: (context, i) => _buildMessageBubble(_messages[i]),
               ),
             ),
             _buildChatInput(),
@@ -268,6 +273,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               ),
+              onSubmitted: (_) => _sendMessage(),
             ),
           ),
           IconButton(onPressed: _sendMessage, icon: const Icon(IconlyBold.send, color: Colors.blue)),
@@ -297,19 +303,19 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   _buildActionButton(
                     icon: _isMicEnabled ? IconlyBold.voice : IconlyBold.voice_2,
                     color: _isMicEnabled ? Colors.white12 : Colors.red.withOpacity(0.8),
-                    onPressed: _toggleMic,
+                    onPressed: () async {
+                      await _room?.localParticipant?.setMicrophoneEnabled(!_isMicEnabled);
+                      setState(() => _isMicEnabled = !_isMicEnabled);
+                    },
                   ),
                   const SizedBox(width: 16),
                   _buildActionButton(
                     icon: _isCamEnabled ? IconlyBold.video : IconlyBold.hide,
                     color: _isCamEnabled ? Colors.white12 : Colors.red.withOpacity(0.8),
-                    onPressed: _toggleCamera,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildActionButton(
-                    icon: Icons.back_hand_rounded,
-                    color: _isHandRaised ? Colors.orange : Colors.white12,
-                    onPressed: _toggleHandRaise,
+                    onPressed: () async {
+                      await _room?.localParticipant?.setCameraEnabled(!_isCamEnabled);
+                      setState(() => _isCamEnabled = !_isCamEnabled);
+                    },
                   ),
                   const SizedBox(width: 30),
                   _buildActionButton(
@@ -350,8 +356,9 @@ class ParticipantGrid extends StatelessWidget {
     return ListenableBuilder(
       listenable: room,
       builder: (context, _) {
+        // تحديد النوع يدوياً لضمان التعرف على الخصائص
         final List<Participant> participants = [
-          if (room.localParticipant != null) room.localParticipant!,
+          if (room.localParticipant != null) ?room.localParticipant,
           ...room.remoteParticipants.values
         ];
 
@@ -413,13 +420,13 @@ class ParticipantGrid extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  (room.localParticipant != null && p.identity == room.localParticipant!.identity) ? "أنت" : p.identity,
-                                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                  (p.identity == room.localParticipant?.identity) ? "أنت" : p.identity,
+                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               if (p.isSpeaking)
-                                const Icon(Icons.graphic_eq_rounded, color: Colors.blue, size: 18)
+                                const Icon(Icons.graphic_eq_rounded, color: Colors.blue, size: 16)
                               else if (!p.isMicrophoneEnabled())
                                 const Icon(Icons.mic_off_rounded, color: Colors.red, size: 16),
                             ],

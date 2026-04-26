@@ -32,6 +32,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
   bool _isCamEnabled = false;
   bool _isHandRaised = false;
   bool _isChatOpen = false;
+  bool _isScreenSharing = false;
   
   final _messageController = TextEditingController();
   final _chatScrollController = ScrollController();
@@ -47,7 +48,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
   void initState() {
     super.initState();
     _connectToRoom();
-    _chatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    _chatTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
       if (_isChatOpen) _fetchMessages(showLoading: false);
     });
   }
@@ -59,12 +60,20 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
 
       final room = Room();
       
+      final listener = room.createListener();
+      listener.on<DataReceivedEvent>((event) {
+        final decoded = utf8.decode(event.data);
+        final data = jsonDecode(decoded);
+        if (data['type'] == 'hand_raise') {
+          setState(() => _remoteHandStates[event.participant!.identity] = data['value']);
+        } else if (data['type'] == 'reaction') {
+          _showReactionEffect(data['value']);
+        }
+      });
+
       await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token, 
         roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true)
       );
-
-      // إعداد المستمع للبيانات التفاعلية
-      room.localParticipant?.addListener(_onParticipantChanged);
       
       if (widget.userName.contains('Teacher')) {
         await room.localParticipant?.setCameraEnabled(true);
@@ -74,12 +83,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
 
       setState(() { _room = room; _isLoading = false; });
     } catch (e) {
-      setState(() { _errorMessage = e.toString(); _isLoading = false; });
+      setState(() { _errorMessage = "خطأ في الاتصال: $e"; _isLoading = false; });
     }
-  }
-
-  void _onParticipantChanged() {
-    if (mounted) setState(() {});
   }
 
   void _sendData(Map<String, dynamic> data) async {
@@ -88,44 +93,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
     await _room!.localParticipant?.publishData(bytes);
   }
 
-  Future<void> _fetchMessages({bool showLoading = true}) async {
-    try {
-      final response = await supabase.from('messages').select()
-          .eq('room_name', widget.roomName).order('created_at', ascending: true);
-      if (mounted) {
-        setState(() { _messages = List<Map<String, dynamic>>.from(response); });
-        _scrollToBottom();
-      }
-    } catch (e) { debugPrint("Chat error: $e"); }
-  }
-
-  void _scrollToBottom() {
-    if (_chatScrollController.hasClients) {
-      _chatScrollController.animateTo(_chatScrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
-    }
-  }
-
-  void _sendMessage() async {
-    if (_messageController.text.isEmpty) return;
-    final content = _messageController.text;
-    _messageController.clear();
-    setState(() {
-      _messages.add({'user_name': widget.userName, 'content': content, 'is_temp': true});
-    });
-    _scrollToBottom();
-    await supabase.from('messages').insert({'room_name': widget.roomName, 'user_name': widget.userName, 'content': content});
-  }
-
   void _toggleHand() {
     final newState = !_isHandRaised;
     setState(() => _isHandRaised = newState);
     _sendData({'type': 'hand_raise', 'value': newState});
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(newState ? "رفعت يدك ✋" : "أنزلت يدك"),
-      duration: const Duration(seconds: 1),
-      behavior: SnackBarBehavior.floating,
-    ));
   }
 
   void _sendReaction(String emoji) {
@@ -145,12 +116,40 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
     });
   }
 
+  Future<void> _toggleScreenShare() async {
+    if (_room == null) return;
+    try {
+      final newState = !_isScreenSharing;
+      await _room!.localParticipant?.setScreenShareEnabled(newState);
+      setState(() => _isScreenSharing = newState);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("مشاركة الشاشة: $e")));
+    }
+  }
+
+  Future<void> _fetchMessages({bool showLoading = true}) async {
+    try {
+      final response = await supabase.from('messages').select()
+          .eq('room_name', widget.roomName).order('created_at', ascending: true);
+      if (mounted) setState(() { _messages = List<Map<String, dynamic>>.from(response); });
+    } catch (e) { debugPrint("Chat error: $e"); }
+  }
+
+  void _sendMessage() async {
+    if (_messageController.text.isEmpty) return;
+    final content = _messageController.text;
+    _messageController.clear();
+    setState(() {
+      _messages.add({'user_name': widget.userName, 'content': content, 'is_temp': true});
+    });
+    await supabase.from('messages').insert({'room_name': widget.roomName, 'user_name': widget.userName, 'content': content});
+  }
+
   @override
   void dispose() {
     _room?.disconnect();
     _chatTimer?.cancel();
     _messageController.dispose();
-    _chatScrollController.dispose();
     super.dispose();
   }
 
@@ -159,7 +158,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
       body: _isLoading 
-          ? const Center(child: CircularProgressIndicator(color: Colors.blue))
+          ? _buildModernLoading()
           : Stack(
               children: [
                 if (_room != null) ParticipantGrid(room: _room!, remoteHands: _remoteHandStates, localHand: _isHandRaised),
@@ -172,21 +171,34 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
     );
   }
 
+  Widget _buildModernLoading() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(color: Colors.blue, strokeWidth: 2),
+          const SizedBox(height: 24),
+          const Text("جاري تحضير القاعة التعليمية...", style: TextStyle(color: Colors.white, fontSize: 14)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTopBar() {
     return Positioned(
       top: 40, left: 20, right: 20,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: Colors.white.withOpacity(0.05),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), border: Border.all(color: Colors.white10)),
             child: Row(
               children: [
                 const Icon(Icons.circle, color: Colors.red, size: 8),
                 const SizedBox(width: 10),
-                Expanded(child: Text(widget.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                Expanded(child: Text(widget.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15))),
                 _buildReactionBtn("❤️"),
                 _buildReactionBtn("👏"),
                 _buildReactionBtn("🔥"),
@@ -223,7 +235,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
             const Padding(padding: EdgeInsets.all(16), child: Text("الدردشة الحية", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
             Expanded(
               child: ListView.builder(
-                controller: _chatScrollController,
                 padding: const EdgeInsets.all(12),
                 itemCount: _messages.length,
                 itemBuilder: (context, i) => _buildMessageBubble(_messages[i]),
@@ -243,11 +254,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
       child: Column(
         crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Text(msg['user_name'], style: TextStyle(color: isMe ? Colors.blue : Colors.grey, fontSize: 10)),
+          Text(msg['user_name'] ?? "", style: TextStyle(color: isMe ? Colors.blue : Colors.grey, fontSize: 10)),
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(color: isMe ? Colors.blue : Colors.white10, borderRadius: BorderRadius.circular(12)),
-            child: Text(msg['content'], style: const TextStyle(color: Colors.white, fontSize: 13)),
+            child: Text(msg['content'] ?? "", style: const TextStyle(color: Colors.white, fontSize: 13)),
           ),
         ],
       ),
@@ -259,20 +270,17 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              style: const TextStyle(color: Colors.black),
-              decoration: InputDecoration(
-                hintText: "رسالة...",
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-              onSubmitted: (_) => _sendMessage(),
+          Expanded(child: TextField(
+            controller: _messageController, 
+            style: const TextStyle(color: Colors.black), 
+            decoration: InputDecoration(
+              hintText: "اكتب...", 
+              filled: true, 
+              fillColor: Colors.white, 
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)
             ),
-          ),
+            onSubmitted: (_) => _sendMessage(),
+          )),
           IconButton(onPressed: _sendMessage, icon: const Icon(IconlyBold.send, color: Colors.blue)),
         ],
       ),
@@ -296,6 +304,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
           }),
           const SizedBox(width: 16),
           _buildCircleBtn(Icons.back_hand, _isHandRaised ? Colors.orange : Colors.white12, _toggleHand),
+          const SizedBox(width: 16),
+          _buildCircleBtn(Icons.screen_share, _isScreenSharing ? Colors.green : Colors.white12, _toggleScreenShare),
           const SizedBox(width: 32),
           _buildCircleBtn(IconlyBold.call_missed, Colors.red, () => Navigator.pop(context), isLarge: true),
         ],
@@ -304,7 +314,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
   }
 
   Widget _buildCircleBtn(IconData icon, Color color, VoidCallback onTap, {bool isLarge = false}) {
-    return InkWell(onTap: onTap, child: Container(padding: EdgeInsets.all(isLarge ? 18 : 14), decoration: BoxDecoration(color: color, shape: BoxShape.circle), child: Icon(icon, color: Colors.white, size: isLarge ? 32 : 24)));
+    return InkWell(onTap: onTap, child: Container(padding: EdgeInsets.all(isLarge ? 18 : 14), decoration: BoxDecoration(color: color, shape: BoxShape.circle), child: Icon(icon, color: Colors.white, size: isLarge ? 30 : 22)));
   }
 }
 
@@ -320,51 +330,37 @@ class ParticipantGrid extends StatelessWidget {
       listenable: room,
       builder: (context, _) {
         final List<Participant> participants = [
-          ?room.localParticipant,
+          if (room.localParticipant != null) room.localParticipant!,
           ...room.remoteParticipants.values
         ];
 
         return GridView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 120, 16, 120),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.8, mainAxisSpacing: 12, crossAxisSpacing: 12),
+          padding: const EdgeInsets.fromLTRB(20, 140, 20, 140),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.8, mainAxisSpacing: 15, crossAxisSpacing: 15),
           itemCount: participants.length,
           itemBuilder: (context, i) {
             final p = participants[i];
-            final isLocal = p.identity == room.localParticipant?.identity;
+            final bool isLocal = room.localParticipant != null && p.identity == room.localParticipant!.identity;
             final bool isHandUp = isLocal ? localHand : (remoteHands[p.identity] ?? false);
             final videoTrack = p.videoTrackPublications.isEmpty ? null : p.videoTrackPublications.first.track as VideoTrack?;
             
             return AnimatedContainer(
               duration: const Duration(milliseconds: 400),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(28),
                 border: Border.all(color: p.isSpeaking ? Colors.blue : (isHandUp ? Colors.orange : Colors.white10), width: 3),
                 boxShadow: p.isSpeaking ? [BoxShadow(color: Colors.blue.withOpacity(0.2), blurRadius: 15)] : [],
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(22),
-                child: Stack(
-                  children: [
-                    if (videoTrack != null) VideoTrackRenderer(videoTrack, fit: VideoViewFit.contain)
-                    else Container(color: Colors.white10, child: const Center(child: Icon(IconlyBold.profile, color: Colors.white24, size: 40))),
-                    
-                    if (isHandUp) Positioned(top: 10, right: 10, child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle), child: const Icon(Icons.back_hand, color: Colors.white, size: 16))),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  if (videoTrack != null) VideoTrackRenderer(videoTrack, fit: VideoViewFit.contain)
+                  else Container(color: Colors.black, child: const Center(child: Icon(IconlyBold.profile, color: Colors.white24, size: 45))),
+                  
+                  if (isHandUp) Positioned(top: 12, right: 12, child: Container(padding: const EdgeInsets.all(6), decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle), child: const Icon(Icons.back_hand, color: Colors.white, size: 18))),
 
-                    Positioned(
-                      bottom: 12, left: 12, right: 12,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
-                        child: Row(
-                          children: [
-                            Expanded(child: Text(isLocal ? "أنت" : p.identity, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                            if (p.isSpeaking) const Icon(Icons.graphic_eq, color: Colors.blue, size: 14),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  Positioned(bottom: 12, left: 12, right: 12, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), color: Colors.black45, child: Row(children: [Expanded(child: Text(isLocal ? "أنت" : p.identity, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))), if (p.isSpeaking) const Icon(Icons.graphic_eq, color: Colors.blue, size: 16)]))),
+                ],
               ),
             );
           },

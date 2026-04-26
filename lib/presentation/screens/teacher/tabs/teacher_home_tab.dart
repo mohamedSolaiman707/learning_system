@@ -10,6 +10,7 @@ import '../../../../core/models/session_model.dart';
 import '../../../../core/services/resources_service.dart';
 import '../widgets/teacher_stat_card.dart';
 import '../attendance/attendance_screen.dart';
+import '../assignments/teacher_assignments_screen.dart';
 import '../../video_room/video_room_screen.dart';
 
 class TeacherHomeTab extends StatefulWidget {
@@ -116,7 +117,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم إنهاء الحصة بنجاح"), backgroundColor: Colors.green));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e"), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في الإنهاء: $e"), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -169,6 +170,20 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     );
   }
 
+  void _showEndDialog(String sessionId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("إنهاء الحصة"),
+        content: const Text("هل أنت متأكد من إنهاء البث وإغلاق الغرفة؟"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          TextButton(onPressed: () { Navigator.pop(context); _handleEndSession(sessionId); }, child: const Text("إنهاء الآن", style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentSession = _sessions.isNotEmpty ? _sessions.first : null;
@@ -217,15 +232,35 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [BoxShadow(color: (session.isLive ? Colors.red : Colors.blue).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
       ), 
-      child: Column(children: [
-        Row(children: [const Icon(IconlyLight.video, color: Colors.white, size: 28), const SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(session.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)), Directionality(textDirection: TextDirection.ltr, child: Text(timeRange, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14)))]))]), 
-        if (classCode != null) ...[const SizedBox(height: 20), Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(12)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("كود الحصة: $classCode", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), IconButton(onPressed: () { Clipboard.setData(ClipboardData(text: classCode)); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ الكود"))); }, icon: const Icon(Icons.copy, color: Colors.white, size: 18))]))], 
-        const SizedBox(height: 24), 
-        Row(children: [
-          Expanded(child: ElevatedButton(onPressed: () => _handleStartSession(session), style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: session.isLive ? Colors.red.shade700 : Colors.blue.shade700, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))), child: Text(session.isLive ? "العودة للبث" : "بدء البث المباشر"))),
-          if (session.isLive) ...[const SizedBox(width: 12), IconButton(onPressed: () => _showEndDialog(session.id), icon: const Icon(IconlyBold.close_square, color: Colors.white), style: IconButton.styleFrom(backgroundColor: Colors.white24, minimumSize: const Size(56, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))))]
-        ]),
-      ]));
+      child: Column(
+        children: [
+          Row(children: [
+            const Icon(IconlyLight.video, color: Colors.white, size: 28),
+            const SizedBox(width: 16),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(session.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              Directionality(textDirection: TextDirection.ltr, child: Text(timeRange, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14))),
+            ]))
+          ]), 
+          if (classCode != null) ...[
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(12), 
+              decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(12)), 
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text("كود الحصة: $classCode", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                IconButton(onPressed: () { Clipboard.setData(ClipboardData(text: classCode)); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ الكود"))); }, icon: const Icon(Icons.copy, color: Colors.white, size: 18))
+              ])
+            )
+          ], 
+          const SizedBox(height: 24), 
+          Row(children: [
+            Expanded(child: ElevatedButton(onPressed: () => _handleStartSession(session), style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: session.isLive ? Colors.red.shade700 : Colors.blue.shade700, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))), child: Text(session.isLive ? "العودة للبث" : "بدء البث المباشر"))),
+            if (session.isLive) ...[const SizedBox(width: 12), IconButton(onPressed: () => _showEndDialog(session.id), icon: const Icon(IconlyBold.close_square, color: Colors.white), style: IconButton.styleFrom(backgroundColor: Colors.white24, minimumSize: const Size(56, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))))]
+          ]),
+        ]
+      )
+    );
   }
 
   Widget _buildQuickActions(SessionModel? currentSession) => Column(children: [
@@ -233,14 +268,14 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       if (currentSession != null) Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: currentSession.id, subjectName: currentSession.subjectName)));
     }), 
     const SizedBox(height: 12), 
+    _buildActionCard(icon: IconlyLight.document, color: Colors.green, title: "الواجبات والمهام", onTap: () {
+      if (currentSession != null) Navigator.push(context, MaterialPageRoute(builder: (context) => TeacherAssignmentsScreen(sessionId: currentSession.id, subjectName: currentSession.subjectName)));
+    }),
+    const SizedBox(height: 12), 
     _buildActionCard(icon: IconlyLight.folder, color: Colors.blue, title: "إدارة المصادر", onTap: () => currentSession != null ? _showUploadDialog(currentSession.id) : null)
   ]);
 
   Widget _buildActionCard({required IconData icon, required Color color, required String title, required VoidCallback onTap}) => Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20)]), child: ListTile(leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color)), title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)), trailing: const Icon(Icons.arrow_forward_ios, size: 16), onTap: onTap));
   
-  void _showEndDialog(String sessionId) {
-    showDialog(context: context, builder: (context) => AlertDialog(title: const Text("إنهاء الحصة"), content: const Text("هل أنت متأكد من إنهاء البث وإغلاق الغرفة؟"), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")), TextButton(onPressed: () { Navigator.pop(context); _handleEndSession(sessionId); }, child: const Text("إنهاء", style: TextStyle(color: Colors.red)))]));
-  }
-
   Widget _buildEmptyState() => Container(width: double.infinity, padding: const EdgeInsets.all(40), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)), child: const Column(children: [Icon(IconlyLight.calendar, size: 64, color: Colors.grey), SizedBox(height: 16), Text("لا توجد حصص مجدولة", style: TextStyle(color: Colors.grey))]));
 }

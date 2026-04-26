@@ -10,6 +10,7 @@ import '../../../../core/models/session_model.dart';
 import '../../../../core/models/resource_model.dart';
 import '../widgets/next_class_card.dart';
 import '../widgets/upcoming_class_item.dart';
+import '../assignments/student_assignments_screen.dart';
 import '../../video_room/video_room_screen.dart';
 
 class StudentHomeTab extends StatefulWidget {
@@ -23,7 +24,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   final supabase = Supabase.instance.client;
   bool _isJoining = false;
   List<SessionModel> _sessions = [];
-  List<ResourceModel> _resources = [];
   bool _isLoading = true;
   Timer? _refreshTimer;
 
@@ -46,17 +46,14 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     if (showLoading) setState(() => _isLoading = true);
     try {
       final userId = supabase.auth.currentUser!.id;
-      
-      // جلب الحصص والمصادر في نفس الوقت
-      final results = await Future.wait([
-        supabase.from('enrollments').select('sessions(*, profiles:teacher_id(full_name), rooms(is_active))').eq('student_id', userId),
-        supabase.from('resources').select().order('created_at', ascending: false),
-      ]);
+      final response = await supabase
+          .from('enrollments')
+          .select('sessions(*, profiles:teacher_id(full_name), rooms(is_active))')
+          .eq('student_id', userId);
 
-      final List<dynamic> sessionData = results[0] as List;
-      final List<dynamic> resourceData = results[1] as List;
+      final List<dynamic> data = response as List;
       
-      final List<SessionModel> loadedSessions = sessionData.map((item) {
+      final List<SessionModel> loadedSessions = data.map((item) {
         final sData = item['sessions'];
         final rooms = sData['rooms'] as List?;
         final bool isLiveNow = rooms != null && rooms.any((r) => r['is_active'] == true);
@@ -74,7 +71,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
       if (mounted) {
         setState(() {
           _sessions = loadedSessions;
-          _resources = resourceData.map((r) => ResourceModel.fromMap(r)).toList();
           _isLoading = false;
           _filterAndRefreshLocal();
         });
@@ -93,51 +89,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     });
   }
 
-  Future<void> _launchUrl(String url) async {
-    if (!await launchUrl(Uri.parse(url))) {
-      throw Exception('Could not launch $url');
-    }
-  }
-
-  void _showJoinCodeDialog() {
-    final codeController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: const Text("انضم لمادة جديدة"),
-          content: TextField(
-            controller: codeController,
-            decoration: const InputDecoration(hintText: "أدخل كود المادة", prefixIcon: Icon(IconlyLight.password)),
-            textCapitalization: TextCapitalization.characters,
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
-            ElevatedButton(
-              onPressed: _isJoining ? null : () async {
-                if (codeController.text.isEmpty) return;
-                setDialogState(() => _isJoining = true);
-                try {
-                  final result = await supabase.rpc('enroll_student_by_code', params: {'p_code': codeController.text.trim().toUpperCase()});
-                  if (!mounted) return;
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: result['success'] ? Colors.green : Colors.orange));
-                  if (result['success']) _loadData();
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e"), backgroundColor: Colors.red));
-                } finally {
-                  setDialogState(() => _isJoining = false);
-                }
-              },
-              child: const Text("انضمام"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
@@ -151,12 +102,12 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
         elevation: 0,
         title: const Text("EduConnect Pro", style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(onPressed: _showJoinCodeDialog, icon: const Icon(Icons.add_box_rounded, color: Colors.blue, size: 28)),
+          IconButton(onPressed: () {}, icon: const Icon(Icons.add_box_rounded, color: Colors.blue, size: 28)),
           const SizedBox(width: 8),
         ],
       ),
       body: _isLoading && _sessions.isEmpty
-          ? _buildLoadingSkeleton()
+          ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: () => _loadData(),
               child: SingleChildScrollView(
@@ -169,43 +120,13 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                     Text(userName, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 24),
                     if (nextSession != null)
-                      NextClassCard(
-                        subject: nextSession.subjectName,
-                        teacher: nextSession.teacherName,
-                        startTime: DateFormat('hh:mm a').format(nextSession.startTime),
-                        isLive: nextSession.isLive,
-                        onJoin: () => _navigateToVideoRoom(nextSession, userName),
-                      )
+                      _buildNextSessionSection(nextSession, userName)
                     else
                       _buildEmptyState(),
                     const SizedBox(height: 32),
-                    if (_resources.isNotEmpty) ...[
-                      const Text("أحدث المصادر والملفات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 100,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _resources.length,
-                          itemBuilder: (context, index) {
-                            final res = _resources[index];
-                            return _buildResourceCard(res);
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                    ],
                     const Text("حصص اليوم القادمة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
-                    if (_sessions.isEmpty)
-                      const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("لا توجد حصص، انضم عبر كود الآن", style: TextStyle(color: Colors.grey))))
-                    else
-                      ..._sessions.map((s) => UpcomingClassItem(
-                        subject: s.subjectName,
-                        teacher: s.teacherName,
-                        time: DateFormat('hh:mm a').format(s.startTime),
-                        duration: "${s.endTime.difference(s.startTime).inMinutes} دقيقة",
-                      )),
+                    ..._sessions.map((s) => _buildSessionItem(s)),
                   ],
                 ),
               ),
@@ -213,31 +134,74 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     );
   }
 
-  Widget _buildResourceCard(ResourceModel res) {
-    return InkWell(
-      onTap: () => _launchUrl(res.fileUrl),
-      child: Container(
-        width: 160,
-        margin: const EdgeInsets.only(left: 12),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200)),
-        child: Row(
+  Widget _buildNextSessionSection(SessionModel nextSession, String userName) {
+    return Column(
+      children: [
+        NextClassCard(
+          subject: nextSession.subjectName,
+          teacher: nextSession.teacherName,
+          startTime: DateFormat('hh:mm a').format(nextSession.startTime),
+          isLive: nextSession.isLive,
+          onJoin: () => _navigateToVideoRoom(nextSession, userName),
+        ),
+        const SizedBox(height: 16),
+        Row(
           children: [
-            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: const Icon(IconlyLight.document, color: Colors.blue, size: 20)),
-            const SizedBox(width: 10),
-            Expanded(child: Text(res.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis)),
+            Expanded(
+              child: _buildActionBtn(
+                icon: IconlyLight.document,
+                label: "الواجبات",
+                color: Colors.orange,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => StudentAssignmentsScreen(sessionId: nextSession.id, subjectName: nextSession.subjectName))),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionBtn(
+                icon: IconlyLight.folder,
+                label: "المصادر",
+                color: Colors.blue,
+                onTap: () {}, 
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionBtn({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 8),
+            Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
     );
   }
 
-  void _navigateToVideoRoom(SessionModel session, String userName) {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => VideoRoomScreen(title: "بث مباشر: ${session.subjectName}", roomName: "room_${session.id}", userName: userName)));
+  Widget _buildSessionItem(SessionModel s) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: UpcomingClassItem(
+        subject: s.subjectName,
+        teacher: s.teacherName,
+        time: DateFormat('hh:mm a').format(s.startTime),
+        duration: "${s.endTime.difference(s.startTime).inMinutes} دقيقة",
+      ),
+    );
   }
 
-  Widget _buildLoadingSkeleton() {
-    return Shimmer.fromColors(baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100, child: Container());
+  void _navigateToVideoRoom(SessionModel session, String userName) {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => VideoRoomScreen(title: "بث مباشر: ${session.subjectName}", roomName: "room_${session.id}", userName: userName)));
   }
 
   Widget _buildEmptyState() {

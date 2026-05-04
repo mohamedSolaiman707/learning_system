@@ -147,7 +147,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   void _showSessionOptions(SessionModel session) {
     showModalBottomSheet(
       context: context,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
       builder: (context) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(

@@ -18,6 +18,7 @@ class SessionModel {
   });
 
   factory SessionModel.fromMap(Map<String, dynamic> map) {
+    // parse التاريخ ثم تحويله لتوقيت الجهاز المحلي (مصر)
     final startTime = DateTime.parse(map['start_time']).toLocal();
     final endTime = DateTime.parse(map['end_time']).toLocal();
     

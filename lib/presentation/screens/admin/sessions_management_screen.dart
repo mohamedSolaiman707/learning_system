@@ -66,8 +66,14 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
     final subjectController = TextEditingController(text: session?['subject_name']);
     final codeController = TextEditingController(text: session?['class_code']);
     String? selectedTeacherId = session?['teacher_id'];
-    DateTime selectedDate = isEditing ? DateTime.parse(session['start_time']).toLocal() : DateTime.now();
-    TimeOfDay selectedTime = isEditing ? TimeOfDay.fromDateTime(DateTime.parse(session['start_time']).toLocal()) : TimeOfDay.now();
+    
+    // تحويل البيانات القادمة من الداتابيز لتوقيت محلي (مصر) قبل عرضها في الـ Pickers
+    DateTime selectedDate = isEditing 
+        ? DateTime.parse(session['start_time']).toLocal() 
+        : DateTime.now();
+    TimeOfDay selectedTime = isEditing 
+        ? TimeOfDay.fromDateTime(DateTime.parse(session['start_time']).toLocal()) 
+        : TimeOfDay.now();
     int selectedDuration = 60;
 
     showModalBottomSheet(
@@ -123,7 +129,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () async {
-                        final date = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
+                        final date = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now().add(const Duration(days: 365)));
                         if (date != null) setSheetState(() => selectedDate = date);
                       },
                       style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
@@ -149,6 +155,8 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               ElevatedButton(
                 onPressed: () async {
                   if (subjectController.text.isEmpty || selectedTeacherId == null) return;
+                  
+                  // بناء التاريخ بالتوقيت المحلي للجهاز (مصر)
                   final startLocal = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute);
                   final endLocal = startLocal.add(Duration(minutes: selectedDuration));
 
@@ -157,7 +165,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                     'subject_name': subjectController.text,
                     'class_code': codeController.text.trim().toUpperCase(),
                     'teacher_id': selectedTeacherId,
-                    'start_time': startLocal.toUtc().toIso8601String(),
+                    'start_time': startLocal.toUtc().toIso8601String(), // تحويل لـ UTC عند الحفظ في Supabase
                     'end_time': endLocal.toUtc().toIso8601String(),
                   }, id: session?['id']);
 
@@ -220,7 +228,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("جدول الحصص الجارية", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Text("يمكنك إضافة أو تعديل مواعيد الدروس هنا", style: TextStyle(fontSize: 13, color: Colors.grey)),
+              Text("سيتم عرض الأوقات بتوقيت مصر المحلي", style: TextStyle(fontSize: 13, color: Colors.blue)),
             ],
           ),
           if (!Responsive.isMobile(context))
@@ -249,6 +257,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
             DataColumn(label: Text('الإجراءات')),
           ],
           rows: _sessions.map((session) {
+            // تحويل الوقت لـ Local عند العرض في الجدول
             final startTime = DateTime.parse(session['start_time']).toLocal();
             return DataRow(cells: [
               DataCell(Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.bold))),
@@ -262,7 +271,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               DataCell(Row(
                 children: [
                   IconButton(onPressed: () => _showSessionSheet(session: session), icon: const Icon(IconlyLight.edit, color: Colors.blue, size: 20)),
-                  IconButton(onPressed: () {}, icon: const Icon(IconlyLight.delete, color: Colors.red, size: 20)),
+                  IconButton(onPressed: () => _confirmDelete(session['id']), icon: const Icon(IconlyLight.delete, color: Colors.red, size: 20)),
                 ],
               )),
             ]);
@@ -270,6 +279,20 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
         ),
       ),
     );
+  }
+
+  void _confirmDelete(String id) {
+    showDialog(context: context, builder: (context) => AlertDialog(
+      title: const Text("حذف الحصة"),
+      content: const Text("هل أنت متأكد من حذف هذه الحصة نهائياً؟"),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+        ElevatedButton(onPressed: () async {
+          await Provider.of<DatabaseService>(context, listen: false).deleteSession(id);
+          if (mounted) { Navigator.pop(context); _fetchData(); }
+        }, style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: const Text("حذف")),
+      ],
+    ));
   }
 
   Widget _buildMobileList() {

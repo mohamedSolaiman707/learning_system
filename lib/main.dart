@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme/app_theme.dart';
 import 'core/routes/app_routes.dart';
 import 'core/providers/auth_provider.dart';
@@ -12,6 +13,9 @@ import 'core/localization/app_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // تهيئة تنسيق التواريخ للغة العربية
+  await initializeDateFormatting('ar_EG', null);
   
   const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
@@ -52,7 +56,7 @@ class MyApp extends StatelessWidget {
       themeMode: themeProvider.themeMode,
       home: const AuthWrapper(),
       routes: AppRoutes.routes,
-      locale: localeProvider.locale, // تفعيل اللغة الديناميكية هنا
+      locale: localeProvider.locale,
       supportedLocales: const [
         Locale('ar', 'EG'),
         Locale('en', 'US'),

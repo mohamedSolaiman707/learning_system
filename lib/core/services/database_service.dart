@@ -6,12 +6,13 @@ class DatabaseService {
   // جلب إحصائيات الإدمن
   Future<Map<String, int>> getAdminStats() async {
     try {
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      final now = DateTime.now();
+      final startOfToday = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
 
       final studentRes = await _supabase.from('profiles').select().eq('role', 'student').count(CountOption.exact);
       final teacherRes = await _supabase.from('profiles').select().eq('role', 'teacher').count(CountOption.exact);
       final roomRes = await _supabase.from('rooms').select().eq('is_active', true).count(CountOption.exact);
-      final sessionRes = await _supabase.from('sessions').select().gte('start_time', '${today}T00:00:00').count(CountOption.exact);
+      final sessionRes = await _supabase.from('sessions').select().gte('start_time', startOfToday).count(CountOption.exact);
 
       return {
         'totalStudents': studentRes.count,
@@ -24,12 +25,82 @@ class DatabaseService {
     }
   }
 
+  // --- إدارة المستخدمين ---
+
+  // جلب كل المستخدمين
+  Future<List<Map<String, dynamic>>> getAllUsers() async {
+    try {
+      final response = await _supabase
+          .from('profiles')
+          .select()
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // تحديث رتبة المستخدم
+  Future<void> updateUserRole(String id, String newRole) async {
+    try {
+      await _supabase.from('profiles').update({'role': newRole}).eq('id', id);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // حذف مستخدم
+  Future<void> deleteUser(String id) async {
+    try {
+      await _supabase.from('profiles').delete().eq('id', id);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // --- إدارة الحصص ---
+
+  // جلب كل الحصص (للأدمن)
+  Future<List<Map<String, dynamic>>> getAllSessions() async {
+    try {
+      final response = await _supabase
+          .from('sessions')
+          .select('*, profiles:teacher_id(full_name)')
+          .order('start_time', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // جلب المدرسين فقط (للأدمن عند إنشاء حصة)
+  Future<List<Map<String, dynamic>>> getTeachersOnly() async {
+    try {
+      final response = await _supabase
+          .from('profiles')
+          .select('id, full_name')
+          .eq('role', 'teacher');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // حذف حصة
+  Future<void> deleteSession(String sessionId) async {
+    try {
+      await _supabase.from('sessions').delete().eq('id', sessionId);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // جلب جدول حصص الطالب
   Future<List<Map<String, dynamic>>> getStudentSchedule(String studentId) async {
     try {
       final response = await _supabase
           .from('enrollments')
-          .select('sessions(*, profiles:teacher_id(full_name), rooms(is_active))')
+          .select('*, sessions(*, profiles:teacher_id(full_name), rooms(is_active))')
           .eq('student_id', studentId);
       
       return List<Map<String, dynamic>>.from(response);
@@ -38,56 +109,42 @@ class DatabaseService {
     }
   }
 
-  // تسجيل طالب في حصة باستخدام الكود
-  Future<void> enrollStudentByCode(String studentId, String classCode) async {
-    try {
-      // 1. البحث عن الحصة باستخدام الكود
-      final session = await _supabase
-          .from('sessions')
-          .select('id')
-          .eq('class_code', classCode.trim().toUpperCase())
-          .maybeSingle();
-
-      if (session == null) {
-        throw Exception("كود الحصة غير صحيح");
-      }
-
-      // 2. التحقق مما إذا كان الطالب مسجلاً بالفعل
-      final existing = await _supabase
-          .from('enrollments')
-          .select()
-          .eq('student_id', studentId)
-          .eq('session_id', session['id'])
-          .maybeSingle();
-
-      if (existing != null) {
-        throw Exception("أنت مسجل بالفعل في هذه الحصة");
-      }
-
-      // 3. إضافة الطالب للجدول
-      await _supabase.from('enrollments').insert({
-        'student_id': studentId,
-        'session_id': session['id'],
-      });
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  // جلب حصص المدرس لليوم
+  // جلب حصص المدرس
   Future<List<Map<String, dynamic>>> getTeacherSessions(String teacherId) async {
     try {
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      final now = DateTime.now();
+      final startBoundary = DateTime(now.year, now.month, now.day).subtract(const Duration(hours: 12)).toUtc().toIso8601String();
+      final endBoundary = DateTime(now.year, now.month, now.day).add(const Duration(hours: 36)).toUtc().toIso8601String();
+
       final response = await _supabase
           .from('sessions')
-          .select('*, rooms(is_active)')
+          .select('*, profiles:teacher_id(full_name), rooms(is_active)')
           .eq('teacher_id', teacherId)
-          .gte('start_time', '${today}T00:00:00')
+          .gte('start_time', startBoundary)
+          .lte('start_time', endBoundary)
           .order('start_time', ascending: true);
       
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       rethrow;
+    }
+  }
+
+  // جلب إحصائيات المدرس الفعلية
+  Future<Map<String, dynamic>> getTeacherStats(String teacherId) async {
+    try {
+      final response = await _supabase
+          .from('enrollments')
+          .select('student_id, sessions!inner(teacher_id)')
+          .eq('sessions.teacher_id', teacherId)
+          .count(CountOption.exact);
+          
+      return {
+        'totalStudents': response.count,
+        'rating': '5.0',
+      };
+    } catch (_) {
+      return {'totalStudents': 0, 'rating': '5.0'};
     }
   }
 
@@ -104,103 +161,19 @@ class DatabaseService {
     }
   }
 
-  // إدارة المستخدمين
-  Future<List<Map<String, dynamic>>> getAllUsers() async {
-    try {
-      final response = await _supabase
-          .from('profiles')
-          .select('id, full_name, role, phone_number, created_at')
-          .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      rethrow;
-    }
+  // تسجيل طالب بكود الحصة
+  Future<void> enrollStudentByCode(String studentId, String classCode) async {
+    final session = await _supabase.from('sessions').select('id').eq('class_code', classCode.trim().toUpperCase()).maybeSingle();
+    if (session == null) throw Exception("كود الحصة غير صحيح");
+    await _supabase.from('enrollments').insert({'student_id': studentId, 'session_id': session['id']});
   }
 
-  Future<void> updateUserRole(String userId, String role) async {
-    try {
-      await _supabase.from('profiles').update({'role': role}).eq('id', userId);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<void> deleteUser(String userId) async {
-    try {
-      await _supabase.from('profiles').delete().eq('id', userId);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  // --- نظام التحضير (Attendance) ---
-
-  Future<List<Map<String, dynamic>>> getEnrolledStudents(String sessionId) async {
-    try {
-      final response = await _supabase
-          .from('enrollments')
-          .select('student_id, profiles:student_id(full_name)')
-          .eq('session_id', sessionId);
-      
-      return (response as List).map((e) => {
-        'id': e['student_id'],
-        'name': e['profiles']['full_name'],
-      }).toList();
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<void> markAttendance(String sessionId, List<Map<String, dynamic>> attendanceData) async {
-    try {
-      await _supabase.from('attendance').upsert(attendanceData);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  // إدارة الحصص (للإدمن)
-  Future<List<Map<String, dynamic>>> getAllSessions() async {
-    try {
-      final response = await _supabase
-          .from('sessions')
-          .select('*, profiles:teacher_id(full_name)')
-          .order('start_time', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getTeachersOnly() async {
-    try {
-      final response = await _supabase
-          .from('profiles')
-          .select('id, full_name')
-          .eq('role', 'teacher');
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
+  // حفظ أو تعديل حصة
   Future<void> saveSession(Map<String, dynamic> data, {String? id}) async {
-    try {
-      if (id == null) {
-        await _supabase.from('sessions').insert(data);
-      } else {
-        await _supabase.from('sessions').update(data).eq('id', id);
-      }
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<void> deleteSession(String id) async {
-    try {
-      await _supabase.from('sessions').delete().eq('id', id);
-    } catch (e) {
-      rethrow;
+    if (id == null) {
+      await _supabase.from('sessions').insert(data);
+    } else {
+      await _supabase.from('sessions').update(data).eq('id', id);
     }
   }
 }

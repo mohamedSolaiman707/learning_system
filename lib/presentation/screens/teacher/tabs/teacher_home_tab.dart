@@ -25,6 +25,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   bool _isLoading = true;
   List<SessionModel> _sessions = [];
   SessionModel? _nextSession;
+  int _totalStudents = 0; // حقل جديد لعدد الطلاب
 
   @override
   void initState() {
@@ -40,16 +41,24 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       final db = Provider.of<DatabaseService>(context, listen: false);
       
       if (auth.user != null) {
-        final data = await db.getTeacherSessions(auth.user!.id);
+        // جلب الحصص والإحصائيات معاً
+        final results = await Future.wait([
+          db.getTeacherSessions(auth.user!.id),
+          db.getTeacherStats(auth.user!.id),
+        ]);
+
         if (mounted) {
           setState(() {
-            _sessions = data.map((e) => SessionModel.fromMap(e)).toList();
+            _sessions = (results[0] as List).map((e) => SessionModel.fromMap(e)).toList();
+            _totalStudents = (results[1] as Map<String, dynamic>)['totalStudents'] ?? 0;
+            
             final now = DateTime.now();
             if (_sessions.isNotEmpty) {
                try {
+                 // البحث عن الحصة القادمة التي لم تنتهِ بعد
                  _nextSession = _sessions.firstWhere((s) => s.endTime.isAfter(now));
                } catch (_) {
-                 _nextSession = _sessions.first;
+                 _nextSession = _sessions.last;
                }
             } else {
               _nextSession = null;
@@ -57,26 +66,20 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
             _isLoading = false;
           });
         }
-      } else {
-        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // دالة التعامل مع الأزرار السريعة
   void _handleQuickAction(String type) {
     if (_sessions.isEmpty) {
       _showNoSessionAlert();
       return;
     }
-
-    // إذا كان هناك حصة واحدة فقط اليوم، نذهب إليها مباشرة
     if (_sessions.length == 1) {
       _navigateToActionScreen(type, _sessions.first);
     } else {
-      // إذا كان هناك أكثر من حصة، نفتح قائمة للاختيار
       _showSessionPicker(type);
     }
   }
@@ -101,13 +104,9 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                 itemBuilder: (context, index) {
                   final s = _sessions[index];
                   return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.blue.withOpacity(0.1),
-                      child: const Icon(IconlyLight.video, color: Colors.blue, size: 20),
-                    ),
+                    leading: CircleAvatar(backgroundColor: Colors.blue.withOpacity(0.1), child: const Icon(IconlyLight.video, color: Colors.blue)),
                     title: Text(s.subjectName, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(intl.DateFormat('hh:mm a').format(s.startTime)),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                     onTap: () {
                       Navigator.pop(context);
                       _navigateToActionScreen(type, s);
@@ -124,13 +123,9 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
 
   void _navigateToActionScreen(String type, SessionModel session) {
     if (type == 'attendance') {
-      Navigator.push(context, MaterialPageRoute(
-        builder: (context) => AttendanceScreen(sessionId: session.id, subjectName: session.subjectName)
-      ));
+      Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: session.id, subjectName: session.subjectName)));
     } else if (type == 'assignment') {
-      Navigator.push(context, MaterialPageRoute(
-        builder: (context) => TeacherAssignmentsScreen(sessionId: session.id, subjectName: session.subjectName)
-      ));
+      Navigator.push(context, MaterialPageRoute(builder: (context) => TeacherAssignmentsScreen(sessionId: session.id, subjectName: session.subjectName)));
     }
   }
 
@@ -140,11 +135,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       await db.toggleRoomStatus(session.id, true);
       if (!mounted) return;
       Navigator.push(context, MaterialPageRoute(
-        builder: (context) => VideoRoomScreen(
-          title: session.subjectName,
-          roomName: "room_${session.id}",
-          userName: "أ. $teacherName"
-        )
+        builder: (context) => VideoRoomScreen(title: session.subjectName, roomName: "room_${session.id}", userName: "أ. $teacherName")
       )).then((_) => _showEndLiveDialog(session.id));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل بدء البث المباشر")));
@@ -163,10 +154,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
             onPressed: () async {
               final db = Provider.of<DatabaseService>(context, listen: false);
               await db.toggleRoomStatus(sessionId, false);
-              if (mounted) {
-                Navigator.pop(context);
-                _loadData();
-              }
+              if (mounted) { Navigator.pop(context); _loadData(); }
             },
             child: const Text("نعم، إنهاء الحصة"),
           ),
@@ -178,8 +166,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
-    final profile = authProvider.profile;
-    final name = profile?['full_name'] ?? "المدرس";
+    final name = authProvider.profile?['full_name'] ?? "المدرس";
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
@@ -201,21 +188,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                           _buildStatsSection(),
                           const SizedBox(height: 32),
                           Responsive(
-                            mobile: Column(
-                              children: [
-                                _buildCurrentSessionSection(name),
-                                const SizedBox(height: 32),
-                                _buildQuickActions(),
-                              ],
-                            ),
-                            desktop: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(flex: 3, child: _buildCurrentSessionSection(name)),
-                                const SizedBox(width: 30),
-                                Expanded(flex: 2, child: _buildQuickActions()),
-                              ],
-                            ),
+                            mobile: Column(children: [_buildCurrentSessionSection(name), const SizedBox(height: 32), _buildQuickActions()]),
+                            desktop: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Expanded(flex: 3, child: _buildCurrentSessionSection(name)),
+                              const SizedBox(width: 30),
+                              Expanded(flex: 2, child: _buildQuickActions()),
+                            ]),
                           ),
                         ],
                       ),
@@ -235,27 +213,21 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
         title: Text("لوحة المدرس", style: TextStyle(color: Colors.black.withOpacity(0.8), fontWeight: FontWeight.bold, fontSize: 18)),
         centerTitle: false,
       ),
-      actions: [
-        IconButton(onPressed: () {}, icon: const Badge(child: Icon(IconlyLight.notification))),
-        const SizedBox(width: 15),
-      ],
+      actions: [IconButton(onPressed: () {}, icon: const Badge(child: Icon(IconlyLight.notification))), const SizedBox(width: 15)],
     );
   }
 
   Widget _buildWelcomeHeader(String name) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text("أهلاً بك، 👋", style: TextStyle(fontSize: 16, color: Colors.grey)),
-        Text("أ. $name", style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-      ],
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text("أهلاً بك، 👋", style: TextStyle(fontSize: 16, color: Colors.grey)),
+      Text("أ. $name", style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+    ]);
   }
 
   Widget _buildStatsSection() {
     return Row(
       children: [
-        const Expanded(child: TeacherStatCard(title: "طلابك", value: "---", icon: IconlyLight.user_1, color: Colors.blue)),
+        Expanded(child: TeacherStatCard(title: "طلابك", value: _totalStudents.toString(), icon: IconlyLight.user_1, color: Colors.blue)),
         const SizedBox(width: 16),
         Expanded(child: TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: IconlyLight.video, color: Colors.orange)),
         if (Responsive.isDesktop(context)) ...[
@@ -270,7 +242,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     if (_nextSession == null) {
       return const Card(
         margin: EdgeInsets.only(top: 16),
-        child: Padding(padding: EdgeInsets.all(30), child: Center(child: Text("لا توجد حصص قادمة لليوم", style: TextStyle(color: Colors.grey)))),
+        child: Padding(padding: EdgeInsets.all(40), child: Center(child: Text("لا توجد حصص مسجلة لك اليوم", style: TextStyle(color: Colors.grey, fontSize: 16)))),
       );
     }
     final startTime = intl.DateFormat('hh:mm a').format(_nextSession!.startTime);
@@ -292,21 +264,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
             children: [
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
-                    child: const Icon(IconlyLight.video, color: Colors.white, size: 30),
-                  ),
+                  Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)), child: const Icon(IconlyLight.video, color: Colors.white, size: 30)),
                   const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_nextSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                        Text("اليوم | $startTime - $endTime", style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                      ],
-                    ),
-                  ),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(_nextSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                    Text("اليوم | $startTime - $endTime", style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                  ])),
                 ],
               ),
               const SizedBox(height: 30),
@@ -315,8 +278,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                 child: ElevatedButton(
                   onPressed: () => _startLive(_nextSession!, teacherName),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white, 
-                    foregroundColor: Colors.blue, 
+                    backgroundColor: Colors.white, foregroundColor: Colors.blue, 
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
@@ -356,11 +318,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]),
       child: ListTile(
         onTap: onTap,
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-          child: Icon(icon, color: color, size: 22),
-        ),
+        leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color, size: 22)),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
         trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),

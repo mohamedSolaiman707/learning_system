@@ -13,25 +13,42 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _isEditing = false;
-
+  
   void _showEditDialog(String title, String field, String currentValue) {
     final controller = TextEditingController(text: currentValue);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text("تعديل $title"),
         content: TextField(
           controller: controller,
-          decoration: InputDecoration(hintText: "أدخل $title الجديد"),
+          decoration: InputDecoration(
+            hintText: "أدخل $title الجديد",
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
           ElevatedButton(
-            onPressed: () {
-              // هنا يمكن إضافة منطق التحديث عبر AuthProvider مستقبلاً
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("سيتم تفعيل التحديث قريباً")));
+            onPressed: () async {
+              try {
+                await authProvider.updateProfile({field: controller.text});
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("تم تحديث البيانات بنجاح"), backgroundColor: Colors.green)
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("فشل التحديث: $e"), backgroundColor: Colors.red)
+                  );
+                }
+              }
             },
             child: const Text("حفظ"),
           ),
@@ -133,7 +150,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 radius: 60,
                 backgroundColor: Colors.blue.withOpacity(0.1),
                 child: Text(
-                  name.substring(0, 1).toUpperCase(),
+                  name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "U",
                   style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.blue),
                 ),
               ),
@@ -193,8 +210,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const Text("الأمان والخصوصية", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 15),
         _buildInfoCard([
-          _buildInfoItem(IconlyLight.lock, "كلمة المرور", "********", () {}),
-          _buildInfoItem(IconlyLight.shield_done, "التحقق بخطوتين", "مفعل", null),
+          _buildInfoItem(IconlyLight.lock, "كلمة المرور", "********", () {
+             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يمكنك تغيير كلمة المرور من خلال بريدك الإلكتروني")));
+          }),
+          _buildInfoItem(IconlyLight.shield_done, "حالة الحساب", "نشط", null),
         ]),
       ],
     );
@@ -227,9 +246,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildLogoutButton(AuthProvider auth) {
     return ElevatedButton.icon(
-      onPressed: () {
-        auth.logout();
-        Navigator.pushReplacementNamed(context, AppRoutes.login);
+      onPressed: () async {
+        await auth.logout();
+        if (mounted) Navigator.pushReplacementNamed(context, AppRoutes.login);
       },
       icon: const Icon(IconlyLight.logout),
       label: const Text("تسجيل الخروج"),

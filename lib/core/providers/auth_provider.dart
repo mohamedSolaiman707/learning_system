@@ -19,6 +19,17 @@ class AuthProvider extends ChangeNotifier {
     if (_user != null) {
       _loadProfile();
     }
+    
+    // الاستماع لتغييرات حالة المصادقة
+    _supabase.auth.onAuthStateChange.listen((data) {
+      _user = data.session?.user;
+      if (_user != null) {
+        _loadProfile();
+      } else {
+        _profile = null;
+        notifyListeners();
+      }
+    });
   }
 
   Future<void> _loadProfile() async {
@@ -29,9 +40,22 @@ class AuthProvider extends ChangeNotifier {
           .eq('id', _user!.id)
           .single();
       _profile = data;
+      // إضافة البريد الإلكتروني للملف الشخصي للعرض فقط
+      _profile?['email'] = _user?.email;
       notifyListeners();
     } catch (e) {
       debugPrint("Error loading profile: $e");
+    }
+  }
+
+  // تحديث بيانات الملف الشخصي
+  Future<void> updateProfile(Map<String, dynamic> data) async {
+    if (_user == null) return;
+    try {
+      await _supabase.from('profiles').update(data).eq('id', _user!.id);
+      await _loadProfile(); // إعادة تحميل البيانات بعد التحديث
+    } catch (e) {
+      rethrow;
     }
   }
 

@@ -27,7 +27,6 @@ class DatabaseService {
 
   // --- إدارة المستخدمين ---
 
-  // جلب كل المستخدمين
   Future<List<Map<String, dynamic>>> getAllUsers() async {
     try {
       final response = await _supabase
@@ -40,7 +39,6 @@ class DatabaseService {
     }
   }
 
-  // تحديث رتبة المستخدم
   Future<void> updateUserRole(String id, String newRole) async {
     try {
       await _supabase.from('profiles').update({'role': newRole}).eq('id', id);
@@ -49,7 +47,14 @@ class DatabaseService {
     }
   }
 
-  // حذف مستخدم
+  Future<void> updateProfile(String id, Map<String, dynamic> data) async {
+    try {
+      await _supabase.from('profiles').update(data).eq('id', id);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<void> deleteUser(String id) async {
     try {
       await _supabase.from('profiles').delete().eq('id', id);
@@ -60,7 +65,6 @@ class DatabaseService {
 
   // --- إدارة الحصص ---
 
-  // جلب كل الحصص (للأدمن)
   Future<List<Map<String, dynamic>>> getAllSessions() async {
     try {
       final response = await _supabase
@@ -73,7 +77,6 @@ class DatabaseService {
     }
   }
 
-  // جلب المدرسين فقط (للأدمن عند إنشاء حصة)
   Future<List<Map<String, dynamic>>> getTeachersOnly() async {
     try {
       final response = await _supabase
@@ -86,7 +89,6 @@ class DatabaseService {
     }
   }
 
-  // حذف حصة
   Future<void> deleteSession(String sessionId) async {
     try {
       await _supabase.from('sessions').delete().eq('id', sessionId);
@@ -95,7 +97,6 @@ class DatabaseService {
     }
   }
 
-  // جلب جدول حصص الطالب
   Future<List<Map<String, dynamic>>> getStudentSchedule(String studentId) async {
     try {
       final response = await _supabase
@@ -109,7 +110,6 @@ class DatabaseService {
     }
   }
 
-  // جلب حصص المدرس
   Future<List<Map<String, dynamic>>> getTeacherSessions(String teacherId) async {
     try {
       final now = DateTime.now();
@@ -130,7 +130,6 @@ class DatabaseService {
     }
   }
 
-  // جلب إحصائيات المدرس الفعلية
   Future<Map<String, dynamic>> getTeacherStats(String teacherId) async {
     try {
       final response = await _supabase
@@ -148,27 +147,47 @@ class DatabaseService {
     }
   }
 
-  // تفعيل أو إغلاق الغرفة
-  Future<void> toggleRoomStatus(String sessionId, bool isActive) async {
+  Future<void> toggleRoomStatus(String sessionId, bool isActive, {String? roomName}) async {
     try {
       await _supabase.from('rooms').upsert({
         'session_id': sessionId,
+        'room_name': roomName ?? "room_$sessionId",
         'is_active': isActive,
-        'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'session_id');
     } catch (e) {
       rethrow;
     }
   }
 
-  // تسجيل طالب بكود الحصة
+  // تسجيل طالب بكود الحصة (منطاق مطور)
   Future<void> enrollStudentByCode(String studentId, String classCode) async {
-    final session = await _supabase.from('sessions').select('id').eq('class_code', classCode.trim().toUpperCase()).maybeSingle();
-    if (session == null) throw Exception("كود الحصة غير صحيح");
-    await _supabase.from('enrollments').insert({'student_id': studentId, 'session_id': session['id']});
+    // 1. تنظيف الكود (إزالة المسافات وتحويله لكبير)
+    final cleanCode = classCode.trim().toUpperCase();
+
+    // 2. البحث عن الحصة
+    final session = await _supabase.from('sessions')
+        .select('id')
+        .eq('class_code', cleanCode)
+        .maybeSingle();
+        
+    if (session == null) throw Exception("كود الحصة غير صحيح أو غير موجود");
+
+    // 3. التحقق من عدم التسجيل المسبق
+    final existing = await _supabase.from('enrollments')
+        .select()
+        .eq('student_id', studentId)
+        .eq('session_id', session['id'])
+        .maybeSingle();
+
+    if (existing != null) throw Exception("أنت مسجل بالفعل في هذه الحصة");
+
+    // 4. التسجيل الفعلي
+    await _supabase.from('enrollments').insert({
+      'student_id': studentId,
+      'session_id': session['id']
+    });
   }
 
-  // حفظ أو تعديل حصة
   Future<void> saveSession(Map<String, dynamic> data, {String? id}) async {
     if (id == null) {
       await _supabase.from('sessions').insert(data);

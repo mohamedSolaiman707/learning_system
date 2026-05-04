@@ -35,7 +35,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
   bool _isScreenSharing = false;
   
   final _messageController = TextEditingController();
-  final _chatScrollController = ScrollController();
   final supabase = Supabase.instance.client;
   
   List<Map<String, dynamic>> _messages = [];
@@ -48,15 +47,15 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
   void initState() {
     super.initState();
     _connectToRoom();
-    _chatTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (_isChatOpen) _fetchMessages(showLoading: false);
+    _chatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (_isChatOpen) _fetchMessages();
     });
   }
 
   Future<void> _connectToRoom() async {
     try {
       final token = await LiveKitService().getRoomToken(widget.roomName, widget.userName);
-      if (token == null) throw "فشل الحصول على التوكن";
+      if (token == null) throw "فشل الحصول على تصريح الدخول (Token)";
 
       final room = Room();
       
@@ -75,7 +74,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
         roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true)
       );
       
-      if (widget.userName.contains('Teacher')) {
+      // تفعيل الكاميرا والمايك تلقائياً للمدرس (التحقق بالاسم العربي أو الإنجليزي)
+      bool isTeacher = widget.userName.contains('أ.') || widget.userName.contains('Teacher') || widget.userName.contains('مدرس');
+      
+      if (isTeacher) {
         await room.localParticipant?.setCameraEnabled(true);
         await room.localParticipant?.setMicrophoneEnabled(true);
         if (mounted) setState(() { _isMicEnabled = true; _isCamEnabled = true; });
@@ -116,21 +118,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
     });
   }
 
-  Future<void> _toggleScreenShare() async {
-    if (_room == null) return;
-    try {
-      final newState = !_isScreenSharing;
-      await _room!.localParticipant?.setScreenShareEnabled(newState);
-      setState(() => _isScreenSharing = newState);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("مشاركة الشاشة: $e")));
-    }
-  }
-
-  Future<void> _fetchMessages({bool showLoading = true}) async {
+  Future<void> _fetchMessages() async {
     try {
       final response = await supabase.from('messages').select()
-          .eq('room_name', widget.roomName).order('created_at', ascending: true);
+          .eq('room_name', widget.roomName).order('created_at', ascending: true).limit(50);
       if (mounted) setState(() { _messages = List<Map<String, dynamic>>.from(response); });
     } catch (e) { debugPrint("Chat error: $e"); }
   }
@@ -139,10 +130,22 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
     if (_messageController.text.isEmpty) return;
     final content = _messageController.text;
     _messageController.clear();
+    
+    // إضافة الرسالة محلياً فوراً لتجربة أسرع
     setState(() {
       _messages.add({'user_name': widget.userName, 'content': content, 'is_temp': true});
     });
-    await supabase.from('messages').insert({'room_name': widget.roomName, 'user_name': widget.userName, 'content': content});
+
+    try {
+      await supabase.from('messages').insert({
+        'room_name': widget.roomName, 
+        'user_name': widget.userName, 
+        'content': content
+      });
+      _fetchMessages();
+    } catch (e) {
+      debugPrint("Insert message error: $e");
+    }
   }
 
   @override
@@ -159,15 +162,32 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
       backgroundColor: const Color(0xFF0F1014),
       body: _isLoading 
           ? _buildModernLoading()
-          : Stack(
-              children: [
-                if (_room != null) ParticipantGrid(room: _room!, remoteHands: _remoteHandStates, localHand: _isHandRaised),
-                ..._reactionParticles,
-                if (_isChatOpen) _buildChatPanel(),
-                _buildTopBar(),
-                _buildBottomControls(),
-              ],
-            ),
+          : _errorMessage != null 
+              ? _buildErrorWidget()
+              : Stack(
+                  children: [
+                    if (_room != null) ParticipantGrid(room: _room!, remoteHands: _remoteHandStates, localHand: _isHandRaised),
+                    ..._reactionParticles,
+                    if (_isChatOpen) _buildChatPanel(),
+                    _buildTopBar(),
+                    _buildBottomControls(),
+                  ],
+                ),
+    );
+  }
+
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(IconlyBold.danger, color: Colors.red, size: 60),
+          const SizedBox(height: 16),
+          Text(_errorMessage!, style: const TextStyle(color: Colors.white), textAlign: TextAlign.center),
+          const SizedBox(height: 24),
+          ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text("العودة للخلف")),
+        ],
+      ),
     );
   }
 
@@ -198,7 +218,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
               children: [
                 const Icon(Icons.circle, color: Colors.red, size: 8),
                 const SizedBox(width: 10),
-                Expanded(child: Text(widget.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15))),
+                Expanded(child: Text(widget.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15), overflow: TextOverflow.ellipsis)),
                 _buildReactionBtn("❤️"),
                 _buildReactionBtn("👏"),
                 _buildReactionBtn("🔥"),
@@ -272,11 +292,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
         children: [
           Expanded(child: TextField(
             controller: _messageController, 
-            style: const TextStyle(color: Colors.black), 
+            style: const TextStyle(color: Colors.white), 
             decoration: InputDecoration(
-              hintText: "اكتب...", 
+              hintText: "اكتب رسالة...", 
+              hintStyle: const TextStyle(color: Colors.grey),
               filled: true, 
-              fillColor: Colors.white, 
+              fillColor: Colors.white10, 
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)
             ),
             onSubmitted: (_) => _sendMessage(),
@@ -316,6 +337,17 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
   Widget _buildCircleBtn(IconData icon, Color color, VoidCallback onTap, {bool isLarge = false}) {
     return InkWell(onTap: onTap, child: Container(padding: EdgeInsets.all(isLarge ? 18 : 14), decoration: BoxDecoration(color: color, shape: BoxShape.circle), child: Icon(icon, color: Colors.white, size: isLarge ? 30 : 22)));
   }
+
+  Future<void> _toggleScreenShare() async {
+    if (_room == null) return;
+    try {
+      final newState = !_isScreenSharing;
+      await _room!.localParticipant?.setScreenShareEnabled(newState);
+      setState(() => _isScreenSharing = newState);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("مشاركة الشاشة: $e")));
+    }
+  }
 }
 
 class ParticipantGrid extends StatelessWidget {
@@ -336,7 +368,12 @@ class ParticipantGrid extends StatelessWidget {
 
         return GridView.builder(
           padding: const EdgeInsets.fromLTRB(20, 140, 20, 140),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.8, mainAxisSpacing: 15, crossAxisSpacing: 15),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2, 
+            childAspectRatio: 0.8, 
+            mainAxisSpacing: 15, 
+            crossAxisSpacing: 15
+          ),
           itemCount: participants.length,
           itemBuilder: (context, i) {
             final p = participants[i];
@@ -349,17 +386,25 @@ class ParticipantGrid extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(color: p.isSpeaking ? Colors.blue : (isHandUp ? Colors.orange : Colors.white10), width: 3),
-                boxShadow: p.isSpeaking ? [BoxShadow(color: Colors.blue.withOpacity(0.2), blurRadius: 15)] : [],
               ),
               clipBehavior: Clip.antiAlias,
               child: Stack(
                 children: [
-                  if (videoTrack != null) VideoTrackRenderer(videoTrack, fit: VideoViewFit.contain)
+                  if (videoTrack != null) VideoTrackRenderer(videoTrack, fit: VideoViewFit.cover)
                   else Container(color: Colors.black, child: const Center(child: Icon(IconlyBold.profile, color: Colors.white24, size: 45))),
                   
                   if (isHandUp) Positioned(top: 12, right: 12, child: Container(padding: const EdgeInsets.all(6), decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle), child: const Icon(Icons.back_hand, color: Colors.white, size: 18))),
 
-                  Positioned(bottom: 12, left: 12, right: 12, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), color: Colors.black45, child: Row(children: [Expanded(child: Text(isLocal ? "أنت" : p.identity, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))), if (p.isSpeaking) const Icon(Icons.graphic_eq, color: Colors.blue, size: 16)]))),
+                  Positioned(
+                    bottom: 0, left: 0, right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), 
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.8), Colors.transparent])
+                      ),
+                      child: Row(children: [Expanded(child: Text(isLocal ? "أنت" : p.identity, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))), if (p.isSpeaking) const Icon(Icons.graphic_eq, color: Colors.blue, size: 16)])
+                    ),
+                  ),
                 ],
               ),
             );

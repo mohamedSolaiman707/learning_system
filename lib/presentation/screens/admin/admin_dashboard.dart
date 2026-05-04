@@ -62,7 +62,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: _buildAppBar(isMobile),
-      drawer: isMobile ? _buildSidebar(context) : null,
+      drawer: isMobile ? Drawer(child: _buildSidebar(context)) : null,
       body: Row(
         children: [
           if (!isMobile)
@@ -224,29 +224,86 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildSidebar(BuildContext context, {bool isDrawer = true}) {
-    return Column(
-      children: [
-        if (isDrawer) const DrawerHeader(child: Center(child: Icon(Icons.school, size: 50, color: Colors.blue))),
-        const SizedBox(height: 20),
-        _buildSidebarItem(IconlyBold.chart, "لوحة التحكم", true, () {}),
-        _buildSidebarItem(IconlyLight.user_1, "إدارة المستخدمين", false, () => Navigator.push(context, MaterialPageRoute(builder: (context) => const UsersManagementScreen()))),
-        _buildSidebarItem(IconlyLight.video, "الجلسات والحصص", false, () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SessionsManagementScreen()))),
-        _buildSidebarItem(IconlyLight.setting, "الإعدادات", false, () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminSettingsScreen()))),
-        const Spacer(),
-        _buildSidebarItem(IconlyLight.logout, "تسجيل الخروج", false, () => supabase.auth.signOut().then((_) => Navigator.pushReplacementNamed(context, '/login')), isDestructive: true),
-        const SizedBox(height: 20),
-      ],
+    return Container(
+      color: Colors.white,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.school, size: 40, color: Colors.blue),
+                ),
+                const SizedBox(height: 15),
+                const Text(
+                  "أكاديمية التعليم",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E)),
+                ),
+                const Text(
+                  "لوحة تحكم المسؤول",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          const Divider(indent: 30, endIndent: 30, height: 1),
+          const SizedBox(height: 20),
+          _buildSidebarItem(IconlyBold.chart, "لوحة التحكم", true, () {
+            if (isDrawer) Navigator.pop(context);
+          }),
+          _buildSidebarItem(IconlyLight.user_1, "إدارة المستخدمين", false, () {
+            if (isDrawer) Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const UsersManagementScreen()));
+          }),
+          _buildSidebarItem(IconlyLight.video, "الجلسات والحصص", false, () {
+            if (isDrawer) Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const SessionsManagementScreen()));
+          }),
+          _buildSidebarItem(IconlyLight.setting, "الإعدادات", false, () {
+            if (isDrawer) Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminSettingsScreen()));
+          }),
+          const Spacer(),
+          const Divider(indent: 30, endIndent: 30),
+          _buildSidebarItem(IconlyLight.logout, "تسجيل الخروج", false, () {
+            supabase.auth.signOut().then((_) => Navigator.pushReplacementNamed(context, '/login'));
+          }, isDestructive: true),
+          const SizedBox(height: 30),
+        ],
+      ),
     );
   }
 
   Widget _buildSidebarItem(IconData icon, String title, bool isSelected, VoidCallback onTap, {bool isDestructive = false}) {
-    return ListTile(
-      onTap: onTap,
-      leading: Icon(icon, color: isSelected ? Colors.blue : (isDestructive ? Colors.red : Colors.grey)),
-      title: Text(title, style: TextStyle(color: isSelected ? Colors.blue : (isDestructive ? Colors.red : Colors.black87), fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-      selected: isSelected,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        onTap: onTap,
+        horizontalTitleGap: 12,
+        leading: Icon(
+          icon, 
+          color: isSelected ? Colors.blue : (isDestructive ? Colors.red.shade400 : Colors.grey.shade600),
+          size: 22,
+        ),
+        title: Text(
+          title, 
+          style: TextStyle(
+            color: isSelected ? Colors.blue : (isDestructive ? Colors.red.shade400 : Colors.grey.shade800), 
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            fontSize: 15,
+          ),
+        ),
+        selected: isSelected,
+        selectedTileColor: Colors.blue.withOpacity(0.08),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      ),
     );
   }
 

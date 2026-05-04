@@ -6,6 +6,7 @@ import 'core/theme/app_theme.dart';
 import 'core/routes/app_routes.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/providers/theme_provider.dart';
+import 'core/providers/locale_provider.dart';
 import 'core/services/database_service.dart';
 import 'core/localization/app_localizations.dart';
 
@@ -27,6 +28,7 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => LocaleProvider()),
         Provider(create: (_) => DatabaseService()),
       ],
       child: const MyApp(),
@@ -40,6 +42,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final localeProvider = Provider.of<LocaleProvider>(context);
 
     return MaterialApp(
       title: 'EduConnect | منصة التعليم الذكي',
@@ -49,13 +52,13 @@ class MyApp extends StatelessWidget {
       themeMode: themeProvider.themeMode,
       home: const AuthWrapper(),
       routes: AppRoutes.routes,
-      locale: const Locale('ar', 'EG'), // يمكن تغييرها لتكون ديناميكية لاحقاً
+      locale: localeProvider.locale, // تفعيل اللغة الديناميكية هنا
       supportedLocales: const [
         Locale('ar', 'EG'),
         Locale('en', 'US'),
       ],
       localizationsDelegates: const [
-        // AppLocalizations.delegate, // سيتم تفعيلها بعد إضافة الـ delegate في ملفها
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,

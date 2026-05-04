@@ -38,13 +38,17 @@ class DatabaseService {
     }
   }
 
-  // إدارة المستخدمين
+  // إدارة المستخدمين - تمت إزالة avatar_url لأنه غير موجود في قاعدة بياناتك
   Future<List<Map<String, dynamic>>> getAllUsers() async {
-    final response = await _supabase
-        .from('profiles')
-        .select('id, full_name, role, phone_number, created_at, avatar_url')
-        .order('created_at', ascending: false);
-    return List<Map<String, dynamic>>.from(response);
+    try {
+      final response = await _supabase
+          .from('profiles')
+          .select('id, full_name, role, phone_number, created_at')
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      rethrow;
+    }
   }
 
   Future<void> updateUserRole(String userId, String role) async {
@@ -63,13 +67,43 @@ class DatabaseService {
     }
   }
 
+  // --- نظام التحضير (Attendance) ---
+
+  Future<List<Map<String, dynamic>>> getEnrolledStudents(String sessionId) async {
+    try {
+      final response = await _supabase
+          .from('enrollments')
+          .select('student_id, profiles:student_id(full_name)')
+          .eq('session_id', sessionId);
+      
+      return (response as List).map((e) => {
+        'id': e['student_id'],
+        'name': e['profiles']['full_name'],
+      }).toList();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> markAttendance(String sessionId, List<Map<String, dynamic>> attendanceData) async {
+    try {
+      await _supabase.from('attendance').upsert(attendanceData);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // إدارة الحصص
   Future<List<Map<String, dynamic>>> getAllSessions() async {
-    final response = await _supabase
-        .from('sessions')
-        .select('*, profiles:teacher_id(full_name)')
-        .order('start_time', ascending: false);
-    return List<Map<String, dynamic>>.from(response);
+    try {
+      final response = await _supabase
+          .from('sessions')
+          .select('*, profiles:teacher_id(full_name)')
+          .order('start_time', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      rethrow;
+    }
   }
 
   Future<List<Map<String, dynamic>>> getTeachersOnly() async {
@@ -85,10 +119,14 @@ class DatabaseService {
   }
 
   Future<void> saveSession(Map<String, dynamic> data, {String? id}) async {
-    if (id == null) {
-      await _supabase.from('sessions').insert(data);
-    } else {
-      await _supabase.from('sessions').update(data).eq('id', id);
+    try {
+      if (id == null) {
+        await _supabase.from('sessions').insert(data);
+      } else {
+        await _supabase.from('sessions').update(data).eq('id', id);
+      }
+    } catch (e) {
+      rethrow;
     }
   }
 

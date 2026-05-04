@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+import '../../../core/utils/responsive.dart';
+import '../../../core/services/database_service.dart';
 
 class UsersManagementScreen extends StatefulWidget {
   const UsersManagementScreen({super.key});
@@ -10,35 +13,41 @@ class UsersManagementScreen extends StatefulWidget {
 }
 
 class _UsersManagementScreenState extends State<UsersManagementScreen> {
-  final supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _users = [];
   List<Map<String, dynamic>> _filteredUsers = [];
   bool _isLoading = true;
+  String? _error;
   final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _fetchUsers();
+    _loadUsers();
     _searchController.addListener(_filterUsers);
   }
 
-  Future<void> _fetchUsers() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadUsers() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
-      final response = await supabase
-          .from('profiles')
-          .select('id, full_name, role, phone_number')
-          .order('full_name', ascending: true);
-      
-      setState(() {
-        _users = List<Map<String, dynamic>>.from(response);
-        _filteredUsers = _users;
-        _isLoading = false;
-      });
+      final dbService = Provider.of<DatabaseService>(context, listen: false);
+      final users = await dbService.getAllUsers();
+      if (mounted) {
+        setState(() {
+          _users = users;
+          _filteredUsers = users;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      print('Error fetching users: $e');
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _error = "فشل تحميل المستخدمين";
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -53,109 +62,231 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
     });
   }
 
-  Future<void> _updateUserRole(String id, String newRole) async {
+  Future<void> _updateRole(String id, String newRole) async {
     try {
-      await supabase.from('profiles').update({'role': newRole}).eq('id', id);
-      _fetchUsers();
+      final dbService = Provider.of<DatabaseService>(context, listen: false);
+      await dbService.updateUserRole(id, newRole);
+      _loadUsers();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم تغيير الرتبة إلى $newRole')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم تحديث الرتبة إلى $newRole'), backgroundColor: Colors.green),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ أثناء التحديث: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('فشل التحديث'), backgroundColor: Colors.red),
+        );
+      }
     }
+  }
+
+  Future<void> _deleteUser(String id) async {
+    try {
+      final dbService = Provider.of<DatabaseService>(context, listen: false);
+      // تأكد من إضافة دالة deleteUser في DatabaseService
+      await dbService.deleteUser(id); 
+      _loadUsers();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حذف المستخدم بنجاح'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('خطأ أثناء الحذف'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _confirmDelete(String id, String name) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("تأكيد الحذف"),
+        content: Text("هل أنت متأكد من حذف المستخدم $name؟ لا يمكن التراجع عن هذا الإجراء."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteUser(id);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("حذف الآن"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("إدارة المستخدمين")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
+      backgroundColor: const Color(0xFFF8F9FB),
+      appBar: AppBar(
+        title: const Text("إدارة المستخدمين"),
+        elevation: 0,
+        actions: [
+          IconButton(onPressed: _loadUsers, icon: const Icon(IconlyLight.swap)),
+          const SizedBox(width: 10),
+        ],
+      ),
+      body: Column(
+        children: [
+          _buildSearchHeader(),
+          Expanded(
+            child: _isLoading 
+                ? _buildLoadingState()
+                : _error != null 
+                    ? _buildErrorState()
+                    : _filteredUsers.isEmpty 
+                        ? _buildEmptyState()
+                        : Responsive(
+                            mobile: _buildMobileList(),
+                            desktop: _buildDesktopTable(),
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchHeader() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      color: Colors.white,
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: "بحث عن مستخدم بالاسم أو الدور...",
+                hintText: "بحث عن مستخدم بالاسم أو الرتبة...",
                 prefixIcon: const Icon(IconlyLight.search),
-                fillColor: Colors.grey.shade100,
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
             ),
-            const SizedBox(height: 24),
-            Expanded(
-              child: _isLoading 
-                ? const Center(child: CircularProgressIndicator())
-                : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SingleChildScrollView(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('الاسم')),
-                          DataColumn(label: Text('الدور')),
-                          DataColumn(label: Text('رقم الهاتف')),
-                          DataColumn(label: Text('الإجراءات')),
-                        ],
-                        rows: _filteredUsers.map((user) {
-                          return DataRow(cells: [
-                            DataCell(Text(user['full_name'] ?? '')),
-                            DataCell(_buildRoleTag(user['role'] ?? '')),
-                            DataCell(Text(user['phone_number'] ?? '---')),
-                            DataCell(
-                              Row(
-                                children: [
-                                  PopupMenuButton<String>(
-                                    icon: const Icon(IconlyLight.edit, color: Colors.blue),
-                                    onSelected: (newRole) => _updateUserRole(user['id'], newRole),
-                                    itemBuilder: (context) => [
-                                      const PopupMenuItem(value: 'student', child: Text('جعل طالب')),
-                                      const PopupMenuItem(value: 'teacher', child: Text('جعل مدرس')),
-                                      const PopupMenuItem(value: 'admin', child: Text('جعل مسؤول')),
-                                    ],
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(IconlyLight.delete, color: Colors.red),
-                                    onPressed: () => _showDeleteDialog(user['id'], user['full_name']),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ]);
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopTable() {
+    return Container(
+      margin: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+      ),
+      child: SingleChildScrollView(
+        child: DataTable(
+          horizontalMargin: 24,
+          columnSpacing: 40,
+          headingRowHeight: 60,
+          columns: const [
+            DataColumn(label: Text('المستخدم', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('الرتبة', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('رقم الهاتف', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
           ],
+          rows: _filteredUsers.map((user) => DataRow(cells: [
+            DataCell(Row(
+              children: [
+                CircleAvatar(backgroundColor: Colors.blue.withOpacity(0.1), child: Text(user['full_name']?[0] ?? 'U', style: const TextStyle(color: Colors.blue))),
+                const SizedBox(width: 12),
+                Text(user['full_name'] ?? 'بدون اسم', style: const TextStyle(fontWeight: FontWeight.w600)),
+              ],
+            )),
+            DataCell(_buildRoleChip(user['role'])),
+            DataCell(Text(user['phone_number'] ?? 'غير متوفر')),
+            DataCell(Row(
+              children: [
+                _buildActionMenu(user),
+                IconButton(
+                  onPressed: () => _confirmDelete(user['id'], user['full_name'] ?? 'مستخدم'),
+                  icon: const Icon(IconlyLight.delete, color: Colors.red, size: 20),
+                ),
+              ],
+            )),
+          ])).toList(),
         ),
       ),
     );
   }
 
-  Widget _buildRoleTag(String role) {
-    Color color = Colors.blue;
-    String label = role == 'teacher' ? 'مدرس' : role == 'student' ? 'طالب' : 'مسؤول';
-    if (role == 'teacher') color = Colors.orange;
-    if (role == 'student') color = Colors.green;
-    if (role == 'admin') color = Colors.red;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
+  Widget _buildMobileList() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(15),
+      itemCount: _filteredUsers.length,
+      itemBuilder: (context, index) {
+        final user = _filteredUsers[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            leading: CircleAvatar(child: Text(user['full_name']?[0] ?? 'U')),
+            title: Text(user['full_name'] ?? 'بدون اسم', style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: _buildRoleChip(user['role']),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildActionMenu(user),
+                IconButton(
+                  onPressed: () => _confirmDelete(user['id'], user['full_name'] ?? 'مستخدم'),
+                  icon: const Icon(IconlyLight.delete, color: Colors.red, size: 20),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  void _showDeleteDialog(String id, String name) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("تأكيد الحذف"),
-        content: Text("هل أنت متأكد من حذف المستخدم $name؟"),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
-          TextButton(onPressed: () { Navigator.pop(context); _fetchUsers(); }, child: const Text("حذف", style: TextStyle(color: Colors.red))),
-        ],
+  Widget _buildRoleChip(String? role) {
+    Color color = Colors.blue;
+    String label = "طالب";
+    if (role == 'teacher') { color = Colors.orange; label = "مدرس"; }
+    if (role == 'admin') { color = Colors.red; label = "مسؤول"; }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildActionMenu(Map<String, dynamic> user) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, color: Colors.grey),
+      onSelected: (role) => _updateRole(user['id'], role),
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'student', child: Text('تعيين كطالب')),
+        const PopupMenuItem(value: 'teacher', child: Text('تعيين كمدرس')),
+        const PopupMenuItem(value: 'admin', child: Text('تعيين كمسؤول')),
+      ],
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(20),
+        itemCount: 8,
+        itemBuilder: (_, __) => Container(height: 70, margin: const EdgeInsets.only(bottom: 15), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12))),
       ),
     );
   }
+
+  Widget _buildErrorState() => Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(IconlyLight.danger, size: 50, color: Colors.red), const SizedBox(height: 10), Text(_error!), TextButton(onPressed: _loadUsers, child: const Text("إعادة المحاولة"))]));
+  
+  Widget _buildEmptyState() => const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(IconlyLight.search, size: 50, color: Colors.grey), SizedBox(height: 10), Text("لم يتم العثور على مستخدمين")]));
 }

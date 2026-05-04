@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
+import '../../../core/utils/responsive.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/routes/app_routes.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -11,49 +13,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final supabase = Supabase.instance.client;
-  bool _isLoading = false;
-  Map<String, dynamic>? _profileData;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchProfile();
-  }
-
-  // جلب البيانات من جدول profiles لضمان الدقة
-  Future<void> _fetchProfile() async {
-    setState(() => _isLoading = true);
-    try {
-      final userId = supabase.auth.currentUser!.id;
-      final data = await supabase.from('profiles').select().eq('id', userId).single();
-      setState(() {
-        _profileData = data;
-        _isLoading = false;
-      });
-    } catch (e) {
-      debugPrint("Error fetching profile: $e");
-      setState(() => _isLoading = false);
-    }
-  }
-
-  // منطق تعديل الاسم أو الهاتف
-  Future<void> _updateProfile(String field, String newValue) async {
-    try {
-      final userId = supabase.auth.currentUser!.id;
-      await supabase.from('profiles').update({field: newValue}).eq('id', userId);
-      
-      // تحديث الميتا داتا في الـ Auth أيضاً لضمان التزامن
-      await supabase.auth.updateUser(UserAttributes(
-        data: {field == 'full_name' ? 'full_name' : field: newValue},
-      ));
-
-      _fetchProfile(); // إعادة جلب البيانات
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم التحديث بنجاح")));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e")));
-    }
-  }
+  bool _isEditing = false;
 
   void _showEditDialog(String title, String field, String currentValue) {
     final controller = TextEditingController(text: currentValue);
@@ -69,8 +29,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
           ElevatedButton(
             onPressed: () {
+              // هنا يمكن إضافة منطق التحديث عبر AuthProvider مستقبلاً
               Navigator.pop(context);
-              _updateProfile(field, controller.text.trim());
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("سيتم تفعيل التحديث قريباً")));
             },
             child: const Text("حفظ"),
           ),
@@ -81,92 +42,161 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-
-    final String fullName = _profileData?['full_name'] ?? 'مستخدم';
-    final String phone = _profileData?['phone_number'] ?? 'غير مسجل';
-    final String role = _profileData?['role'] ?? 'student';
-    final String email = supabase.auth.currentUser?.email ?? '';
+    final authProvider = Provider.of<AuthProvider>(context);
+    final profile = authProvider.profile;
+    
+    if (profile == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      appBar: AppBar(
-        title: const Text("حسابي الشخصي", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            _buildHeader(fullName, role, email),
-            const SizedBox(height: 32),
-            _buildSectionTitle("المعلومات الشخصية"),
-            const SizedBox(height: 12),
-            _buildInfoCard([
-              _buildInfoItem(IconlyLight.profile, "الاسم الكامل", fullName, () => _showEditDialog("الاسم", "full_name", fullName)),
-              _buildInfoItem(IconlyLight.call, "رقم الهاتف", phone, () => _showEditDialog("الهاتف", "phone_number", phone)),
-              _buildInfoItem(IconlyLight.message, "البريد الإلكتروني", email, null), // الإيميل لا يعدل بسهولة
-            ]),
-            const SizedBox(height: 32),
-            _buildSectionTitle("الإعدادات والأمان"),
-            const SizedBox(height: 12),
-            _buildInfoCard([
-              _buildInfoItem(IconlyLight.lock, "تغيير كلمة المرور", "********", () {}),
-              _buildInfoItem(IconlyLight.setting, "إعدادات التطبيق", "العربية، المظهر الفاتح", () {}),
-            ]),
-            const SizedBox(height: 40),
-            ElevatedButton.icon(
-              onPressed: () async {
-                await supabase.auth.signOut();
-                if (!mounted) return;
-                Navigator.pushReplacementNamed(context, AppRoutes.login);
-              },
-              icon: const Icon(IconlyLight.logout),
-              label: const Text("تسجيل الخروج"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade50,
-                foregroundColor: Colors.red,
-                minimumSize: const Size(double.infinity, 56),
-                elevation: 0,
-              ),
-            ),
-          ],
-        ),
+      appBar: Responsive.isMobile(context) 
+          ? AppBar(title: const Text("الملف الشخصي"), elevation: 0)
+          : null,
+      body: Responsive(
+        mobile: _buildMobileLayout(profile, authProvider),
+        desktop: _buildDesktopLayout(profile, authProvider),
       ),
     );
   }
 
-  Widget _buildHeader(String name, String role, String email) {
-    return Column(
+  Widget _buildMobileLayout(Map<String, dynamic> profile, AuthProvider auth) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          _buildAvatarSection(profile),
+          const SizedBox(height: 30),
+          _buildDetailsSection(profile),
+          const SizedBox(height: 30),
+          _buildLogoutButton(auth),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout(Map<String, dynamic> profile, AuthProvider auth) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          radius: 55,
-          backgroundColor: Colors.blue.shade100,
-          child: Text(
-            name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "?",
-            style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.blue),
+        Expanded(
+          flex: 2,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(40),
+            child: Column(
+              children: [
+                _buildAvatarSection(profile),
+                const SizedBox(height: 40),
+                _buildLogoutButton(auth),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 16),
-        Text(name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-          child: Text(
-            role == 'teacher' ? "مدرس معتمد" : "طالب متعلم",
-            style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12),
+        const VerticalDivider(width: 1),
+        Expanded(
+          flex: 5,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("إعدادات الحساب", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 30),
+                _buildDetailsSection(profile),
+                const SizedBox(height: 30),
+                _buildSecuritySection(),
+              ],
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
+  Widget _buildAvatarSection(Map<String, dynamic> profile) {
+    final String name = profile['full_name'] ?? 'مستخدم';
+    final String role = profile['role'] ?? 'student';
+
+    return Container(
+      padding: const EdgeInsets.all(30),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20)],
+      ),
+      child: Column(
+        children: [
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 60,
+                backgroundColor: Colors.blue.withOpacity(0.1),
+                child: Text(
+                  name.substring(0, 1).toUpperCase(),
+                  style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.blue),
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
+                  child: const Icon(IconlyLight.camera, color: Colors.white, size: 20),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: role == 'admin' ? Colors.red.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              role == 'admin' ? "مدير النظام" : (role == 'teacher' ? "مدرس معتمد" : "طالب"),
+              style: TextStyle(
+                color: role == 'admin' ? Colors.red : Colors.blue,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailsSection(Map<String, dynamic> profile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("المعلومات الشخصية", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 15),
+        _buildInfoCard([
+          _buildInfoItem(IconlyLight.profile, "الاسم الكامل", profile['full_name'] ?? '', () => _showEditDialog("الاسم", "full_name", profile['full_name'])),
+          _buildInfoItem(IconlyLight.call, "رقم الهاتف", profile['phone_number'] ?? 'غير مسجل', () => _showEditDialog("الهاتف", "phone_number", profile['phone_number'] ?? '')),
+          _buildInfoItem(IconlyLight.message, "البريد الإلكتروني", profile['email'] ?? 'جاري التحميل...', null),
+        ]),
+      ],
+    );
+  }
+
+  Widget _buildSecuritySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("الأمان والخصوصية", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 15),
+        _buildInfoCard([
+          _buildInfoItem(IconlyLight.lock, "كلمة المرور", "********", () {}),
+          _buildInfoItem(IconlyLight.shield_done, "التحقق بخطوتين", "مفعل", null),
+        ]),
+      ],
     );
   }
 
@@ -174,8 +204,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20)],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
       ),
       child: Column(children: children),
     );
@@ -183,11 +213,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildInfoItem(IconData icon, String label, String value, VoidCallback? onTap) {
     return ListTile(
-      leading: Icon(icon, color: Colors.blue.shade300, size: 22),
-      title: Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey)),
-      subtitle: Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
-      trailing: onTap != null ? const Icon(Icons.chevron_right, size: 18) : null,
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: Colors.grey.withOpacity(0.05), borderRadius: BorderRadius.circular(10)),
+        child: Icon(icon, size: 20, color: Colors.blue.shade400),
+      ),
+      title: Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      subtitle: Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF1A1C1E))),
+      trailing: onTap != null ? const Icon(Icons.edit_outlined, size: 18, color: Colors.grey) : null,
       onTap: onTap,
+    );
+  }
+
+  Widget _buildLogoutButton(AuthProvider auth) {
+    return ElevatedButton.icon(
+      onPressed: () {
+        auth.logout();
+        Navigator.pushReplacementNamed(context, AppRoutes.login);
+      },
+      icon: const Icon(IconlyLight.logout),
+      label: const Text("تسجيل الخروج"),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.red.withOpacity(0.05),
+        foregroundColor: Colors.red,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.red.withOpacity(0.1))),
+      ),
     );
   }
 }

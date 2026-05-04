@@ -1,9 +1,11 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/models/session_model.dart';
+import 'package:shimmer/shimmer.dart';
+import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/services/database_service.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../video_room/video_room_screen.dart';
 
 class StudentScheduleTab extends StatefulWidget {
@@ -14,113 +16,104 @@ class StudentScheduleTab extends StatefulWidget {
 }
 
 class _StudentScheduleTabState extends State<StudentScheduleTab> {
-  final supabase = Supabase.instance.client;
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
-  List<SessionModel> _allSessions = [];
+  List<Map<String, dynamic>> _allSessions = [];
   bool _isLoading = true;
-  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
-    _fetchSchedule();
-    // تحديث الجدول كل 30 ثانية لضمان دقة مواعيد انتهاء الحصص
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (mounted) _filterSessionsLocally();
-    });
+    _loadSchedule();
   }
 
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _fetchSchedule() async {
+  Future<void> _loadSchedule() async {
+    setState(() => _isLoading = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
-      final response = await supabase
-          .from('enrollments')
-          .select('sessions(*, profiles:teacher_id(full_name), rooms(is_active))')
-          .eq('student_id', userId);
-
-      final List<dynamic> data = response as List;
-
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final db = Provider.of<DatabaseService>(context, listen: false);
+      final data = await db.getStudentSchedule(auth.user!.id);
+      
       if (mounted) {
         setState(() {
-          _allSessions = data.map((item) {
-            final sessionData = item['sessions'];
-            final rooms = sessionData['rooms'] as List?;
-            final bool isLiveNow = rooms != null && rooms.any((r) => r['is_active'] == true);
-
-            final session = SessionModel.fromMap(sessionData);
-            return SessionModel(
-              id: session.id,
-              subjectName: session.subjectName,
-              teacherName: session.teacherName,
-              startTime: session.startTime,
-              endTime: session.endTime,
-              isLive: isLiveNow,
-            );
-          }).toList();
+          _allSessions = data;
           _isLoading = false;
-          _filterSessionsLocally();
         });
       }
     } catch (e) {
-      debugPrint("Error: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _filterSessionsLocally() {
-    final now = DateTime.now();
-    setState(() {
-      // لا نحذف الحصص من الجدول بالكامل لكي يراها الطالب كسجل، 
-      // ولكننا فقط سنقوم بتمييز الحصص المنتهية أو القادمة
-      _allSessions.sort((a, b) => a.startTime.compareTo(b.startTime));
-    });
-  }
-
-  List<SessionModel> _getSessionsForDay(DateTime day) {
-    return _allSessions.where((session) => isSameDay(session.startTime, day)).toList();
+  List<Map<String, dynamic>> _getSessionsForDay(DateTime day) {
+    return _allSessions.where((item) {
+      final session = item['sessions'];
+      final startTime = DateTime.parse(session['start_time']).toLocal();
+      return isSameDay(startTime, day);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final sessionsForSelectedDay = _getSessionsForDay(_selectedDay!);
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
-        title: const Text("جدول حصصي", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
+        title: const Text("جدول حصصي"),
         elevation: 0,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-        children: [
-          _buildCalendar(),
-          const SizedBox(height: 16),
-          Expanded(child: _buildSessionsList(sessionsForSelectedDay)),
-        ],
-      ),
+      body: _isLoading 
+          ? _buildLoadingSkeleton()
+          : Responsive(
+              mobile: _buildMobileLayout(),
+              desktop: _buildDesktopLayout(),
+            ),
     );
   }
 
-  Widget _buildCalendar() {
+  Widget _buildMobileLayout() {
+    return Column(
+      children: [
+        _buildCalendarCard(),
+        Expanded(
+          child: _buildSessionsList(_getSessionsForDay(_selectedDay!)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 2,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: _buildCalendarCard(),
+          ),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(
+          flex: 3,
+          child: _buildSessionsList(_getSessionsForDay(_selectedDay!)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCalendarCard() {
     return Container(
-      decoration: const BoxDecoration(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
       ),
       child: TableCalendar(
-        firstDay: DateTime.utc(2023, 1, 1),
-        lastDay: DateTime.utc(2030, 12, 31),
+        firstDay: DateTime.now().subtract(const Duration(days: 365)),
+        lastDay: DateTime.now().add(const Duration(days: 365)),
         focusedDay: _focusedDay,
         calendarFormat: _calendarFormat,
         locale: 'ar_EG',
@@ -131,78 +124,121 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
             _focusedDay = focusedDay;
           });
         },
+        onFormatChanged: (format) {
+          setState(() => _calendarFormat = format);
+        },
         eventLoader: _getSessionsForDay,
-        calendarStyle: CalendarStyle(
-          todayDecoration: BoxDecoration(color: Colors.blue.withOpacity(0.2), shape: BoxShape.circle),
-          selectedDecoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
-          markerDecoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+        headerStyle: const HeaderStyle(
+          formatButtonVisible: false,
+          titleCentered: true,
+          titleTextStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
-        headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
+        calendarStyle: const CalendarStyle(
+          todayDecoration: BoxDecoration(color: Colors.lightBlueAccent, shape: BoxShape.circle),
+          selectedDecoration: BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
+          markerDecoration: BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+        ),
       ),
     );
   }
 
-  Widget _buildSessionsList(List<SessionModel> sessions) {
-    final now = DateTime.now();
+  Widget _buildSessionsList(List<Map<String, dynamic>> sessions) {
     if (sessions.isEmpty) {
-      return const Center(child: Text("لا توجد حصص في هذا اليوم", style: TextStyle(color: Colors.grey)));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.calendar_today_outlined, size: 60, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            const Text("لا توجد حصص في هذا اليوم", style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(20),
       itemCount: sessions.length,
       itemBuilder: (context, index) {
-        final session = sessions[index];
-        final bool isEnded = session.endTime.isBefore(now);
-        final bool isLive = session.isLive && !isEnded;
+        final item = sessions[index];
+        final session = item['sessions'];
+        final startTime = DateTime.parse(session['start_time']).toLocal();
+        final isLive = session['rooms'] != null && 
+                       (session['rooms'] as List).any((r) => r['is_active'] == true);
 
-        return Card(
+        return Container(
           margin: const EdgeInsets.only(bottom: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          color: isEnded ? Colors.grey.shade50 : Colors.white,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+          ),
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
             leading: Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isLive ? Colors.red.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
+                color: (isLive ? Colors.red : Colors.blue).withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                isLive ? Icons.sensors : (isEnded ? Icons.history : Icons.book),
-                color: isLive ? Colors.red : (isEnded ? Colors.grey : Colors.blue),
+                isLive ? Icons.sensors : Icons.book_outlined,
+                color: isLive ? Colors.red : Colors.blue,
               ),
             ),
-            title: Text(
-              session.subjectName,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                decoration: isEnded ? TextDecoration.lineThrough : null,
-                color: isEnded ? Colors.grey : Colors.black87,
-              ),
+            title: Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("مع: ${session['profiles']?['full_name'] ?? '---'}"),
+                Text(DateFormat('hh:mm a').format(startTime), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
             ),
-            subtitle: Text("${DateFormat('hh:mm a').format(session.startTime)} - ${session.teacherName}"),
-            trailing: isLive
-                ? _buildLiveBadge()
-                : (isEnded ? const Text("منتهية", style: TextStyle(color: Colors.grey, fontSize: 12)) : const Icon(Icons.arrow_forward_ios, size: 14)),
-            onTap: isLive ? () => _joinSession(session) : null,
+            trailing: isLive 
+              ? ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (context) => VideoRoomScreen(
+                        title: session['subject_name'],
+                        roomName: "room_${session['id']}",
+                        userName: Provider.of<AuthProvider>(context, listen: false).profile?['full_name'] ?? "Student",
+                      ),
+                    ));
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    minimumSize: const Size(80, 40),
+                  ),
+                  child: const Text("دخول"),
+                )
+              : const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
           ),
         );
       },
     );
   }
 
-  Widget _buildLiveBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(12)),
-      child: const Text("مباشر", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+  Widget _buildLoadingSkeleton() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: Column(
+        children: [
+          Container(height: 350, margin: const EdgeInsets.all(20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24))),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: 3,
+              itemBuilder: (_, __) => Container(height: 100, margin: const EdgeInsets.only(bottom: 15), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20))),
+            ),
+          ),
+        ],
+      ),
     );
   }
+}
 
-  void _joinSession(SessionModel session) {
-    final user = supabase.auth.currentUser;
-    final userName = user?.userMetadata?['full_name'] ?? "الطالب";
-    Navigator.push(context, MaterialPageRoute(builder: (context) => VideoRoomScreen(title: "بث مباشر: ${session.subjectName}", roomName: "room_${session.id}", userName: userName)));
-  }
+extension ColorExtension on Colors {
+  static Color get blueOpacity => Colors.blue.withOpacity(0.1);
 }

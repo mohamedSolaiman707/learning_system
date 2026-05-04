@@ -147,35 +147,24 @@ class DatabaseService {
     }
   }
 
-  // تفعيل أو إغلاق الغرفة (تم تحسين المنطق)
+  // تفعيل أو إغلاق الغرفة (تم التحويل لـ upsert حقيقي لضمان التحديث)
   Future<void> toggleRoomStatus(String sessionId, bool isActive, {String? roomName}) async {
     try {
-      // البحث أولاً إذا كانت الغرفة موجودة
-      final existing = await _supabase.from('rooms')
-          .select('id')
-          .eq('session_id', sessionId)
-          .maybeSingle();
-
-      if (existing == null) {
-        // إنشاء غرفة جديدة
-        await _supabase.from('rooms').insert({
-          'session_id': sessionId,
-          'room_name': roomName ?? "room_$sessionId",
-          'is_active': isActive,
-        });
-      } else {
-        // تحديث حالة الغرفة الموجودة
-        await _supabase.from('rooms').update({
-          'is_active': isActive,
-        }).eq('id', existing['id']);
-      }
+      await _supabase.from('rooms').upsert({
+        'session_id': sessionId,
+        'room_name': roomName ?? "room_$sessionId",
+        'is_active': isActive,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'session_id');
+      
+      print("Room status updated: $sessionId -> $isActive");
     } catch (e) {
       print("ToggleRoom Error: $e");
       rethrow;
     }
   }
 
-  // تسجيل طالب بكود الحصة (منطق مطور)
+  // تسجيل طالب بكود الحصة
   Future<void> enrollStudentByCode(String studentId, String classCode) async {
     try {
       final cleanCode = classCode.trim().toUpperCase();

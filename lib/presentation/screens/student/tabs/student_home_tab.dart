@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 import 'package:provider/provider.dart';
@@ -26,16 +27,29 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   List<SessionModel> _sessions = [];
   SessionModel? _nextSession;
   int _pendingAssignmentsCount = 0;
+  Timer? _refreshTimer; // تايمر للتحديث التلقائي
 
   @override
   void initState() {
     super.initState();
-    _loadStudentData();
+    _loadStudentData(initial: true);
+    
+    // تحديث البيانات كل 10 ثواني للتأكد من حالة اللايف
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _loadStudentData(initial: false);
+    });
   }
 
-  Future<void> _loadStudentData() async {
+  @override
+  void dispose() {
+    _refreshTimer?.cancel(); // إيقاف التايمر عند الخروج
+    super.dispose();
+  }
+
+  Future<void> _loadStudentData({bool initial = true}) async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    if (initial) setState(() => _isLoading = true);
+    
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
@@ -51,28 +65,28 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
 
             final now = DateTime.now();
             try {
+              // الحصة القادمة هي أول حصة لم تنتهِ بعد
               _nextSession = _sessions.firstWhere((s) => s.endTime.isAfter(now));
             } catch (_) {
               _nextSession = null;
             }
+            
+            if (initial) _isLoading = false;
           });
 
-          int totalAssignments = 0;
-          for (var session in _sessions) {
-             final assignments = await assignService.getAssignments(session.id);
-             totalAssignments += assignments.length;
-          }
-          
-          if (mounted) {
-            setState(() {
-              _pendingAssignmentsCount = totalAssignments;
-              _isLoading = false;
-            });
+          // تحديث عدد الواجبات فقط في التحميل الأول أو بشكل منفصل لتوفير الاستهلاك
+          if (initial) {
+            int totalAssignments = 0;
+            for (var session in _sessions) {
+               final assignments = await assignService.getAssignments(session.id);
+               totalAssignments += assignments.length;
+            }
+            if (mounted) setState(() => _pendingAssignmentsCount = totalAssignments);
           }
         }
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && initial) setState(() => _isLoading = false);
     }
   }
 
@@ -125,7 +139,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text("تم الانضمام للحصة بنجاح"), backgroundColor: Colors.green)
                     );
-                    _loadStudentData();
+                    _loadStudentData(initial: true);
                   }
                 } catch (e) {
                   setDialogState(() => isSubmitting = false);
@@ -190,7 +204,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
       body: _isLoading 
           ? _buildLoadingSkeleton()
           : RefreshIndicator(
-              onRefresh: _loadStudentData,
+              onRefresh: () => _loadStudentData(initial: true),
               child: CustomScrollView(
                 slivers: [
                   _buildSliverAppBar(userName),

@@ -18,13 +18,26 @@ class SessionModel {
   });
 
   factory SessionModel.fromMap(Map<String, dynamic> map) {
-    // parse التاريخ ثم تحويله لتوقيت الجهاز المحلي (مصر)
     final startTime = DateTime.parse(map['start_time']).toLocal();
     final endTime = DateTime.parse(map['end_time']).toLocal();
     
-    String teacherName = "مدرس غير معروف";
+    String teacherName = "مدرس";
     if (map['profiles'] != null) {
       teacherName = map['profiles']['full_name'] ?? "مدرس";
+    }
+
+    // منطق متطور للتحقق من حالة اللايف لضمان الدقة
+    bool liveStatus = false;
+    final roomsData = map['rooms'];
+    
+    if (roomsData != null) {
+      if (roomsData is List && roomsData.isNotEmpty) {
+        // إذا رجعت كقائمة، نتحقق من أي غرفة نشطة
+        liveStatus = roomsData.any((r) => r['is_active'] == true);
+      } else if (roomsData is Map) {
+        // إذا رجعت ككائن واحد
+        liveStatus = roomsData['is_active'] == true;
+      }
     }
 
     return SessionModel(
@@ -34,7 +47,7 @@ class SessionModel {
       classCode: map['class_code'] ?? '',
       startTime: startTime,
       endTime: endTime,
-      isLive: map['rooms'] != null && (map['rooms'] is List && (map['rooms'] as List).isNotEmpty ? map['rooms'][0]['is_active'] : false),
+      isLive: liveStatus,
     );
   }
 

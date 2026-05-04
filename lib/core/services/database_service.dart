@@ -147,45 +147,63 @@ class DatabaseService {
     }
   }
 
+  // تفعيل أو إغلاق الغرفة (تم تحسين المنطق)
   Future<void> toggleRoomStatus(String sessionId, bool isActive, {String? roomName}) async {
     try {
-      await _supabase.from('rooms').upsert({
-        'session_id': sessionId,
-        'room_name': roomName ?? "room_$sessionId",
-        'is_active': isActive,
-      }, onConflict: 'session_id');
+      // البحث أولاً إذا كانت الغرفة موجودة
+      final existing = await _supabase.from('rooms')
+          .select('id')
+          .eq('session_id', sessionId)
+          .maybeSingle();
+
+      if (existing == null) {
+        // إنشاء غرفة جديدة
+        await _supabase.from('rooms').insert({
+          'session_id': sessionId,
+          'room_name': roomName ?? "room_$sessionId",
+          'is_active': isActive,
+        });
+      } else {
+        // تحديث حالة الغرفة الموجودة
+        await _supabase.from('rooms').update({
+          'is_active': isActive,
+        }).eq('id', existing['id']);
+      }
     } catch (e) {
+      print("ToggleRoom Error: $e");
       rethrow;
     }
   }
 
-  // تسجيل طالب بكود الحصة (منطاق مطور)
+  // تسجيل طالب بكود الحصة (منطق مطور)
   Future<void> enrollStudentByCode(String studentId, String classCode) async {
-    // 1. تنظيف الكود (إزالة المسافات وتحويله لكبير)
-    final cleanCode = classCode.trim().toUpperCase();
+    try {
+      final cleanCode = classCode.trim().toUpperCase();
 
-    // 2. البحث عن الحصة
-    final session = await _supabase.from('sessions')
-        .select('id')
-        .eq('class_code', cleanCode)
-        .maybeSingle();
-        
-    if (session == null) throw Exception("كود الحصة غير صحيح أو غير موجود");
+      final response = await _supabase.from('sessions')
+          .select('id')
+          .eq('class_code', cleanCode);
+          
+      if (response.isEmpty) throw Exception("كود الحصة غير صحيح أو غير موجود");
 
-    // 3. التحقق من عدم التسجيل المسبق
-    final existing = await _supabase.from('enrollments')
-        .select()
-        .eq('student_id', studentId)
-        .eq('session_id', session['id'])
-        .maybeSingle();
+      final sessionId = response[0]['id'];
 
-    if (existing != null) throw Exception("أنت مسجل بالفعل في هذه الحصة");
+      final existing = await _supabase.from('enrollments')
+          .select()
+          .eq('student_id', studentId)
+          .eq('session_id', sessionId)
+          .maybeSingle();
 
-    // 4. التسجيل الفعلي
-    await _supabase.from('enrollments').insert({
-      'student_id': studentId,
-      'session_id': session['id']
-    });
+      if (existing != null) throw Exception("أنت مسجل بالفعل في هذه الحصة");
+
+      await _supabase.from('enrollments').insert({
+        'student_id': studentId,
+        'session_id': sessionId
+      });
+    } catch (e) {
+      print("Enroll Error: $e");
+      rethrow;
+    }
   }
 
   Future<void> saveSession(Map<String, dynamic> data, {String? id}) async {

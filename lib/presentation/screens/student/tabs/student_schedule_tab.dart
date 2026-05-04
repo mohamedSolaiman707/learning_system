@@ -3,6 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:iconly/iconly.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/services/database_service.dart';
 import '../../../../core/utils/responsive.dart';
@@ -47,9 +48,78 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
     }
   }
 
+  void _showJoinCodeDialog() {
+    final codeController = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("انضمام لحصة جديدة", textAlign: TextAlign.center),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("أدخل كود الحصة المكون من 6 أرقام/حروف للانضمام إلى جدولك", 
+                style: TextStyle(fontSize: 13, color: Colors.grey), textAlign: TextAlign.center),
+              const SizedBox(height: 20),
+              TextField(
+                controller: codeController,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 4),
+                decoration: InputDecoration(
+                  hintText: "ABC123",
+                  hintStyle: TextStyle(color: Colors.grey.shade300, letterSpacing: 4),
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+                textCapitalization: TextCapitalization.characters,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+            ElevatedButton(
+              onPressed: isSubmitting ? null : () async {
+                if (codeController.text.isEmpty) return;
+                
+                setDialogState(() => isSubmitting = true);
+                try {
+                  final auth = Provider.of<AuthProvider>(context, listen: false);
+                  final db = Provider.of<DatabaseService>(context, listen: false);
+                  
+                  await db.enrollStudentByCode(auth.user!.id, codeController.text);
+                  
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("تم الانضمام للحصة بنجاح"), backgroundColor: Colors.green)
+                    );
+                    _loadSchedule();
+                  }
+                } catch (e) {
+                  setDialogState(() => isSubmitting = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: Colors.red)
+                  );
+                }
+              },
+              child: isSubmitting 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text("انضمام"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   List<Map<String, dynamic>> _getSessionsForDay(DateTime day) {
     return _allSessions.where((item) {
       final session = item['sessions'];
+      if (session == null) return false;
       final startTime = DateTime.parse(session['start_time']).toLocal();
       return isSameDay(startTime, day);
     }).toList();
@@ -62,13 +132,31 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       appBar: AppBar(
         title: const Text("جدول حصصي"),
         elevation: 0,
+        actions: [
+          IconButton(
+            onPressed: _showJoinCodeDialog,
+            icon: const Icon(IconlyLight.plus),
+            tooltip: "انضمام بكود",
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: _isLoading 
           ? _buildLoadingSkeleton()
-          : Responsive(
-              mobile: _buildMobileLayout(),
-              desktop: _buildDesktopLayout(),
+          : RefreshIndicator(
+              onRefresh: _loadSchedule,
+              child: Responsive(
+                mobile: _buildMobileLayout(),
+                desktop: _buildDesktopLayout(),
+              ),
             ),
+      floatingActionButton: Responsive.isMobile(context) 
+        ? FloatingActionButton.extended(
+            onPressed: _showJoinCodeDialog,
+            icon: const Icon(IconlyLight.plus),
+            label: const Text("انضمام بكود"),
+          )
+        : null,
     );
   }
 
@@ -151,6 +239,12 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
             Icon(Icons.calendar_today_outlined, size: 60, color: Colors.grey.shade300),
             const SizedBox(height: 16),
             const Text("لا توجد حصص في هذا اليوم", style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _showJoinCodeDialog,
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade50, foregroundColor: Colors.blue, elevation: 0),
+              child: const Text("انضم لحصة الآن"),
+            ),
           ],
         ),
       );
@@ -162,9 +256,10 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       itemBuilder: (context, index) {
         final item = sessions[index];
         final session = item['sessions'];
+        if (session == null) return const SizedBox();
         final startTime = DateTime.parse(session['start_time']).toLocal();
         final isLive = session['rooms'] != null && 
-                       (session['rooms'] as List).any((r) => r['is_active'] == true);
+                       (session['rooms'] is List && (session['rooms'] as List).isNotEmpty ? session['rooms'][0]['is_active'] == true : false);
 
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
@@ -186,7 +281,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                 color: isLive ? Colors.red : Colors.blue,
               ),
             ),
-            title: Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            title: Text(session['subject_name'] ?? 'بدون عنوان', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -237,8 +332,4 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       ),
     );
   }
-}
-
-extension ColorExtension on Colors {
-  static Color get blueOpacity => Colors.blue.withOpacity(0.1);
 }

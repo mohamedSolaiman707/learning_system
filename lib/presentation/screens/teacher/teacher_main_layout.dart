@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
+import '../../../core/utils/responsive.dart';
 import 'tabs/teacher_home_tab.dart';
-import 'tabs/teacher_schedule_tab.dart'; // استدعاء ملف جدول المدرس الجديد
+import 'tabs/teacher_schedule_tab.dart'; 
 import '../profile/profile_screen.dart';
 
 class TeacherMainLayout extends StatefulWidget {
@@ -16,42 +17,76 @@ class _TeacherMainLayoutState extends State<TeacherMainLayout> {
 
   final List<Widget> _tabs = [
     const TeacherHomeTab(),
-    const TeacherScheduleTab(), // تم التغيير هنا لاستخدام كلاس المدرس
+    const TeacherScheduleTab(),
     const ProfileScreen(),
+  ];
+
+  final List<NavigationDestination> _destinations = const [
+    NavigationDestination(
+      icon: Icon(IconlyLight.home),
+      selectedIcon: Icon(IconlyBold.home),
+      label: 'الرئيسية',
+    ),
+    NavigationDestination(
+      icon: Icon(IconlyLight.calendar),
+      selectedIcon: Icon(IconlyBold.calendar),
+      label: 'جدولي',
+    ),
+    NavigationDestination(
+      icon: Icon(IconlyLight.profile),
+      selectedIcon: Icon(IconlyBold.profile),
+      label: 'حسابي',
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
+    bool isMobile = Responsive.isMobile(context);
+
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _tabs,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(IconlyLight.home),
-            selectedIcon: Icon(IconlyBold.home),
-            label: 'الرئيسية',
-          ),
-          NavigationDestination(
-            icon: Icon(IconlyLight.calendar),
-            selectedIcon: Icon(IconlyBold.calendar),
-            label: 'جدولي',
-          ),
-          NavigationDestination(
-            icon: Icon(IconlyLight.profile),
-            selectedIcon: Icon(IconlyBold.profile),
-            label: 'حسابي',
+      body: Row(
+        children: [
+          if (!isMobile)
+            NavigationRail(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) {
+                setState(() => _selectedIndex = index);
+              },
+              extended: Responsive.isDesktop(context),
+              labelType: Responsive.isDesktop(context) 
+                  ? NavigationRailLabelType.none 
+                  : NavigationRailLabelType.all,
+              leading: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 30),
+                child: CircleAvatar(
+                  backgroundColor: Colors.orange.withOpacity(0.1),
+                  child: const Icon(Icons.menu_book, color: Colors.orange),
+                ),
+              ),
+              destinations: _destinations.map((d) => NavigationRailDestination(
+                icon: d.icon,
+                selectedIcon: d.selectedIcon,
+                label: Text(d.label),
+              )).toList(),
+            ),
+          if (!isMobile) const VerticalDivider(thickness: 1, width: 1),
+          Expanded(
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: _tabs,
+            ),
           ),
         ],
       ),
+      bottomNavigationBar: isMobile 
+          ? NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) {
+                setState(() => _selectedIndex = index);
+              },
+              destinations: _destinations,
+            )
+          : null,
     );
   }
 }

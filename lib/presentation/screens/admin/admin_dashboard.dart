@@ -3,6 +3,7 @@ import 'package:iconly/iconly.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shimmer/shimmer.dart';
+import '../../core/utils/responsive.dart';
 import 'admin_settings_screen.dart';
 import 'widgets/admin_stat_card.dart';
 import 'users_management_screen.dart';
@@ -57,44 +58,57 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    bool isMobile = MediaQuery.of(context).size.width < 900;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      appBar: _buildAppBar(isMobile),
-      drawer: isMobile ? Drawer(child: _buildSidebar(context)) : null,
+      appBar: Responsive.isMobile(context) ? _buildAppBar(true) : null,
+      drawer: Responsive.isMobile(context) ? Drawer(child: _buildSidebar(context)) : null,
       body: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!isMobile)
-            Container(
-              width: 280,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)],
+          if (!Responsive.isMobile(context))
+            Expanded(
+              flex: 1,
+              child: Container(
+                height: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)],
+                ),
+                child: _buildSidebar(context, isDrawer: false),
               ),
-              child: _buildSidebar(context, isDrawer: false),
             ),
           Expanded(
+            flex: 5,
             child: _isLoading 
                 ? _buildLoadingSkeleton()
                 : RefreshIndicator(
                     onRefresh: _loadStats,
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(30.0),
+                      padding: EdgeInsets.all(Responsive.isMobile(context) ? 15.0 : 30.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildHeader(),
+                          if (!Responsive.isMobile(context)) _buildDesktopHeader(),
+                          if (Responsive.isMobile(context)) _buildMobileHeader(),
                           const SizedBox(height: 30),
                           _buildStatsGrid(),
                           const SizedBox(height: 40),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(flex: 2, child: _buildChartSection()),
-                              if (!isMobile) const SizedBox(width: 30),
-                              if (!isMobile) Expanded(child: _buildRecentActivity()),
-                            ],
+                          Responsive(
+                            mobile: Column(
+                              children: [
+                                _buildChartSection(),
+                                const SizedBox(height: 30),
+                                _buildRecentActivity(),
+                              ],
+                            ),
+                            desktop: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 2, child: _buildChartSection()),
+                                const SizedBox(width: 30),
+                                Expanded(child: _buildRecentActivity()),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -111,23 +125,54 @@ class _AdminDashboardState extends State<AdminDashboard> {
       backgroundColor: Colors.white,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
-      leading: isMobile ? null : const SizedBox(),
-      title: Text("لوحة التحكم", style: TextStyle(color: Colors.grey.shade800, fontWeight: FontWeight.bold)),
+      title: const Text("لوحة التحكم", style: TextStyle(color: Color(0xFF1A1C1E), fontWeight: FontWeight.bold)),
       actions: [
         IconButton(onPressed: _loadStats, icon: const Icon(IconlyLight.swap)),
         const SizedBox(width: 10),
-        const CircleAvatar(radius: 18, backgroundColor: Colors.blue, child: Icon(IconlyBold.profile, size: 20, color: Colors.white)),
-        const SizedBox(width: 20),
+        const CircleAvatar(radius: 16, backgroundColor: Colors.blue, child: Icon(IconlyBold.profile, size: 18, color: Colors.white)),
+        const SizedBox(width: 15),
       ],
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildDesktopHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("نظرة عامة على النظام", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E))),
+            Text("مرحباً بك مجدداً، إليك ما يحدث في المنصة اليوم", style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
+          ],
+        ),
+        Row(
+          children: [
+            ElevatedButton.icon(
+              onPressed: _loadStats,
+              icon: const Icon(IconlyLight.swap, size: 20),
+              label: const Text("تحديث البيانات"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(width: 15),
+            const CircleAvatar(radius: 25, backgroundColor: Colors.blue, child: Icon(IconlyBold.profile, size: 28, color: Colors.white)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileHeader() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("نظرة عامة على النظام", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E))),
-        Text("مرحباً بك مجدداً، إليك ما يحدث في المنصة اليوم", style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
+        const Text("نظرة عامة", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E))),
+        Text("مرحباً بك مجدداً في المنصة", style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
       ],
     );
   }
@@ -135,14 +180,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget _buildStatsGrid() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        int crossAxisCount = constraints.maxWidth > 1200 ? 4 : (constraints.maxWidth > 700 ? 2 : 1);
+        int crossAxisCount = Responsive.isDesktop(context) ? 4 : (Responsive.isTablet(context) ? 2 : 1);
+        double aspectRatio = Responsive.isDesktop(context) ? 1.5 : (Responsive.isTablet(context) ? 2.0 : 1.8);
+        
         return GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           crossAxisCount: crossAxisCount,
           crossAxisSpacing: 20,
           mainAxisSpacing: 20,
-          childAspectRatio: 1.8,
+          childAspectRatio: aspectRatio,
           children: [
             AdminStatCard(title: "إجمالي الطلاب", value: _totalStudents.toString(), icon: IconlyLight.user_1, color: Colors.blue),
             AdminStatCard(title: "الغرف النشطة", value: _activeRooms.toString(), icon: IconlyLight.video, color: Colors.green),
@@ -165,14 +212,30 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("إحصائيات الحضور الأسبوعي", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("إحصائيات الحضور الأسبوعي", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              DropdownButton<String>(
+                value: 'هذا الأسبوع',
+                items: ['هذا الأسبوع', 'الشهر الماضي'].map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 12)))).toList(),
+                onChanged: (_) {},
+                underline: const SizedBox(),
+              ),
+            ],
+          ),
           const SizedBox(height: 30),
           SizedBox(
             height: 300,
             child: LineChart(
               LineChartData(
                 gridData: const FlGridData(show: true, drawVerticalLine: false),
-                titlesData: const FlTitlesData(show: true, rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false))),
+                titlesData: const FlTitlesData(
+                  show: true, 
+                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), 
+                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 30)),
+                ),
                 borderData: FlBorderData(show: false),
                 lineBarsData: [
                   LineChartBarData(
@@ -196,15 +259,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget _buildRecentActivity() {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+      decoration: BoxDecoration(
+        color: Colors.white, 
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10))],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text("آخر النشاطات", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
+          const SizedBox(height: 25),
           _buildActivityItem("تم إنشاء حساب طالب جديد", "منذ 5 دقائق", IconlyLight.user_1, Colors.blue),
           _buildActivityItem("بدأت حصة الرياضيات", "منذ 12 دقيقة", IconlyLight.video, Colors.green),
           _buildActivityItem("تم تحديث جدول الامتحانات", "منذ ساعة", IconlyLight.document, Colors.orange),
+          _buildActivityItem("انضم معلم جديد للمنصة", "منذ ساعتين", IconlyLight.user_1, Colors.purple),
+          const SizedBox(height: 10),
+          TextButton(onPressed: () {}, child: const Text("عرض الكل")),
         ],
       ),
     );
@@ -224,12 +294,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildSidebar(BuildContext context, {bool isDrawer = true}) {
-    return Container(
-      color: Colors.white,
+    return SingleChildScrollView(
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
+            padding: EdgeInsets.fromLTRB(20, isDrawer ? 60 : 40, 20, 30),
             child: Column(
               children: [
                 Container(
@@ -269,7 +338,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             if (isDrawer) Navigator.pop(context);
             Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminSettingsScreen()));
           }),
-          const Spacer(),
+          const SizedBox(height: 100),
           const Divider(indent: 30, endIndent: 30),
           _buildSidebarItem(IconlyLight.logout, "تسجيل الخروج", false, () {
             supabase.auth.signOut().then((_) => Navigator.pushReplacementNamed(context, '/login'));

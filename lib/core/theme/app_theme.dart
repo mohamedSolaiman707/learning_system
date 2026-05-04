@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  static const Color primaryColor = Color(0xFF2196F3);
-  static const Color secondaryColor = Color(0xFFFF9800);
-  static const Color backgroundColor = Color(0xFAFAFAFA);
-  static const Color errorColor = Color(0xFFD32F2F);
+  // ألوان احترافية (Enterprise Palette)
+  static const Color primaryColor = Color(0xFF0061FF);
+  static const Color secondaryColor = Color(0xFF00C6FF);
+  static const Color accentColor = Color(0xFFFF9800);
+  static const Color backgroundColor = Color(0xFFF8FAFC);
+  static const Color surfaceColor = Colors.white;
+  static const Color errorColor = Color(0xFFE11D48);
+  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textSecondary = Color(0xFF64748B);
 
   static ThemeData get lightTheme {
     return ThemeData(
@@ -14,41 +19,52 @@ class AppTheme {
         primary: primaryColor,
         secondary: secondaryColor,
         error: errorColor,
-        background: backgroundColor,
+        surface: surfaceColor,
+        onSurface: textPrimary,
       ),
-      textTheme: GoogleFonts.cairoTextTheme(),
+      textTheme: GoogleFonts.cairoTextTheme().copyWith(
+        displayLarge: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: textPrimary),
+        displayMedium: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: textPrimary),
+        titleLarge: GoogleFonts.cairo(fontWeight: FontWeight.w600, color: textPrimary),
+        bodyLarge: GoogleFonts.cairo(color: textPrimary),
+        bodyMedium: GoogleFonts.cairo(color: textSecondary),
+      ),
       scaffoldBackgroundColor: backgroundColor,
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.white,
         elevation: 0,
-        centerTitle: true,
-        iconTheme: IconThemeData(color: Colors.black),
+        centerTitle: false,
+        iconTheme: IconThemeData(color: textPrimary),
         titleTextStyle: TextStyle(
-          color: Colors.black,
-          fontSize: 20,
+          color: textPrimary,
+          fontSize: 18,
           fontWeight: FontWeight.bold,
+          fontFamily: 'Cairo',
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: secondaryColor,
+          backgroundColor: primaryColor,
           foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 50),
+          minimumSize: const Size(double.infinity, 54),
+          elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           textStyle: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
+            fontFamily: 'Cairo',
           ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(color: Colors.grey.shade200),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -56,15 +72,22 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primaryColor),
+          borderSide: const BorderSide(color: primaryColor, width: 2),
         ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: errorColor),
+        ),
+        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+        prefixIconColor: textSecondary,
       ),
       cardTheme: CardThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        elevation: 2,
+        elevation: 0,
         color: Colors.white,
+        margin: EdgeInsets.zero,
       ),
     );
   }

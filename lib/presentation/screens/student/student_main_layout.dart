@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
+import '../../../core/utils/responsive.dart';
 import 'tabs/student_home_tab.dart';
 import 'tabs/student_schedule_tab.dart';
 import '../profile/profile_screen.dart';
@@ -20,35 +21,69 @@ class _StudentMainLayoutState extends State<StudentMainLayout> {
     const ProfileScreen(),
   ];
 
+  final List<NavigationDestination> _destinations = const [
+    NavigationDestination(
+      icon: Icon(IconlyLight.home),
+      selectedIcon: Icon(IconlyBold.home),
+      label: 'الرئيسية',
+    ),
+    NavigationDestination(
+      icon: Icon(IconlyLight.calendar),
+      selectedIcon: Icon(IconlyBold.calendar),
+      label: 'الجدول',
+    ),
+    NavigationDestination(
+      icon: Icon(IconlyLight.profile),
+      selectedIcon: Icon(IconlyBold.profile),
+      label: 'حسابي',
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
+    bool isMobile = Responsive.isMobile(context);
+
     return Scaffold(
-      body: _tabs[_selectedIndex],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(IconlyLight.home),
-            selectedIcon: Icon(IconlyBold.home),
-            label: 'الرئيسية',
-          ),
-          NavigationDestination(
-            icon: Icon(IconlyLight.calendar),
-            selectedIcon: Icon(IconlyBold.calendar),
-            label: 'الجدول',
-          ),
-          NavigationDestination(
-            icon: Icon(IconlyLight.profile),
-            selectedIcon: Icon(IconlyBold.profile),
-            label: 'حسابي',
+      body: Row(
+        children: [
+          if (!isMobile)
+            NavigationRail(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) {
+                setState(() => _selectedIndex = index);
+              },
+              extended: Responsive.isDesktop(context),
+              labelType: Responsive.isDesktop(context) 
+                  ? NavigationRailLabelType.none 
+                  : NavigationRailLabelType.all,
+              leading: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 30),
+                child: CircleAvatar(
+                  backgroundColor: Colors.blue.withOpacity(0.1),
+                  child: const Icon(Icons.school, color: Colors.blue),
+                ),
+              ),
+              destinations: _destinations.map((d) => NavigationRailDestination(
+                icon: d.icon,
+                selectedIcon: d.selectedIcon,
+                label: Text(d.label),
+              )).toList(),
+            ),
+          if (!isMobile) const VerticalDivider(thickness: 1, width: 1),
+          Expanded(
+            child: _tabs[_selectedIndex],
           ),
         ],
       ),
+      bottomNavigationBar: isMobile 
+          ? NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) {
+                setState(() => _selectedIndex = index);
+              },
+              destinations: _destinations,
+            )
+          : null,
     );
   }
 }

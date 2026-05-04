@@ -3,6 +3,7 @@ import 'package:iconly/iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/routes/app_routes.dart';
+import '../../../core/utils/responsive.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,21 +29,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      // 1. محاولة تسجيل الدخول
       final response = await supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (response.user != null) {
-        // 2. محاولة جلب البروفايل
         var userData = await supabase
             .from('profiles')
             .select('role')
             .eq('id', response.user!.id)
             .maybeSingle();
 
-        // 3. (حماية إضافية) إذا لم يجد البروفايل، نقوم بإنشائه الآن
         if (userData == null) {
           final String fullName = response.user!.userMetadata?['full_name'] ?? 'مستخدم';
           final String role = response.user!.userMetadata?['role'] ?? 'student';
@@ -60,7 +58,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (!mounted) return;
 
-        // 4. التوجيه بناءً على الدور
         if (role == 'teacher') {
           Navigator.pushReplacementNamed(context, AppRoutes.teacherHome);
         } else if (role == 'admin') {
@@ -72,7 +69,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on AuthApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ في الدخول: البريد أو كلمة المرور غير صحيحة')),
+        const SnackBar(content: Text('خطأ في الدخول: البريد أو كلمة المرور غير صحيحة')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -87,75 +84,159 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
+      backgroundColor: Colors.white,
+      body: Responsive(
+        mobile: _buildMobileLayout(),
+        desktop: _buildDesktopLayout(),
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout() {
+    return SafeArea(
+      child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 50),
-              Center(
-                child: SvgPicture.asset(
-                  'assets/icons/logo.svg',
-                  width: 80,
-                  height: 80,
-                ),
-              ),
-              const SizedBox(height: 32),
-              Text(
-                "مرحباً بك مجدداً",
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                "سجل دخولك للمتابعة في EduConnect",
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 40),
-              TextField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  hintText: "البريد الإلكتروني",
-                  prefixIcon: Icon(IconlyLight.message),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: _obscureText,
-                decoration: InputDecoration(
-                  hintText: "كلمة المرور",
-                  prefixIcon: const Icon(IconlyLight.lock),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureText ? IconlyLight.hide : IconlyLight.show),
-                    onPressed: () => setState(() => _obscureText = !_obscureText),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleLogin,
-                child: _isLoading 
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text("دخول"),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("ليس لديك حساب؟"),
-                  TextButton(
-                    onPressed: () => Navigator.pushNamed(context, AppRoutes.register),
-                    child: const Text("أنشئ حسابك الآن"),
-                  ),
-                ],
-              ),
-            ],
-          ),
+          child: _buildLoginForm(),
         ),
       ),
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    return Row(
+      children: [
+        // الجانب الأيسر: واجهة ترحيبية
+        Expanded(
+          flex: 3,
+          child: Container(
+            color: const Color(0xFFF0F7FF),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.school_rounded, size: 120, color: Colors.blue),
+                const SizedBox(height: 40),
+                const Text(
+                  "مرحباً بك في منصة التعلم الذكي",
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E)),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 50),
+                  child: Text(
+                    "نحن نجمع المعلمين والطلاب في مكان واحد لتجربة تعليمية فريدة واحترافية.",
+                    style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // الجانب الأيمن: نموذج تسجيل الدخول
+        Expanded(
+          flex: 2,
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 60),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: _buildLoginForm(),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoginForm() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: SvgPicture.asset(
+              'assets/icons/logo.svg',
+              width: 50,
+              height: 50,
+              placeholderBuilder: (context) => const Icon(Icons.school, size: 50, color: Colors.blue),
+            ),
+          ),
+        ),
+        const SizedBox(height: 40),
+        const Text(
+          "تسجيل الدخول",
+          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E)),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          "سجل دخولك للمتابعة في المنصة",
+          style: TextStyle(color: Colors.grey),
+        ),
+        const SizedBox(height: 40),
+        TextField(
+          controller: _emailController,
+          decoration: const InputDecoration(
+            hintText: "البريد الإلكتروني",
+            prefixIcon: Icon(IconlyLight.message),
+          ),
+        ),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _passwordController,
+          obscureText: _obscureText,
+          decoration: InputDecoration(
+            hintText: "كلمة المرور",
+            prefixIcon: const Icon(IconlyLight.lock),
+            suffixIcon: IconButton(
+              icon: Icon(_obscureText ? IconlyLight.hide : IconlyLight.show),
+              onPressed: () => setState(() => _obscureText = !_obscureText),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: () {},
+            child: const Text("نسيت كلمة المرور؟", style: TextStyle(fontSize: 13)),
+          ),
+        ),
+        const SizedBox(height: 30),
+        SizedBox(
+          width: double.infinity,
+          height: 55,
+          child: ElevatedButton(
+            onPressed: _isLoading ? null : _handleLogin,
+            style: ElevatedButton.styleFrom(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _isLoading 
+                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text("دخول", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text("ليس لديك حساب؟"),
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, AppRoutes.register),
+              child: const Text("أنشئ حسابك الآن"),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

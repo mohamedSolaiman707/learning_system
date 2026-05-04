@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' as intl;
 import 'package:shimmer/shimmer.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/services/database_service.dart';
+import '../../../../core/services/assignments_service.dart';
 import '../../../../core/models/session_model.dart';
 import '../widgets/next_class_card.dart';
 import '../widgets/upcoming_class_item.dart';
 import '../../video_room/video_room_screen.dart';
+import '../assignments/student_assignments_screen.dart';
 
 class StudentHomeTab extends StatefulWidget {
   const StudentHomeTab({super.key});
@@ -21,6 +23,8 @@ class StudentHomeTab extends StatefulWidget {
 class _StudentHomeTabState extends State<StudentHomeTab> {
   bool _isLoading = true;
   List<SessionModel> _sessions = [];
+  SessionModel? _nextSession;
+  int _pendingAssignmentsCount = 0;
 
   @override
   void initState() {
@@ -29,16 +33,43 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   }
 
   Future<void> _loadStudentData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      // هنا يمكن تطوير DatabaseService ليشمل جلب حصص الطالب المسجل فيها
-      // حالياً سنحاكي جلب البيانات لتوضيح التصميم الاحترافي
-      await Future.delayed(const Duration(seconds: 1));
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final db = Provider.of<DatabaseService>(context, listen: false);
+      final assignService = AssignmentsService();
       
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+      if (auth.user != null) {
+        final response = await db.getStudentSchedule(auth.user!.id);
+        
+        if (mounted) {
+          setState(() {
+            _sessions = response.map((e) => SessionModel.fromMap(e['sessions'])).toList();
+            _sessions.sort((a, b) => a.startTime.compareTo(b.startTime));
+
+            final now = DateTime.now();
+            try {
+              _nextSession = _sessions.firstWhere((s) => s.endTime.isAfter(now));
+            } catch (_) {
+              _nextSession = null;
+            }
+          });
+
+          // جلب عدد الواجبات لكل المواد المشترك فيها
+          int totalAssignments = 0;
+          for (var session in _sessions) {
+             final assignments = await assignService.getAssignments(session.id);
+             totalAssignments += assignments.length;
+          }
+          
+          if (mounted) {
+            setState(() {
+              _pendingAssignmentsCount = totalAssignments;
+              _isLoading = false;
+            });
+          }
+        }
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -68,13 +99,18 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                         children: [
                           _buildWelcomeSection(userName),
                           const SizedBox(height: 30),
-                          _buildNextClassSection(userName),
+                          if (_nextSession != null) 
+                            _buildNextClassSection(userName)
+                          else
+                            _buildNoClassesCard(),
                           const SizedBox(height: 40),
                           _buildStatsAndProgress(),
                           const SizedBox(height: 40),
-                          _buildUpcomingClassesHeader(),
-                          const SizedBox(height: 15),
-                          _buildUpcomingGrid(),
+                          if (_sessions.isNotEmpty) ...[
+                            _buildUpcomingClassesHeader(),
+                            const SizedBox(height: 15),
+                            _buildUpcomingGrid(),
+                          ],
                         ],
                       ),
                     ),
@@ -113,7 +149,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
           padding: const EdgeInsets.only(left: 16),
           child: CircleAvatar(
             backgroundColor: Colors.blue.withOpacity(0.1),
-            child: Text(name[0].toUpperCase(), style: const TextStyle(color: Colors.blue)),
+            child: Text(name.isNotEmpty ? name[0].toUpperCase() : "U", style: const TextStyle(color: Colors.blue)),
           ),
         ),
       ],
@@ -121,6 +157,11 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   }
 
   Widget _buildWelcomeSection(String name) {
+    int todayCount = _sessions.where((s) {
+      final now = DateTime.now();
+      return s.startTime.day == now.day && s.startTime.month == now.month;
+    }).length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -128,26 +169,25 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
           "مرحباً بك مجدداً، $name 👋",
           style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
-        const Text(
-          "لديك حصتان اليوم، استعد جيداً!",
-          style: TextStyle(fontSize: 16, color: Colors.grey),
+        Text(
+          todayCount > 0 ? "لديك $todayCount حصص اليوم، استعد جيداً!" : "لا توجد حصص مجدولة لليوم.",
+          style: const TextStyle(fontSize: 16, color: Colors.grey),
         ),
       ],
     );
   }
 
   Widget _buildNextClassSection(String userName) {
-    // محاكاة لحصة قادمة
     return NextClassCard(
-      subject: "رياضيات - التفاضل والتكامل",
-      teacher: "أ. محمد علي",
-      startTime: "10:30 ص",
-      isLive: true,
+      subject: _nextSession!.subjectName,
+      teacher: _nextSession!.teacherName,
+      startTime: intl.DateFormat('hh:mm a').format(_nextSession!.startTime),
+      isLive: _nextSession!.isLive,
       onJoin: () {
         Navigator.push(context, MaterialPageRoute(
           builder: (context) => VideoRoomScreen(
-            title: "بث مباشر: رياضيات",
-            roomName: "math_101",
+            title: "بث مباشر: ${_nextSession!.subjectName}",
+            roomName: "room_${_nextSession!.id}",
             userName: userName,
           ),
         ));
@@ -155,22 +195,41 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     );
   }
 
+  Widget _buildNoClassesCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(30),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+      ),
+      child: const Column(
+        children: [
+          Icon(IconlyLight.calendar, size: 50, color: Colors.grey),
+          SizedBox(height: 15),
+          Text("لا توجد حصص قادمة حالياً", style: TextStyle(color: Colors.grey, fontSize: 16)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatsAndProgress() {
     return Responsive(
       mobile: Column(
         children: [
-          _buildStatItem("الحصص المكتملة", "12", Icons.check_circle, Colors.green),
+          _buildStatItem("الحصص المسجلة", "${_sessions.length}", Icons.collections_bookmark, Colors.green),
           const SizedBox(height: 12),
-          _buildStatItem("الساعات الدراسية", "24.5", Icons.timer, Colors.orange),
+          _buildStatItem("الواجبات", "$_pendingAssignmentsCount", Icons.assignment, Colors.orange),
         ],
       ),
       desktop: Row(
         children: [
-          Expanded(child: _buildStatItem("الحصص المكتملة", "12", Icons.check_circle, Colors.green)),
+          Expanded(child: _buildStatItem("الحصص المسجلة", "${_sessions.length}", Icons.collections_bookmark, Colors.green)),
           const SizedBox(width: 20),
-          Expanded(child: _buildStatItem("الساعات الدراسية", "24.5", Icons.timer, Colors.orange)),
+          Expanded(child: _buildStatItem("الواجبات", "$_pendingAssignmentsCount", Icons.assignment, Colors.orange)),
           const SizedBox(width: 20),
-          Expanded(child: _buildStatItem("المهام المنجزة", "85%", Icons.assignment_turned_in, Colors.blue)),
+          Expanded(child: _buildStatItem("التقدم", "100%", Icons.auto_graph, Colors.blue)),
         ],
       ),
     );
@@ -215,6 +274,10 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   }
 
   Widget _buildUpcomingGrid() {
+    final upcoming = _sessions.where((s) => s.id != _nextSession?.id).toList();
+    
+    if (upcoming.isEmpty) return const SizedBox.shrink();
+
     return LayoutBuilder(
       builder: (context, constraints) {
         int crossAxisCount = Responsive.isDesktop(context) ? 3 : (Responsive.isTablet(context) ? 2 : 1);
@@ -225,15 +288,26 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
             crossAxisCount: crossAxisCount,
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
-            mainAxisExtent: 100,
+            mainAxisExtent: 110,
           ),
-          itemCount: 4,
-          itemBuilder: (context, index) => const UpcomingClassItem(
-            subject: "اللغة العربية",
-            teacher: "د. سارة محمود",
-            time: "04:00 م",
-            duration: "60 دقيقة",
-          ),
+          itemCount: upcoming.length,
+          itemBuilder: (context, index) {
+            final session = upcoming[index];
+            final diff = session.endTime.difference(session.startTime).inMinutes;
+            return InkWell(
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (context) => StudentAssignmentsScreen(sessionId: session.id, subjectName: session.subjectName)
+                ));
+              },
+              child: UpcomingClassItem(
+                subject: session.subjectName,
+                teacher: session.teacherName,
+                time: intl.DateFormat('hh:mm a').format(session.startTime),
+                duration: "$diff دقيقة",
+              ),
+            );
+          },
         );
       },
     );

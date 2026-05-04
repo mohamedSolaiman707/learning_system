@@ -7,6 +7,7 @@ import 'package:iconly/iconly.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/services/database_service.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../core/models/session_model.dart';
 import '../../video_room/video_room_screen.dart';
 
 class StudentScheduleTab extends StatefulWidget {
@@ -20,7 +21,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
-  List<Map<String, dynamic>> _allSessions = [];
+  List<SessionModel> _allSessions = [];
   bool _isLoading = true;
 
   @override
@@ -31,6 +32,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
   }
 
   Future<void> _loadSchedule() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -39,7 +41,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       
       if (mounted) {
         setState(() {
-          _allSessions = data;
+          _allSessions = data.map((e) => SessionModel.fromMap(e['sessions'])).toList();
           _isLoading = false;
         });
       }
@@ -61,7 +63,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("أدخل كود الحصة المكون من 6 أرقام/حروف للانضمام إلى جدولك", 
+              const Text("أدخل كود الحصة للانضمام إلى جدولك", 
                 style: TextStyle(fontSize: 13, color: Colors.grey), textAlign: TextAlign.center),
               const SizedBox(height: 20),
               TextField(
@@ -116,13 +118,8 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
     );
   }
 
-  List<Map<String, dynamic>> _getSessionsForDay(DateTime day) {
-    return _allSessions.where((item) {
-      final session = item['sessions'];
-      if (session == null) return false;
-      final startTime = DateTime.parse(session['start_time']).toLocal();
-      return isSameDay(startTime, day);
-    }).toList();
+  List<SessionModel> _getSessionsForDay(DateTime day) {
+    return _allSessions.where((s) => isSameDay(s.startTime, day)).toList();
   }
 
   @override
@@ -215,7 +212,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
         onFormatChanged: (format) {
           setState(() => _calendarFormat = format);
         },
-        eventLoader: _getSessionsForDay,
+        eventLoader: (day) => _getSessionsForDay(day),
         headerStyle: const HeaderStyle(
           formatButtonVisible: false,
           titleCentered: true,
@@ -230,7 +227,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
     );
   }
 
-  Widget _buildSessionsList(List<Map<String, dynamic>> sessions) {
+  Widget _buildSessionsList(List<SessionModel> sessions) {
     if (sessions.isEmpty) {
       return Center(
         child: Column(
@@ -254,12 +251,8 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       padding: const EdgeInsets.all(20),
       itemCount: sessions.length,
       itemBuilder: (context, index) {
-        final item = sessions[index];
-        final session = item['sessions'];
-        if (session == null) return const SizedBox();
-        final startTime = DateTime.parse(session['start_time']).toLocal();
-        final isLive = session['rooms'] != null && 
-                       (session['rooms'] is List && (session['rooms'] as List).isNotEmpty ? session['rooms'][0]['is_active'] == true : false);
+        final session = sessions[index];
+        final isLive = session.isLive;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
@@ -281,12 +274,12 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                 color: isLive ? Colors.red : Colors.blue,
               ),
             ),
-            title: Text(session['subject_name'] ?? 'بدون عنوان', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            title: Text(session.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("مع: ${session['profiles']?['full_name'] ?? '---'}"),
-                Text(DateFormat('hh:mm a').format(startTime), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Text("مع: ${session.teacherName}"),
+                Text(DateFormat('hh:mm a').format(session.startTime), style: const TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
             trailing: isLive 
@@ -294,8 +287,8 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                   onPressed: () {
                     Navigator.push(context, MaterialPageRoute(
                       builder: (context) => VideoRoomScreen(
-                        title: session['subject_name'],
-                        roomName: "room_${session['id']}",
+                        title: session.subjectName,
+                        roomName: "room_${session.id}",
                         userName: Provider.of<AuthProvider>(context, listen: false).profile?['full_name'] ?? "Student",
                       ),
                     ));

@@ -244,7 +244,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
         ),
         if (label != null)
           Padding(
-            padding: const EdgeInsets.top(5),
+            padding: const EdgeInsets.only(top: 5),
             child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 10)),
           ),
       ],

@@ -60,6 +60,23 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
       final room = Room();
       
       final listener = room.createListener();
+      
+      // تحديث الواجهة عند ظهور أي تراك جديد (سواء محلي أو بعيد)
+      listener.on<TrackPublishedEvent>((_) { if (mounted) setState(() {}); });
+      listener.on<TrackSubscribedEvent>((_) { if (mounted) setState(() {}); });
+      listener.on<TrackUnpublishedEvent>((_) { if (mounted) setState(() {}); });
+      
+      listener.on<LocalTrackPublishedEvent>((event) {
+        if (mounted && event.publication.isScreenShare) {
+          setState(() => _isScreenSharing = true);
+        }
+      });
+      listener.on<LocalTrackUnpublishedEvent>((event) {
+        if (mounted && event.publication.isScreenShare) {
+          setState(() => _isScreenSharing = false);
+        }
+      });
+
       listener.on<DataReceivedEvent>((event) {
         final decoded = utf8.decode(event.data);
         final data = jsonDecode(decoded);
@@ -74,7 +91,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
         roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true)
       );
       
-      // تفعيل الكاميرا والمايك تلقائياً للمدرس (التحقق بالاسم العربي أو الإنجليزي)
       bool isTeacher = widget.userName.contains('أ.') || widget.userName.contains('Teacher') || widget.userName.contains('مدرس');
       
       if (isTeacher) {
@@ -131,7 +147,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
     final content = _messageController.text;
     _messageController.clear();
     
-    // إضافة الرسالة محلياً فوراً لتجربة أسرع
     setState(() {
       _messages.add({'user_name': widget.userName, 'content': content, 'is_temp': true});
     });
@@ -166,7 +181,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
               ? _buildErrorWidget()
               : Stack(
                   children: [
-                    if (_room != null) ParticipantGrid(room: _room!, remoteHands: _remoteHandStates, localHand: _isHandRaised),
+                    if (_room != null) ParticipantLayout(room: _room!, remoteHands: _remoteHandStates, localHand: _isHandRaised),
                     ..._reactionParticles,
                     if (_isChatOpen) _buildChatPanel(),
                     _buildTopBar(),
@@ -342,19 +357,21 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
     if (_room == null) return;
     try {
       final newState = !_isScreenSharing;
+      // تفعيل التقاط الشاشة
       await _room!.localParticipant?.setScreenShareEnabled(newState);
-      setState(() => _isScreenSharing = newState);
+      if (mounted) setState(() => _isScreenSharing = newState);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("مشاركة الشاشة: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في مشاركة الشاشة: $e")));
     }
   }
 }
 
-class ParticipantGrid extends StatelessWidget {
+class ParticipantLayout extends StatelessWidget {
   final Room room;
   final Map<String, bool> remoteHands;
   final bool localHand;
-  const ParticipantGrid({super.key, required this.room, required this.remoteHands, required this.localHand});
+
+  const ParticipantLayout({super.key, required this.room, required this.remoteHands, required this.localHand});
 
   @override
   Widget build(BuildContext context) {
@@ -366,49 +383,111 @@ class ParticipantGrid extends StatelessWidget {
           ...room.remoteParticipants.values
         ];
 
-        return GridView.builder(
-          padding: const EdgeInsets.fromLTRB(20, 140, 20, 140),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2, 
-            childAspectRatio: 0.8, 
-            mainAxisSpacing: 15, 
-            crossAxisSpacing: 15
-          ),
-          itemCount: participants.length,
-          itemBuilder: (context, i) {
-            final p = participants[i];
-            final bool isLocal = room.localParticipant != null && p.identity == room.localParticipant!.identity;
-            final bool isHandUp = isLocal ? localHand : (remoteHands[p.identity] ?? false);
-            final videoTrack = p.videoTrackPublications.isEmpty ? null : p.videoTrackPublications.first.track as VideoTrack?;
-            
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: p.isSpeaking ? Colors.blue : (isHandUp ? Colors.orange : Colors.white10), width: 3),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Stack(
-                children: [
-                  if (videoTrack != null) VideoTrackRenderer(videoTrack, fit: VideoViewFit.cover)
-                  else Container(color: Colors.black, child: const Center(child: Icon(IconlyBold.profile, color: Colors.white24, size: 45))),
-                  
-                  if (isHandUp) Positioned(top: 12, right: 12, child: Container(padding: const EdgeInsets.all(6), decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle), child: const Icon(Icons.back_hand, color: Colors.white, size: 18))),
+        // البحث عن أي شخص يشارك شاشته حالياً
+        Participant? screenSharingParticipant;
+        TrackPublication? screenSharePub;
 
-                  Positioned(
-                    bottom: 0, left: 0, right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), 
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.8), Colors.transparent])
-                      ),
-                      child: Row(children: [Expanded(child: Text(isLocal ? "أنت" : p.identity, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))), if (p.isSpeaking) const Icon(Icons.graphic_eq, color: Colors.blue, size: 16)])
+        for (var p in participants) {
+          // البحث عن تراك الشاشة بشكل صريح عبر الـ Source
+          final pub = p.videoTrackPublications.where((pub) => pub.source == TrackSource.screenShare).firstOrNull;
+          if (pub != null && pub.track != null) {
+            screenSharingParticipant = p;
+            screenSharePub = pub;
+            break;
+          }
+        }
+
+        return Column(
+          children: [
+            const SizedBox(height: 120),
+            // عرض الشاشة المشاركة (إن وجدت) في مساحة كبيرة
+            if (screenSharePub != null)
+              Expanded(
+                flex: 4,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.green, width: 2),
+                      color: Colors.black,
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      children: [
+                        VideoTrackRenderer(screenSharePub.track as VideoTrack, fit: VideoViewFit.contain),
+                        Positioned(
+                          top: 10, left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.screen_share, color: Colors.green, size: 16),
+                                const SizedBox(width: 8),
+                                Text("شاشة: ${screenSharingParticipant?.identity ?? ""}", style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            );
-          },
+            
+            // عرض الكاميرات (شبكة المشاركين)
+            Expanded(
+              flex: 2,
+              child: GridView.builder(
+                padding: const EdgeInsets.all(20),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: screenSharePub != null ? 3 : 2, 
+                  childAspectRatio: 1.0, 
+                  mainAxisSpacing: 10, 
+                  crossAxisSpacing: 10
+                ),
+                itemCount: participants.length,
+                itemBuilder: (context, i) {
+                  final p = participants[i];
+                  final bool isLocal = room.localParticipant != null && p.identity == room.localParticipant!.identity;
+                  final bool isHandUp = isLocal ? localHand : (remoteHands[p.identity] ?? false);
+                  
+                  // جلب تراك الكاميرا فقط (استبعاد تراك الشاشة هنا لكي لا تظهر الكاميرا مرتين إذا كان الشخص يشارك شاشته)
+                  final cameraPub = p.videoTrackPublications.where((pub) => pub.source != TrackSource.screenShare).firstOrNull;
+                  VideoTrack? cameraTrack = cameraPub?.track as VideoTrack?;
+
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 400),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: p.isSpeaking ? Colors.blue : (isHandUp ? Colors.orange : Colors.white10), width: 2),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      children: [
+                        if (cameraTrack != null) VideoTrackRenderer(cameraTrack, fit: VideoViewFit.cover)
+                        else Container(color: Colors.black, child: const Center(child: Icon(IconlyBold.profile, color: Colors.white24, size: 30))),
+                        
+                        if (isHandUp) Positioned(top: 8, right: 8, child: const Icon(Icons.back_hand, color: Colors.orange, size: 16)),
+
+                        Positioned(
+                          bottom: 0, left: 0, right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(6), 
+                            color: Colors.black45,
+                            child: Text(isLocal ? "أنت" : p.identity, style: const TextStyle(color: Colors.white, fontSize: 10), overflow: TextOverflow.ellipsis),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 100),
+          ],
         );
       },
     );

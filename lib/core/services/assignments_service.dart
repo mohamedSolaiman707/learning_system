@@ -24,7 +24,25 @@ class AssignmentsService {
     }
   }
 
-  // 2. جلب التسليمات كـ SubmissionModel (هنا الربط الحقيقي)
+  // 2. جلب تسليم طالب معين لواجب معين
+  Future<SubmissionModel?> getStudentSubmission(String assignmentId, String studentId) async {
+    try {
+      final response = await supabase
+          .from('submissions')
+          .select()
+          .eq('assignment_id', assignmentId)
+          .eq('student_id', studentId)
+          .maybeSingle();
+      
+      if (response == null) return null;
+      return SubmissionModel.fromMap(response);
+    } catch (e) {
+      debugPrint("Error fetching submission: $e");
+      return null;
+    }
+  }
+
+  // 3. جلب كل التسليمات (للمدرس)
   Future<List<SubmissionModel>> getSubmissions(String assignmentId) async {
     try {
       final response = await supabase
@@ -39,7 +57,7 @@ class AssignmentsService {
     }
   }
 
-  // 3. رفع واجب جديد (للمدرس)
+  // 4. رفع واجب جديد (للمدرس)
   Future<String?> createAssignment({
     required String sessionId,
     required String title,
@@ -75,7 +93,7 @@ class AssignmentsService {
     }
   }
 
-  // 4. رفع تسليم جديد (للطلاب)
+  // 5. رفع تسليم جديد (للطلاب)
   Future<String?> submitAssignment({
     required String assignmentId,
     required PlatformFile pickerFile,

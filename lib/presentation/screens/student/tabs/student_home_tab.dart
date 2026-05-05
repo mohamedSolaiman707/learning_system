@@ -27,22 +27,21 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   List<SessionModel> _sessions = [];
   SessionModel? _nextSession;
   int _pendingAssignmentsCount = 0;
-  Timer? _refreshTimer; // تايمر للتحديث التلقائي
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadStudentData(initial: true);
     
-    // تحديث البيانات كل 10 ثواني للتأكد من حالة اللايف
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       _loadStudentData(initial: false);
     });
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel(); // إيقاف التايمر عند الخروج
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -65,7 +64,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
 
             final now = DateTime.now();
             try {
-              // الحصة القادمة هي أول حصة لم تنتهِ بعد
               _nextSession = _sessions.firstWhere((s) => s.endTime.isAfter(now));
             } catch (_) {
               _nextSession = null;
@@ -74,15 +72,18 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
             if (initial) _isLoading = false;
           });
 
-          // تحديث عدد الواجبات فقط في التحميل الأول أو بشكل منفصل لتوفير الاستهلاك
-          if (initial) {
-            int totalAssignments = 0;
-            for (var session in _sessions) {
-               final assignments = await assignService.getAssignments(session.id);
-               totalAssignments += assignments.length;
-            }
-            if (mounted) setState(() => _pendingAssignmentsCount = totalAssignments);
+          // حساب الواجبات المعلقة فقط (التي لم يسلمها الطالب)
+          int pendingCount = 0;
+          for (var session in _sessions) {
+             final assignments = await assignService.getAssignments(session.id);
+             for (var assignment in assignments) {
+               final submission = await assignService.getStudentSubmission(assignment.id, auth.user!.id);
+               if (submission == null) {
+                 pendingCount++;
+               }
+             }
           }
+          if (mounted) setState(() => _pendingAssignmentsCount = pendingCount);
         }
       }
     } catch (e) {
@@ -170,9 +171,10 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
           children: [
             Text(session.subjectName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
-            _buildOptionTile(IconlyLight.document, "الواجبات المدرسية", Colors.blue, () {
+            _buildOptionTile(IconlyLight.document, "الواجبات المدرسية", Colors.blue, () async {
               Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => StudentAssignmentsScreen(sessionId: session.id, subjectName: session.subjectName)));
+              await Navigator.push(context, MaterialPageRoute(builder: (context) => StudentAssignmentsScreen(sessionId: session.id, subjectName: session.subjectName)));
+              _loadStudentData(initial: false); // تحديث العداد عند العودة
             }),
             const Divider(),
             _buildOptionTile(IconlyLight.folder, "المصادر والكتب", Colors.orange, () {

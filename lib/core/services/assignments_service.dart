@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart';
 class AssignmentsService {
   final supabase = Supabase.instance.client;
 
-  // 1. جلب الواجبات كـ AssignmentModel
+  // 1. جلب الواجبات
   Future<List<AssignmentModel>> getAssignments(String sessionId) async {
     try {
       final response = await supabase
@@ -24,7 +24,7 @@ class AssignmentsService {
     }
   }
 
-  // 2. جلب تسليم طالب معين لواجب معين
+  // 2. جلب تسليم الطالب
   Future<SubmissionModel?> getStudentSubmission(String assignmentId, String studentId) async {
     try {
       final response = await supabase
@@ -42,7 +42,49 @@ class AssignmentsService {
     }
   }
 
-  // 3. جلب كل التسليمات (للمدرس)
+  // 3. رفع أو تعديل تسليم (upsert)
+  Future<String?> submitAssignment({
+    required String assignmentId,
+    required PlatformFile pickerFile,
+  }) async {
+    try {
+      final userId = supabase.auth.currentUser!.id;
+      // نستخدم اسم ثابت لكل طالب في كل واجب لضمان استبدال الملف القديم
+      final fileName = "sub_${assignmentId}_$userId.${pickerFile.extension}";
+      final filePath = 'submissions/$fileName';
+
+      // إضافة upsert: true لتخطي خطأ "الملف موجود مسبقاً"
+      if (kIsWeb) {
+        await supabase.storage.from('resources').uploadBinary(
+          filePath, 
+          pickerFile.bytes!,
+          fileOptions: const FileOptions(upsert: true),
+        );
+      } else {
+        await supabase.storage.from('resources').upload(
+          filePath, 
+          File(pickerFile.path!),
+          fileOptions: const FileOptions(upsert: true),
+        );
+      }
+      
+      final fileUrl = supabase.storage.from('resources').getPublicUrl(filePath);
+
+      // تحديث البيانات في الجدول (إذا وجد سجل قديم سيتم تحديثه)
+      await supabase.from('submissions').upsert({
+        'assignment_id': assignmentId,
+        'student_id': userId,
+        'file_url': fileUrl,
+        'submitted_at': DateTime.now().toUtc().toIso8601String(),
+      });
+
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  // 4. جلب كل التسليمات (للمدرس)
   Future<List<SubmissionModel>> getSubmissions(String assignmentId) async {
     try {
       final response = await supabase
@@ -57,7 +99,7 @@ class AssignmentsService {
     }
   }
 
-  // 4. رفع واجب جديد (للمدرس)
+  // 5. رفع واجب جديد (للمدرس)
   Future<String?> createAssignment({
     required String sessionId,
     required String title,
@@ -85,36 +127,6 @@ class AssignmentsService {
         'description': description,
         'file_url': fileUrl,
         'due_date': dueDate?.toIso8601String(),
-      });
-
-      return null;
-    } catch (e) {
-      return e.toString();
-    }
-  }
-
-  // 5. رفع تسليم جديد (للطلاب)
-  Future<String?> submitAssignment({
-    required String assignmentId,
-    required PlatformFile pickerFile,
-  }) async {
-    try {
-      final userId = supabase.auth.currentUser!.id;
-      final fileName = "sub_${assignmentId}_$userId.${pickerFile.extension}";
-      final filePath = 'submissions/$fileName';
-
-      if (kIsWeb) {
-        await supabase.storage.from('resources').uploadBinary(filePath, pickerFile.bytes!);
-      } else {
-        await supabase.storage.from('resources').upload(filePath, File(pickerFile.path!));
-      }
-      final fileUrl = supabase.storage.from('resources').getPublicUrl(filePath);
-
-      await supabase.from('submissions').upsert({
-        'assignment_id': assignmentId,
-        'student_id': userId,
-        'file_url': fileUrl,
-        'submitted_at': DateTime.now().toUtc().toIso8601String(),
       });
 
       return null;

@@ -52,15 +52,13 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
           setState(() {
             _sessions = (results[0] as List).map((e) => SessionModel.fromMap(e)).toList();
             _totalStudents = (results[1] as Map<String, dynamic>)['totalStudents'] ?? 0;
-            
+
             final now = DateTime.now();
-            if (_sessions.isNotEmpty) {
-               try {
-                 // البحث عن الحصة القادمة التي لم تنتهِ بعد
-                 _nextSession = _sessions.firstWhere((s) => s.endTime.isAfter(now));
-               } catch (_) {
-                 _nextSession = _sessions.last;
-               }
+            // فلترة الحصص: اختيار أول حصة لم تنتهِ بعد
+            final activeSessions = _sessions.where((s) => s.endTime.isAfter(now)).toList();
+
+            if (activeSessions.isNotEmpty) {
+              _nextSession = activeSessions.first;
             } else {
               _nextSession = null;
             }
@@ -241,76 +239,99 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
 
   Widget _buildCurrentSessionSection(String teacherName) {
     if (_nextSession == null) {
-      return const Card(
-        margin: EdgeInsets.only(top: 16),
-        child: Padding(padding: EdgeInsets.all(40), child: Center(child: Text("لا توجد حصص مسجلة لك اليوم", style: TextStyle(color: Colors.grey, fontSize: 16)))),
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(
+          children: [
+            Icon(IconlyLight.calendar, size: 48, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            const Text("لا توجد حصص قادمة حالياً", style: TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text("سيتم إعلامك فور إضافة حصص جديدة", style: TextStyle(color: Colors.grey, fontSize: 13)),
+          ],
+        ),
       );
     }
-    final startTime = intl.DateFormat('hh:mm a').format(_nextSession!.startTime);
-    final endTime = intl.DateFormat('hh:mm a').format(_nextSession!.endTime);
+    final now = DateTime.now();
+    final isUpcoming = _nextSession!.startTime.isAfter(now);
+    final isSoon = isUpcoming && _nextSession!.startTime.difference(now).inMinutes <= 15;
+
+    final startTimeStr = intl.DateFormat('hh:mm a').format(_nextSession!.startTime);
+    final dateStr = intl.DateFormat('EEEE, d MMMM').format(_nextSession!.startTime);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text("الحصة القادمة", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(30),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF0061FF), Color(0xFF00C6FF)]),
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+    Text(isUpcoming ? "الحصة القادمة" : "بث مباشر الآن 🔴",
+        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isUpcoming ? Colors.black : Colors.red)),
+    const SizedBox(height: 16),
+    Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+    gradient: isUpcoming
+    ? LinearGradient(colors: [Colors.blue.shade700, Colors.blue.shade400])
+        : const LinearGradient(colors: [Color(0xFFE91E63), Color(0xFFFF5252)]),
+    borderRadius: BorderRadius.circular(28),
+    boxShadow: [BoxShadow(color: (isUpcoming ? Colors.blue : Colors.red).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+    ), child: Column(
+        children: [
+    Row(
+    children: [
+    Container(
+    padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
+        child: Icon(isUpcoming ? IconlyLight.calendar : IconlyLight.video, color: Colors.white, size: 30)
+    ),
+          const SizedBox(width: 16),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_nextSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            if (isUpcoming)
+              Text("موعدنا: $dateStr الساعة $startTimeStr", style: const TextStyle(color: Colors.white70, fontSize: 13))
+            else
+              Text("بدأت في $startTimeStr وتستمر حتى ${intl.DateFormat('hh:mm a').format(_nextSession!.endTime)}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          ])),
+        ],
+    ),        const SizedBox(height: 24),
+    if (isUpcoming && !isSoon)
+    Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(color: Colors.black.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+    child: Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+    const Icon(IconlyLight.time_circle, color: Colors.white, size: 18),
+    const SizedBox(width: 8),
+    Text("تفتح الغرفة قبل الموعد بـ 15 دقيقة", style: const TextStyle(color: Colors.white, fontSize: 13)),
+    ],
+    ),
+    )
+    else
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: () => _startLive(_nextSession!, teacherName),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white, foregroundColor: isUpcoming ? Colors.blue : Colors.red,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            elevation: 0,
           ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)), child: const Icon(IconlyLight.video, color: Colors.white, size: 30)),
-                  const SizedBox(width: 20),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(_nextSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                    Text("اليوم | $startTime - $endTime", style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Text("كود الانضمام: ", style: TextStyle(color: Colors.white70, fontSize: 13)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
-                          child: Text(_nextSession!.classCode, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.1, fontSize: 13)),
-                        ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: _nextSession!.classCode));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ الكود")));
-                          },
-                          child: const Icon(Icons.copy, color: Colors.white70, size: 16),
-                        ),
-                      ],
-                    ),
-                  ])),
-                ],
-              ),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _startLive(_nextSession!, teacherName),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white, foregroundColor: Colors.blue, 
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Text("ابدأ البث المباشر الآن", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                ),
-              ),
-            ],
-          ),
+          child: Text(isUpcoming ? "فتح غرفة البث مبكراً" : "دخول البث المباشر الآن", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         ),
-      ],
+      ),
+        ],
+    ),
+    ),
+        ],
     );
   }
+
 
   Widget _buildQuickActions() {
     return Column(

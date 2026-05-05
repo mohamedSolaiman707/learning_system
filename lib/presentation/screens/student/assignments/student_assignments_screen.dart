@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';import 'package:iconly/iconly.dart';
+import 'package:flutter/material.dart';
+import 'package:iconly/iconly.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -70,8 +71,23 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
     }
   }
 
-  Future<void> _handleSubmission(String assignmentId) async {
+  Future<void> _handleSubmission(String assignmentId, bool isUpdate) async {
     try {
+      if (isUpdate) {
+        bool? confirm = await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("تعديل الحل"),
+            content: const Text("هل تريد رفع ملف جديد واستبدال الحل القديم؟"),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("إلغاء")),
+              ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text("نعم، استبدال")),
+            ],
+          ),
+        );
+        if (confirm != true) return;
+      }
+
       final result = await FilePicker.pickFiles(
         type: FileType.any,
         allowMultiple: false,
@@ -81,7 +97,9 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
       if (result == null) return;
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("جاري رفع حلك...")));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(isUpdate ? "جاري تحديث حلك..." : "جاري رفع حلك..."))
+      );
 
       final error = await _assignmentsService.submitAssignment(
         assignmentId: assignmentId,
@@ -113,7 +131,12 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      appBar: AppBar(title: Text("واجبات ${widget.subjectName}")),
+      appBar: AppBar(
+        title: Text("واجبات ${widget.subjectName}"),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _assignments.isEmpty
@@ -173,22 +196,47 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
                     Text(assignment.description!, style: const TextStyle(color: Colors.black87, fontSize: 13)),
                   ],
                   if (isSubmitted && (submission.grade != null || submission.feedback != null)) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.amber.withOpacity(0.2)),
+                        color: Colors.amber.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: Colors.amber.withOpacity(0.3)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (submission.grade != null)
-                            Text("الدرجة: ${submission.grade}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amber)),
-                          if (submission.feedback != null)
-                            Text("ملاحظة المدرس: ${submission.feedback}", style: const TextStyle(fontSize: 12)),
+                          Row(
+                            children: [
+                              const Icon(IconlyBold.star, color: Colors.amber, size: 18),
+                              const SizedBox(width: 8),
+                              const Text("تقييم المدرس", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const Spacer(),
+                              if (submission.grade != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    submission.grade!,
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (submission.feedback != null) ...[
+                            const SizedBox(height: 10),
+                            const Divider(),
+                            const SizedBox(height: 5),
+                            Text(
+                              submission.feedback!,
+                              style: const TextStyle(fontSize: 13, color: Colors.black87),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -206,13 +254,14 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
                               foregroundColor: Colors.blue,
                               side: const BorderSide(color: Colors.blue),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                           ),
                         ),
                       if (assignment.fileUrl != null) const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => _handleSubmission(assignment.id),
+                          onPressed: () => _handleSubmission(assignment.id, isSubmitted),
                           icon: Icon(isSubmitted ? IconlyLight.edit : IconlyLight.upload, size: 18),
                           label: Text(isSubmitted ? "تعديل الحل" : "تسليم الحل"),
                           style: ElevatedButton.styleFrom(
@@ -220,6 +269,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
                             foregroundColor: isSubmitted ? Colors.black87 : Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         ),
                       ),

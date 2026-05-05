@@ -286,6 +286,54 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     });
   }
 
+  // منطق تحضير جميع الطلاب المتواجدين حالياً
+  Future<void> _markAllAsPresent() async {
+    if (widget.sessionId == null || _room == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("لا يمكن التحضير: لم يتم العثور على جلسة مفعلة")),
+      );
+      return;
+    }
+
+    // تحديد النوع صراحة كـ List<Participant> لتجنب خطأ identity
+    final List<Participant> participants = [
+      if (_room!.localParticipant != null) _room!.localParticipant!,
+      ..._room!.remoteParticipants.values,
+    ];
+
+    if (participants.isEmpty) return;
+
+    try {
+      final attendanceData = participants.map((p) => {
+        'session_id': widget.sessionId,
+        'student_name': p.identity,
+        'status': 'present',
+      }).toList();
+
+      await supabase.from('attendance').upsert(
+        attendanceData,
+        onConflict: 'session_id, student_name',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("تم تسجيل حضور جميع الطلاب الحاليين بنجاح ✅"),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Attendance error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("فشل في عملية التحضير: $e")),
+        );
+      }
+    }
+  }
+
   void _createPoll(String question, List<String> options) {
     if (question.isEmpty) return;
     final pollData = {
@@ -370,7 +418,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           onFinished: () {
             if (mounted)
               setState(
-                () => _reactionParticles.removeWhere((w) => w.key == key),
+                    () => _reactionParticles.removeWhere((w) => w.key == key),
               );
           },
         ),
@@ -480,31 +528,31 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       body: _isLoading
           ? _buildLoadingState()
           : Stack(
-              children: [
-                if (_room != null)
-                  ParticipantLayout(
-                    room: _room!,
-                    remoteHands: _remoteHandStates,
-                    localHand: _isHandRaised,
-                    isTeacher: widget.isTeacher,
-                    isWhiteboardOpen: _isWhiteboardOpen,
-                    onControlMic: (id, val) => _sendData({
-                      'type': 'control_mic',
-                      'target': id,
-                      'value': val,
-                      'lock': false,
-                    }),
-                  ),
-                if (_isWhiteboardOpen) _buildWhiteboardLayer(),
-                ..._reactionParticles,
-                if (_isChatOpen) _buildChatPanel(),
-                if (_isParticipantsOpen) _buildParticipantsPanel(),
-                if (_isPollsOpen) _buildPollsPanel(),
-                if (_isBreakoutOpen) _buildBreakoutPanel(),
-                _buildTopBar(inSubRoom),
-                _buildBottomControls(),
-              ],
+        children: [
+          if (_room != null)
+            ParticipantLayout(
+              room: _room!,
+              remoteHands: _remoteHandStates,
+              localHand: _isHandRaised,
+              isTeacher: widget.isTeacher,
+              isWhiteboardOpen: _isWhiteboardOpen,
+              onControlMic: (id, val) => _sendData({
+                'type': 'control_mic',
+                'target': id,
+                'value': val,
+                'lock': false,
+              }),
             ),
+          if (_isWhiteboardOpen) _buildWhiteboardLayer(),
+          ..._reactionParticles,
+          if (_isChatOpen) _buildChatPanel(),
+          if (_isParticipantsOpen) _buildParticipantsPanel(),
+          if (_isPollsOpen) _buildPollsPanel(),
+          if (_isBreakoutOpen) _buildBreakoutPanel(),
+          _buildTopBar(inSubRoom),
+          _buildBottomControls(),
+        ],
+      ),
     );
   }
 
@@ -837,16 +885,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               children: [2, 3, 4]
                   .map(
                     (n) => ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueGrey,
-                      ),
-                      onPressed: () {
-                        _startBreakout(n);
-                        setState(() => _isBreakoutOpen = false);
-                      },
-                      child: Text("$n"),
-                    ),
-                  )
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueGrey,
+                  ),
+                  onPressed: () {
+                    _startBreakout(n);
+                    setState(() => _isBreakoutOpen = false);
+                  },
+                  child: Text("$n"),
+                ),
+              )
                   .toList(),
             ),
             const Text(
@@ -1019,37 +1067,48 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           children: [
             if (widget.isTeacher)
               Padding(
-                padding: const EdgeInsets.all(8.0),
+                padding: const EdgeInsets.all(12.0),
                 child: Column(
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        ElevatedButton.icon(
-                          onPressed: () => _toggleMicLock(true),
-                          icon: const Icon(Icons.lock, size: 14),
-                          label: const Text(
-                            "قفل المايكات",
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.redAccent,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _toggleMicLock(true),
+                            icon: const Icon(Icons.mic_off, size: 14),
+                            label: const Text("كتم الجميع", style: TextStyle(fontSize: 10)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.redAccent.withOpacity(0.8),
+                              padding: EdgeInsets.zero,
+                            ),
                           ),
                         ),
-                        ElevatedButton.icon(
-                          onPressed: () => _toggleMicLock(false),
-                          icon: const Icon(Icons.lock_open, size: 14),
-                          label: const Text(
-                            "فتح القفل",
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _markAllAsPresent,
+                            icon: const Icon(Icons.how_to_reg, size: 14),
+                            label: const Text("تحضير الكل", style: TextStyle(fontSize: 10)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.withOpacity(0.8),
+                              padding: EdgeInsets.zero,
+                            ),
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _toggleMicLock(false),
+                        icon: const Icon(Icons.lock_open, size: 14),
+                        label: const Text("فتح القفل للجميع", style: TextStyle(fontSize: 10)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.withOpacity(0.8),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
                     ),
                     const Divider(color: Colors.white10),
                   ],
@@ -1063,6 +1122,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                   final bool isLocal =
                       p.identity == _room?.localParticipant?.identity;
                   return ListTile(
+                    dense: true,
                     leading: const CircleAvatar(
                       backgroundColor: Colors.white10,
                       radius: 15,
@@ -1073,29 +1133,29 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                       ),
                     ),
                     title: Text(
-                      p.identity,
+                      isLocal ? "${p.identity} (أنت)" : p.identity,
                       style: const TextStyle(color: Colors.white, fontSize: 13),
                     ),
                     trailing: widget.isTeacher && !isLocal
                         ? IconButton(
-                            icon: Icon(
-                              p.isMicrophoneEnabled()
-                                  ? Icons.mic
-                                  : Icons.mic_off,
-                              color: p.isMicrophoneEnabled()
-                                  ? Colors.green
-                                  : Colors.red,
-                              size: 18,
-                            ),
-                            onPressed: () => _toggleStudentMic(p),
-                          )
+                      icon: Icon(
+                        p.isMicrophoneEnabled()
+                            ? Icons.mic
+                            : Icons.mic_off,
+                        color: p.isMicrophoneEnabled()
+                            ? Colors.green
+                            : Colors.red,
+                        size: 18,
+                      ),
+                      onPressed: () => _toggleStudentMic(p),
+                    )
                         : Icon(
-                            p.isMicrophoneEnabled() ? Icons.mic : Icons.mic_off,
-                            color: p.isMicrophoneEnabled()
-                                ? Colors.green
-                                : Colors.grey,
-                            size: 16,
-                          ),
+                      p.isMicrophoneEnabled() ? Icons.mic : Icons.mic_off,
+                      color: p.isMicrophoneEnabled()
+                          ? Colors.green
+                          : Colors.grey,
+                      size: 16,
+                    ),
                   );
                 },
               ),
@@ -1241,7 +1301,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               tooltip: _isMicLocked && !widget.isTeacher
                   ? "المايك مقفل من المدرس"
                   : (_isMicEnabled ? "كتم المايك" : "فتح المايك"),
-              () async {
+                  () async {
                 if (_isMicLocked && !widget.isTeacher) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -1262,7 +1322,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               _isCamEnabled ? IconlyBold.video : IconlyBold.hide,
               _isCamEnabled ? Colors.white12 : Colors.red,
               tooltip: _isCamEnabled ? "إغلاق الكاميرا" : "فتح الكاميرا",
-              () async {
+                  () async {
                 await _room?.localParticipant?.setCameraEnabled(!_isCamEnabled);
                 setState(() => _isCamEnabled = !_isCamEnabled);
               },
@@ -1272,7 +1332,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               Icons.back_hand,
               _isHandRaised ? Colors.orange : Colors.white12,
               tooltip: _isHandRaised ? "خفض اليد" : "رفع اليد",
-              () {
+                  () {
                 final newState = !_isHandRaised;
                 setState(() => _isHandRaised = newState);
                 _sendData({'type': 'hand_raise', 'value': newState});
@@ -1283,7 +1343,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               Icons.screen_share,
               _isScreenSharing ? Colors.green : Colors.white12,
               tooltip: _isScreenSharing ? "إيقاف المشاركة" : "مشاركة الشاشة",
-              () async {
+                  () async {
                 final newState = !_isScreenSharing;
                 await _room?.localParticipant?.setScreenShareEnabled(newState);
                 setState(() => _isScreenSharing = newState);
@@ -1294,7 +1354,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               IconlyBold.call_missed,
               Colors.red,
               tooltip: "إنهاء المكالمة",
-              () => Navigator.pop(context),
+                  () => Navigator.pop(context),
               isLarge: true,
             ),
           ],
@@ -1304,12 +1364,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   }
 
   Widget _buildCircleBtn(
-    IconData icon,
-    Color color,
-    VoidCallback onTap, {
-    bool isLarge = false,
-    String? tooltip,
-  }) {
+      IconData icon,
+      Color color,
+      VoidCallback onTap, {
+        bool isLarge = false,
+        String? tooltip,
+      }) {
     return Tooltip(
       message: tooltip ?? "",
       child: InkWell(
@@ -1403,7 +1463,7 @@ class ParticipantLayout extends StatelessWidget {
                   final p = participants[i];
                   final bool isLocal =
                       room.localParticipant != null &&
-                      p.identity == room.localParticipant!.identity;
+                          p.identity == room.localParticipant!.identity;
                   final bool isHandUp = isLocal
                       ? localHand
                       : (remoteHands[p.identity] ?? false);
@@ -1468,10 +1528,10 @@ class ParticipantLayout extends StatelessWidget {
                                   padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
                                     color:
-                                        (p.isMicrophoneEnabled()
-                                                ? Colors.green
-                                                : Colors.red)
-                                            .withOpacity(0.8),
+                                    (p.isMicrophoneEnabled()
+                                        ? Colors.green
+                                        : Colors.red)
+                                        .withOpacity(0.8),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(

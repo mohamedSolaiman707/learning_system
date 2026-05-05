@@ -251,7 +251,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         children: [
           const CircularProgressIndicator(color: Colors.blue),
           const SizedBox(height: 20),
-          Text(_errorMessage ?? "جاري الاتصال بالقاعة...", style: const TextStyle(color: Colors.white)),
+          Text(_errorMessage ?? "جاري الاتصال بالقاعة..", style: const TextStyle(color: Colors.white)),
           if (_errorMessage != null)
             TextButton(onPressed: () => _connectToRoom(widget.roomName), child: const Text("إعادة المحاولة"))
         ],

@@ -30,13 +30,14 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   Room? _room;
   bool _isLoading = true;
   String? _errorMessage;
-
+  String? _currentActiveRoom;
   bool _isMicEnabled = false;
   bool _isCamEnabled = false;
   bool _isHandRaised = false;
   bool _isChatOpen = false;
   bool _isParticipantsOpen = false;
   bool _isPollsOpen = false;
+  bool _isBreakoutOpen = false;
   bool _isScreenSharing = false;
   bool _isChatLocked = false;
 
@@ -57,19 +58,20 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   @override
   void initState() {
     super.initState();
-    _connectToRoom();
+    _currentActiveRoom = widget.roomName;
+    _connectToRoom(_currentActiveRoom!);
     _chatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (_isChatOpen) _fetchMessages();
     });
   }
 
-  Future<void> _connectToRoom() async {
+  Future<void> _connectToRoom(String roomName) async {
+    setState(() => _isLoading = true);
     try {
-      final token = await LiveKitService().getRoomToken(
-        widget.roomName,
-        widget.userName,
-      );
+      final token = await LiveKitService().getRoomToken(roomName, widget.userName);
       if (token == null) throw "فشل الحصول على تصريح الدخول (Token)";
+
+      if (_room != null) await _room!.disconnect();
 
       final room = Room();
       final listener = room.createListener();
@@ -90,15 +92,14 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             final option = data['option'];
             _pollResults[option] = (_pollResults[option] ?? 0) + 1;
           });
+        } else if (data['type'] == 'breakout_invite' && data['target'] == widget.userName) {
+          _showBreakoutInvitation(data['room'], data['groupName']);
         } else if (data['type'] == 'hand_raise') {
-          setState(
-                () =>
-            _remoteHandStates[event.participant!.identity] = data['value'],
-          );
+          final p = event.participant;
+          if (p != null) setState(() => _remoteHandStates[p.identity] = data['value']);
         } else if (data['type'] == 'reaction') {
           _showReactionEffect(data['value']);
-        } else if (data['type'] == 'control_mic' &&
-            (data['target'] == widget.userName || data['target'] == null)) {
+        } else if (data['type'] == 'control_mic' && (data['target'] == widget.userName || data['target'] == null)) {
           if (!widget.isTeacher) {
             _room?.localParticipant?.setMicrophoneEnabled(data['value']);
             setState(() => _isMicEnabled = data['value']);
@@ -110,19 +111,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
 
       await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
 
-      if (widget.isTeacher) {
+      if (widget.isTeacher || roomName != widget.roomName) {
         await room.localParticipant?.setCameraEnabled(true);
         await room.localParticipant?.setMicrophoneEnabled(true);
-        if (mounted)
-          setState(() {
-            _isMicEnabled = true;
-            _isCamEnabled = true;
-          });
+        if (mounted) setState(() { _isMicEnabled = true; _isCamEnabled = true; });
       }
 
       setState(() {
         _room = room;
         _isLoading = false;
+        _currentActiveRoom = roomName;
       });
     } catch (e) {
       setState(() {
@@ -139,61 +137,63 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   }
 
   void _createPoll(String question, List<String> options) {
-    final pollData = {
-      'question': question,
-      'options': options,
-      'creator': widget.userName,
-    };
+    final pollData = {'question': question, 'options': options, 'creator': widget.userName};
     _sendData({'type': 'poll_create', 'poll': pollData});
-    setState(() {
-      _activePoll = pollData;
-      _pollResults = {for (var item in options) item: 0};
-    });
+    setState(() { _activePoll = pollData; _pollResults = { for (var item in options) item : 0 }; });
   }
 
   void _submitVote(String option) {
     if (_myVote != null) return;
     _sendData({'type': 'poll_vote', 'option': option});
-    setState(() {
-      _myVote = option;
-      _pollResults[option] = (_pollResults[option] ?? 0) + 1;
-    });
+    setState(() { _myVote = option; _pollResults[option] = (_pollResults[option] ?? 0) + 1; });
+  }
+
+  void _showBreakoutInvitation(String roomName, String groupName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("مجموعات العمل الفرعية"),
+        content: Text("المدرس يدعوك للانضمام إلى $groupName. هل تود الانتقال الآن؟"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("لاحقاً")),
+          ElevatedButton(onPressed: () { Navigator.pop(context); _connectToRoom(roomName); }, child: const Text("انضمام الآن")),
+        ],
+      ),
+    );
+  }
+
+  void _startBreakout(int groupCount) {
+    final participants = _room!.remoteParticipants.values.toList();
+    participants.shuffle();
+    for (int i = 0; i < participants.length; i++) {
+      final groupId = (i % groupCount) + 1;
+      _sendData({
+        'type': 'breakout_invite',
+        'target': participants[i].identity,
+        'room': "${widget.roomName}_grp_$groupId",
+        'groupName': "المجموعة $groupId"
+      });
+    }
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم إرسال دعوات المجموعات للطلاب")));
   }
 
   void _showReactionEffect(String emoji) {
     if (!mounted) return;
     final key = UniqueKey();
     setState(() {
-      _reactionParticles.add(
-        _FloatingEmoji(
-          key: key,
-          emoji: emoji,
-          onFinished: () {
-            if (mounted)
-              setState(
-                    () => _reactionParticles.removeWhere((w) => w.key == key),
-              );
-          },
-        ),
-      );
+      _reactionParticles.add(_FloatingEmoji(key: key, emoji: emoji, onFinished: () {
+        if (mounted) setState(() => _reactionParticles.removeWhere((w) => w.key == key));
+      }));
     });
   }
 
   Future<void> _fetchMessages() async {
     try {
-      final response = await supabase
-          .from('messages')
-          .select()
-          .eq('room_name', widget.roomName)
-          .order('created_at', ascending: true)
-          .limit(50);
-      if (mounted)
-        setState(() {
-          _messages = List<Map<String, dynamic>>.from(response);
-        });
-    } catch (e) {
-      debugPrint("Chat error: $e");
-    }
+      final response = await supabase.from('messages').select().eq('room_name', widget.roomName).order('created_at', ascending: true).limit(50);
+      if (mounted) setState(() { _messages = List<Map<String, dynamic>>.from(response); });
+    } catch (e) { debugPrint("Chat error: $e"); }
   }
 
   void _sendMessage() async {
@@ -202,15 +202,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     final content = _messageController.text;
     _messageController.clear();
     try {
-      await supabase.from('messages').insert({
-        'room_name': widget.roomName,
-        'user_name': widget.userName,
-        'content': content,
-      });
+      await supabase.from('messages').insert({'room_name': widget.roomName, 'user_name': widget.userName, 'content': content});
       _fetchMessages();
-    } catch (e) {
-      debugPrint("Insert error: $e");
-    }
+    } catch (e) { debugPrint("Insert error: $e"); }
   }
 
   @override
@@ -223,10 +217,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
 
   @override
   Widget build(BuildContext context) {
+    bool inSubRoom = _currentActiveRoom != widget.roomName;
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? _buildLoadingState()
           : Stack(
         children: [
           if (_room != null)
@@ -235,24 +230,36 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               remoteHands: _remoteHandStates,
               localHand: _isHandRaised,
               isTeacher: widget.isTeacher,
-              onControlMic: (id, val) => _sendData({
-                'type': 'control_mic',
-                'target': id,
-                'value': val,
-              }),
+              onControlMic: (id, val) => _sendData({'type': 'control_mic', 'target': id, 'value': val}),
             ),
           ..._reactionParticles,
           if (_isChatOpen) _buildChatPanel(),
           if (_isParticipantsOpen) _buildParticipantsPanel(),
           if (_isPollsOpen) _buildPollsPanel(),
-          _buildTopBar(),
+          if (_isBreakoutOpen) _buildBreakoutPanel(),
+          _buildTopBar(inSubRoom),
           _buildBottomControls(),
         ],
       ),
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(color: Colors.blue),
+          const SizedBox(height: 20),
+          Text(_errorMessage ?? "جاري الاتصال بالقاعة...", style: const TextStyle(color: Colors.white)),
+          if (_errorMessage != null)
+            TextButton(onPressed: () => _connectToRoom(widget.roomName), child: const Text("إعادة المحاولة"))
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopBar(bool inSubRoom) {
     return Positioned(
       top: 40,
       left: 20,
@@ -269,50 +276,36 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             ),
             child: Row(
               children: [
-                const Icon(Icons.circle, color: Colors.red, size: 8),
+                Icon(Icons.circle, color: inSubRoom ? Colors.orange : Colors.red, size: 8),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    widget.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                    inSubRoom ? "غرفة فرعية: ${_currentActiveRoom}" : widget.title,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                 ),
-                IconButton(
-                  icon: Icon(
-                    IconlyLight.graph,
-                    color: _isPollsOpen ? Colors.blue : Colors.white70,
+                if (inSubRoom)
+                  IconButton(
+                    icon: const Icon(Icons.exit_to_app, color: Colors.orange),
+                    onPressed: () => _connectToRoom(widget.roomName),
+                    tooltip: "العودة للقاعة الرئيسية",
                   ),
-                  onPressed: () => setState(() {
-                    _isPollsOpen = !_isPollsOpen;
-                    _isChatOpen = false;
-                    _isParticipantsOpen = false;
-                  }),
+                IconButton(
+                  icon: Icon(IconlyLight.graph, color: _isPollsOpen ? Colors.blue : Colors.white70),
+                  onPressed: () => setState(() { _isPollsOpen = !_isPollsOpen; _isChatOpen = false; _isParticipantsOpen = false; _isBreakoutOpen = false; }),
+                ),
+                if (widget.isTeacher)
+                  IconButton(
+                    icon: Icon(Icons.groups_outlined, color: _isBreakoutOpen ? Colors.blue : Colors.white70),
+                    onPressed: () => setState(() { _isBreakoutOpen = !_isBreakoutOpen; _isChatOpen = false; _isParticipantsOpen = false; _isPollsOpen = false; }),
+                  ),
+                IconButton(
+                  icon: Icon(IconlyLight.user_1, color: _isParticipantsOpen ? Colors.blue : Colors.white70),
+                  onPressed: () => setState(() { _isParticipantsOpen = !_isParticipantsOpen; _isChatOpen = false; _isPollsOpen = false; _isBreakoutOpen = false; }),
                 ),
                 IconButton(
-                  icon: Icon(
-                    IconlyLight.user_1,
-                    color: _isParticipantsOpen ? Colors.blue : Colors.white70,
-                  ),
-                  onPressed: () => setState(() {
-                    _isParticipantsOpen = !_isParticipantsOpen;
-                    _isChatOpen = false;
-                    _isPollsOpen = false;
-                  }),
-                ),
-                IconButton(
-                  icon: Icon(
-                    IconlyLight.chat,
-                    color: _isChatOpen ? Colors.blue : Colors.white70,
-                  ),
-                  onPressed: () => setState(() {
-                    _isChatOpen = !_isChatOpen;
-                    _isParticipantsOpen = false;
-                    _isPollsOpen = false;
-                  }),
+                  icon: Icon(IconlyLight.chat, color: _isChatOpen ? Colors.blue : Colors.white70),
+                  onPressed: () => setState(() { _isChatOpen = !_isChatOpen; _isParticipantsOpen = false; _isPollsOpen = false; _isBreakoutOpen = false; }),
                 ),
                 IconButton(
                   icon: const Icon(Icons.logout_rounded, color: Colors.white70),
@@ -321,6 +314,38 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBreakoutPanel() {
+    return Positioned(
+      top: 110,
+      right: 20,
+      child: Container(
+        width: 250,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1F26).withOpacity(0.95),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("تقسيم المجموعات", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [2, 3, 4].map((n) => ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
+                onPressed: () { _startBreakout(n); setState(() => _isBreakoutOpen = false); },
+                child: Text("$n"),
+              )).toList(),
+            ),
+            const Text("اختر عدد المجموعات", style: TextStyle(color: Colors.grey, fontSize: 10)),
+          ],
         ),
       ),
     );
@@ -342,23 +367,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           children: [
             const Padding(
               padding: EdgeInsets.all(16),
-              child: Text(
-                "التصويت المباشر",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: Text("التصويت المباشر", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
             if (_activePoll == null && widget.isTeacher) _buildPollCreator(),
-            if (_activePoll != null) _buildActivePoll(),
+            if (_activePoll != null) Expanded(child: SingleChildScrollView(child: _buildActivePoll())),
             if (_activePoll == null && !widget.isTeacher)
-              const Center(
-                child: Text(
-                  "لا يوجد تصويت حالياً",
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
+              const Expanded(child: Center(child: Text("لا يوجد تصويت حالياً", style: TextStyle(color: Colors.grey)))),
           ],
         ),
       ),
@@ -374,15 +388,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           TextField(
             controller: qController,
             style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              hintText: "السؤال...",
-              hintStyle: TextStyle(color: Colors.grey),
-            ),
+            decoration: const InputDecoration(hintText: "السؤال...", hintStyle: TextStyle(color: Colors.grey)),
           ),
           const SizedBox(height: 12),
           ElevatedButton(
-            onPressed: () =>
-                _createPoll(qController.text, ["نعم", "لا", "غير متأكد"]),
+            onPressed: () => _createPoll(qController.text, ["نعم", "لا", "غير متأكد"]),
             child: const Text("بدء التصويت"),
           ),
         ],
@@ -397,13 +407,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _activePoll!['question'],
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          Text(_activePoll!['question'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           ...(_activePoll!['options'] as List).map((opt) {
             double percent = total == 0 ? 0 : (_pollResults[opt] ?? 0) / total;
@@ -416,31 +420,15 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          opt,
-                          style: TextStyle(
-                            color: _myVote == opt
-                                ? Colors.blue
-                                : Colors.white70,
-                            fontSize: 13,
-                          ),
-                        ),
-                        Text(
-                          "${(percent * 100).toInt()}%",
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 12,
-                          ),
-                        ),
+                        Text(opt, style: TextStyle(color: _myVote == opt ? Colors.blue : Colors.white70, fontSize: 13)),
+                        Text("${(percent * 100).toInt()}%", style: const TextStyle(color: Colors.white54, fontSize: 12)),
                       ],
                     ),
                     const SizedBox(height: 4),
                     LinearProgressIndicator(
                       value: percent,
                       backgroundColor: Colors.white10,
-                      color: _myVote == opt
-                          ? Colors.blue
-                          : Colors.blue.withOpacity(0.3),
+                      color: _myVote == opt ? Colors.blue : Colors.blue.withOpacity(0.3),
                     ),
                   ],
                 ),
@@ -449,13 +437,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           }),
           if (widget.isTeacher) ...[
             const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => setState(() => _activePoll = null),
-              child: const Text(
-                "إنهاء التصويت",
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
+            TextButton(onPressed: () => setState(() => _activePoll = null), child: const Text("إنهاء التصويت", style: TextStyle(color: Colors.red))),
           ],
         ],
       ),
@@ -484,14 +466,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           itemBuilder: (context, i) {
             final p = participants[i];
             return ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Colors.white10,
-                radius: 15,
-              ),
-              title: Text(
-                p.identity,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-              ),
+              leading: const CircleAvatar(backgroundColor: Colors.white10, radius: 15, child: Icon(Icons.person, size: 15, color: Colors.white70)),
+              title: Text(p.identity, style: const TextStyle(color: Colors.white, fontSize: 13)),
               trailing: Icon(
                 p.isMicrophoneEnabled() ? Icons.mic : Icons.mic_off,
                 color: p.isMicrophoneEnabled() ? Colors.green : Colors.red,
@@ -532,16 +508,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     child: TextField(
                       controller: _messageController,
                       style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        hintText: "دردشة...",
-                        hintStyle: TextStyle(color: Colors.grey),
-                      ),
+                      decoration: const InputDecoration(hintText: "دردشة...", hintStyle: TextStyle(color: Colors.grey)),
                     ),
                   ),
-                  IconButton(
-                    onPressed: _sendMessage,
-                    icon: const Icon(IconlyBold.send, color: Colors.blue),
-                  ),
+                  IconButton(onPressed: _sendMessage, icon: const Icon(IconlyBold.send, color: Colors.blue)),
                 ],
               ),
             ),
@@ -556,24 +526,13 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     return Padding(
       padding: const EdgeInsets.all(8),
       child: Column(
-        crossAxisAlignment: isMe
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
+        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Text(
-            msg['user_name'] ?? "",
-            style: const TextStyle(color: Colors.grey, fontSize: 10),
-          ),
+          Text(msg['user_name'] ?? "", style: const TextStyle(color: Colors.grey, fontSize: 10)),
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isMe ? Colors.blue : Colors.white10,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              msg['content'] ?? "",
-              style: const TextStyle(color: Colors.white, fontSize: 12),
-            ),
+            decoration: BoxDecoration(color: isMe ? Colors.blue : Colors.white10, borderRadius: BorderRadius.circular(12)),
+            child: Text(msg['content'] ?? "", style: const TextStyle(color: Colors.white, fontSize: 12)),
           ),
         ],
       ),
@@ -592,9 +551,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             _isMicEnabled ? IconlyBold.voice : IconlyBold.voice_2,
             _isMicEnabled ? Colors.white12 : Colors.red,
                 () async {
-              await _room?.localParticipant?.setMicrophoneEnabled(
-                !_isMicEnabled,
-              );
+              await _room?.localParticipant?.setMicrophoneEnabled(!_isMicEnabled);
               setState(() => _isMicEnabled = !_isMicEnabled);
             },
           ),
@@ -628,23 +585,13 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             },
           ),
           const SizedBox(width: 32),
-          _buildCircleBtn(
-            IconlyBold.call_missed,
-            Colors.red,
-                () => Navigator.pop(context),
-            isLarge: true,
-          ),
+          _buildCircleBtn(IconlyBold.call_missed, Colors.red, () => Navigator.pop(context), isLarge: true),
         ],
       ),
     );
   }
 
-  Widget _buildCircleBtn(
-      IconData icon,
-      Color color,
-      VoidCallback onTap, {
-        bool isLarge = false,
-      }) {
+  Widget _buildCircleBtn(IconData icon, Color color, VoidCallback onTap, {bool isLarge = false}) {
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -769,10 +716,10 @@ class ParticipantLayout extends StatelessWidget {
                             ),
                           ),
                         if (isHandUp)
-                          Positioned(
+                          const Positioned(
                             top: 8,
                             right: 8,
-                            child: const Icon(
+                            child: Icon(
                               Icons.back_hand,
                               color: Colors.orange,
                               size: 16,
@@ -806,7 +753,6 @@ class ParticipantLayout extends StatelessWidget {
                                 ),
                               ),
                             ),
-
                           ),
                         Positioned(
                           bottom: 0,
@@ -851,7 +797,8 @@ class _FloatingEmoji extends StatefulWidget {
 }
 
 class _FloatingEmojiState extends State<_FloatingEmoji>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin
+{
   late AnimationController _controller;
   @override
   void initState() {

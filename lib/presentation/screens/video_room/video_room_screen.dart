@@ -61,11 +61,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
       
       final listener = room.createListener();
       
-      // تحديث الواجهة عند ظهور أي تراك جديد (سواء محلي أو بعيد)
+      // مستمع لتحديث الواجهة عند أي تغيير في التراكات (هام جداً لمشاركة الشاشة)
       listener.on<TrackPublishedEvent>((_) { if (mounted) setState(() {}); });
       listener.on<TrackSubscribedEvent>((_) { if (mounted) setState(() {}); });
       listener.on<TrackUnpublishedEvent>((_) { if (mounted) setState(() {}); });
       
+      // مراقبة حالة مشاركة الشاشة المحلية
       listener.on<LocalTrackPublishedEvent>((event) {
         if (mounted && event.publication.isScreenShare) {
           setState(() => _isScreenSharing = true);
@@ -357,11 +358,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
     if (_room == null) return;
     try {
       final newState = !_isScreenSharing;
-      // تفعيل التقاط الشاشة
       await _room!.localParticipant?.setScreenShareEnabled(newState);
       if (mounted) setState(() => _isScreenSharing = newState);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ في مشاركة الشاشة: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ مشاركة الشاشة: $e")));
     }
   }
 }
@@ -383,12 +383,11 @@ class ParticipantLayout extends StatelessWidget {
           ...room.remoteParticipants.values
         ];
 
-        // البحث عن أي شخص يشارك شاشته حالياً
+        // البحث عن مشاركة الشاشة
         Participant? screenSharingParticipant;
         TrackPublication? screenSharePub;
 
         for (var p in participants) {
-          // البحث عن تراك الشاشة بشكل صريح عبر الـ Source
           final pub = p.videoTrackPublications.where((pub) => pub.source == TrackSource.screenShare).firstOrNull;
           if (pub != null && pub.track != null) {
             screenSharingParticipant = p;
@@ -400,7 +399,7 @@ class ParticipantLayout extends StatelessWidget {
         return Column(
           children: [
             const SizedBox(height: 120),
-            // عرض الشاشة المشاركة (إن وجدت) في مساحة كبيرة
+            // المسرح: عرض الشاشة
             if (screenSharePub != null)
               Expanded(
                 flex: 4,
@@ -419,16 +418,9 @@ class ParticipantLayout extends StatelessWidget {
                         Positioned(
                           top: 10, left: 10,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.screen_share, color: Colors.green, size: 16),
-                                const SizedBox(width: 8),
-                                Text("شاشة: ${screenSharingParticipant?.identity ?? ""}", style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
+                            child: Text("شاشة: ${screenSharingParticipant?.identity ?? ""}", style: const TextStyle(color: Colors.white, fontSize: 12)),
                           ),
                         ),
                       ],
@@ -437,7 +429,7 @@ class ParticipantLayout extends StatelessWidget {
                 ),
               ),
             
-            // عرض الكاميرات (شبكة المشاركين)
+            // شبكة الكاميرات
             Expanded(
               flex: 2,
               child: GridView.builder(
@@ -454,8 +446,8 @@ class ParticipantLayout extends StatelessWidget {
                   final bool isLocal = room.localParticipant != null && p.identity == room.localParticipant!.identity;
                   final bool isHandUp = isLocal ? localHand : (remoteHands[p.identity] ?? false);
                   
-                  // جلب تراك الكاميرا فقط (استبعاد تراك الشاشة هنا لكي لا تظهر الكاميرا مرتين إذا كان الشخص يشارك شاشته)
-                  final cameraPub = p.videoTrackPublications.where((pub) => pub.source != TrackSource.screenShare).firstOrNull;
+                  // الكاميرا فقط
+                  final cameraPub = p.videoTrackPublications.where((pub) => pub.source == TrackSource.camera).firstOrNull;
                   VideoTrack? cameraTrack = cameraPub?.track as VideoTrack?;
 
                   return AnimatedContainer(
@@ -477,7 +469,7 @@ class ParticipantLayout extends StatelessWidget {
                           child: Container(
                             padding: const EdgeInsets.all(6), 
                             color: Colors.black45,
-                            child: Text(isLocal ? "أنت" : p.identity, style: const TextStyle(color: Colors.white, fontSize: 10), overflow: TextOverflow.ellipsis),
+                            child: Text(isLocal ? "أنت" : p.identity, style: const TextStyle(color: Colors.white, fontSize: 10)),
                           ),
                         ),
                       ],

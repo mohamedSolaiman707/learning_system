@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter/material.dart';import 'package:iconly/iconly.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -36,11 +35,12 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     final userId = Provider.of<AuthProvider>(context, listen: false).user!.id;
-    
+
     final assignmentsData = await _assignmentsService.getAssignments(widget.sessionId);
-    
+
     Map<String, SubmissionModel?> submissionsData = {};
     for (var assignment in assignmentsData) {
       final sub = await _assignmentsService.getStudentSubmission(assignment.id, userId);
@@ -71,24 +71,39 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
   }
 
   Future<void> _handleSubmission(String assignmentId) async {
-    // تم التعديل لتجنب خطأ .platform
-    final result = await FilePicker.pickFiles(withData: true);
-    if (result == null) return;
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("جاري رفع حلك...")));
+      if (result == null) return;
 
-    final error = await _assignmentsService.submitAssignment(
-      assignmentId: assignmentId,
-      pickerFile: result.files.first,
-    );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("جاري رفع حلك...")));
 
-    if (mounted) {
-      if (error == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تسليم الواجب بنجاح!"), backgroundColor: Colors.green));
-        _loadData();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل التسليم: $error"), backgroundColor: Colors.red));
+      final error = await _assignmentsService.submitAssignment(
+        assignmentId: assignmentId,
+        pickerFile: result.files.first,
+      );
+
+      if (mounted) {
+        if (error == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("تم تسليم الواجب بنجاح!"), backgroundColor: Colors.green)
+          );
+          _loadData();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("فشل التسليم: $error"), backgroundColor: Colors.red)
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("حدث خطأ: $e"), backgroundColor: Colors.red)
+        );
       }
     }
   }
@@ -101,120 +116,120 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _assignments.isEmpty
-              ? _buildEmptyState()
-              : ListView.builder(
-                  padding: const EdgeInsets.all(20),
-                  itemCount: _assignments.length,
-                  itemBuilder: (context, index) {
-                    final assignment = _assignments[index];
-                    final submission = _submissions[assignment.id];
-                    final isSubmitted = submission != null;
+          ? _buildEmptyState()
+          : ListView.builder(
+        padding: const EdgeInsets.all(20),
+        itemCount: _assignments.length,
+        itemBuilder: (context, index) {
+          final assignment = _assignments[index];
+          final submission = _submissions[assignment.id];
+          final isSubmitted = submission != null;
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
+          return Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(IconlyBold.document, color: Colors.blue),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Icon(IconlyBold.document, color: Colors.blue),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(assignment.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                      Text(
-                                        "آخر موعد: ${assignment.dueDate != null ? DateFormat('dd/MM/yyyy').format(assignment.dueDate!) : 'مفتوح'}",
-                                        style: const TextStyle(color: Colors.grey, fontSize: 12),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (isSubmitted)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const Text("تم التسليم", style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
-                                  ),
-                              ],
-                            ),
-                            if (assignment.description != null && assignment.description!.isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              Text(assignment.description!, style: const TextStyle(color: Colors.black87, fontSize: 13)),
-                            ],
-                            if (isSubmitted && (submission.grade != null || submission.feedback != null)) ...[
-                              const SizedBox(height: 12),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.withOpacity(0.05),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.amber.withOpacity(0.2)),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (submission.grade != null)
-                                      Text("الدرجة: ${submission.grade}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amber)),
-                                    if (submission.feedback != null)
-                                      Text("ملاحظة المدرس: ${submission.feedback}", style: const TextStyle(fontSize: 12)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            const Divider(height: 32),
-                            Row(
-                              children: [
-                                if (assignment.fileUrl != null)
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () => _downloadAssignment(assignment.fileUrl),
-                                      icon: const Icon(IconlyLight.download, size: 18),
-                                      label: const Text("عرض الواجب"),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.blue,
-                                        side: const BorderSide(color: Colors.blue),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                    ),
-                                  ),
-                                if (assignment.fileUrl != null) const SizedBox(width: 12),
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    onPressed: () => _handleSubmission(assignment.id),
-                                    icon: Icon(isSubmitted ? IconlyLight.edit : IconlyLight.upload, size: 18),
-                                    label: Text(isSubmitted ? "تعديل الحل" : "تسليم الحل"),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: isSubmitted ? Colors.grey.shade100 : Colors.blue,
-                                      foregroundColor: isSubmitted ? Colors.black87 : Colors.white,
-                                      elevation: 0,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            Text(assignment.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text(
+                              "آخر موعد: ${assignment.dueDate != null ? DateFormat('dd/MM/yyyy').format(assignment.dueDate!) : 'مفتوح'}",
+                              style: const TextStyle(color: Colors.grey, fontSize: 12),
                             ),
                           ],
                         ),
                       ),
-                    );
-                  },
-                ),
+                      if (isSubmitted)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text("تم التسليم", style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                    ],
+                  ),
+                  if (assignment.description != null && assignment.description!.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(assignment.description!, style: const TextStyle(color: Colors.black87, fontSize: 13)),
+                  ],
+                  if (isSubmitted && (submission.grade != null || submission.feedback != null)) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.withOpacity(0.2)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (submission.grade != null)
+                            Text("الدرجة: ${submission.grade}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amber)),
+                          if (submission.feedback != null)
+                            Text("ملاحظة المدرس: ${submission.feedback}", style: const TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const Divider(height: 32),
+                  Row(
+                    children: [
+                      if (assignment.fileUrl != null)
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _downloadAssignment(assignment.fileUrl),
+                            icon: const Icon(IconlyLight.download, size: 18),
+                            label: const Text("عرض الواجب"),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.blue,
+                              side: const BorderSide(color: Colors.blue),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                      if (assignment.fileUrl != null) const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _handleSubmission(assignment.id),
+                          icon: Icon(isSubmitted ? IconlyLight.edit : IconlyLight.upload, size: 18),
+                          label: Text(isSubmitted ? "تعديل الحل" : "تسليم الحل"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isSubmitted ? Colors.grey.shade100 : Colors.blue,
+                            foregroundColor: isSubmitted ? Colors.black87 : Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 

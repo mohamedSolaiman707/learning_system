@@ -61,12 +61,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> with TickerProviderSt
       
       final listener = room.createListener();
       
-      // مستمع لتحديث الواجهة عند أي تغيير في التراكات (هام جداً لمشاركة الشاشة)
       listener.on<TrackPublishedEvent>((_) { if (mounted) setState(() {}); });
       listener.on<TrackSubscribedEvent>((_) { if (mounted) setState(() {}); });
       listener.on<TrackUnpublishedEvent>((_) { if (mounted) setState(() {}); });
       
-      // مراقبة حالة مشاركة الشاشة المحلية
       listener.on<LocalTrackPublishedEvent>((event) {
         if (mounted && event.publication.isScreenShare) {
           setState(() => _isScreenSharing = true);
@@ -383,12 +381,12 @@ class ParticipantLayout extends StatelessWidget {
           ...room.remoteParticipants.values
         ];
 
-        // البحث عن مشاركة الشاشة
         Participant? screenSharingParticipant;
         TrackPublication? screenSharePub;
 
         for (var p in participants) {
-          final pub = p.videoTrackPublications.where((pub) => pub.source == TrackSource.screenShare).firstOrNull;
+          // تصحيح: استخدام screenShareVideo بدلاً من screenShare
+          final pub = p.videoTrackPublications.where((pub) => pub.source == TrackSource.screenShareVideo).firstOrNull;
           if (pub != null && pub.track != null) {
             screenSharingParticipant = p;
             screenSharePub = pub;
@@ -399,7 +397,6 @@ class ParticipantLayout extends StatelessWidget {
         return Column(
           children: [
             const SizedBox(height: 120),
-            // المسرح: عرض الشاشة
             if (screenSharePub != null)
               Expanded(
                 flex: 4,
@@ -429,7 +426,6 @@ class ParticipantLayout extends StatelessWidget {
                 ),
               ),
             
-            // شبكة الكاميرات
             Expanded(
               flex: 2,
               child: GridView.builder(
@@ -446,7 +442,6 @@ class ParticipantLayout extends StatelessWidget {
                   final bool isLocal = room.localParticipant != null && p.identity == room.localParticipant!.identity;
                   final bool isHandUp = isLocal ? localHand : (remoteHands[p.identity] ?? false);
                   
-                  // الكاميرا فقط
                   final cameraPub = p.videoTrackPublications.where((pub) => pub.source == TrackSource.camera).firstOrNull;
                   VideoTrack? cameraTrack = cameraPub?.track as VideoTrack?;
 

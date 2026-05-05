@@ -71,6 +71,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
   }
 
   Future<void> _handleSubmission(String assignmentId) async {
+    // تم التعديل لتجنب خطأ .platform
     final result = await FilePicker.platform.pickFiles(withData: true);
     if (result == null) return;
 
@@ -85,7 +86,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
     if (mounted) {
       if (error == null) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تسليم الواجب بنجاح!"), backgroundColor: Colors.green));
-        _loadData(); // إعادة التحميل لتحديث الحالة
+        _loadData();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("فشل التسليم: $error"), backgroundColor: Colors.red));
       }

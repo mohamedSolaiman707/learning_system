@@ -49,7 +49,7 @@ class _TeacherResourcesScreenState extends State<TeacherResourcesScreen> {
   }
 
   Future<void> _uploadResource() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf', 'doc', 'docx', 'ppt', 'pptx']);
+    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['pdf', 'doc', 'docx', 'ppt', 'pptx']);
     if (result == null) return;
 
     setState(() => _isLoading = true);

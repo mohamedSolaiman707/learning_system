@@ -147,19 +147,32 @@ class DatabaseService {
     }
   }
 
-  // تفعيل أو إغلاق الغرفة (تم التحويل لـ upsert حقيقي لضمان التحديث)
+  // تفعيل أو إغلاق الغرفة (طريقة يدوية أكثر استقراراً)
   Future<void> toggleRoomStatus(String sessionId, bool isActive, {String? roomName}) async {
     try {
-      await _supabase.from('rooms').upsert({
-        'session_id': sessionId,
-        'room_name': roomName ?? "room_$sessionId",
-        'is_active': isActive,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }, onConflict: 'session_id');
+      // 1. فحص وجود الغرفة مسبقاً
+      final existing = await _supabase.from('rooms')
+          .select('id')
+          .eq('session_id', sessionId)
+          .maybeSingle();
+
+      if (existing == null) {
+        // 2. إذا لم توجد، نقوم بإنشائها
+        await _supabase.from('rooms').insert({
+          'session_id': sessionId,
+          'room_name': roomName ?? "room_$sessionId",
+          'is_active': isActive,
+        });
+      } else {
+        // 3. إذا وجدت، نقوم بتحديث الحالة فقط
+        await _supabase.from('rooms').update({
+          'is_active': isActive,
+        }).eq('id', existing['id']);
+      }
       
-      print("Room status updated: $sessionId -> $isActive");
+      print("Room status synced: $sessionId -> $isActive");
     } catch (e) {
-      print("ToggleRoom Error: $e");
+      print("Database Error (ToggleRoom): $e");
       rethrow;
     }
   }

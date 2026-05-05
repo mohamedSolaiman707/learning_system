@@ -43,9 +43,17 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   bool _isParticipantsOpen = false;
   bool _isPollsOpen = false;
   bool _isBreakoutOpen = false;
+  bool _isWhiteboardOpen = false;
   bool _isScreenSharing = false;
   bool _isChatLocked = false;
+  bool _isMicLocked = false;
   String? _classCode;
+
+  // Whiteboard State
+  List<List<Offset>> _whiteboardStrokes = [];
+  List<Offset> _currentStroke = [];
+  Color _selectedColor = Colors.blue;
+  double _strokeWidth = 3.0;
 
   // Poll State
   Map<String, dynamic>? _activePoll;
@@ -110,6 +118,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             _isPollsOpen = true;
             _isChatOpen = false;
             _isParticipantsOpen = false;
+            _isWhiteboardOpen = false;
           });
         } else if (data['type'] == 'poll_vote') {
           setState(() {
@@ -128,10 +137,31 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           if (p != null) setState(() => _remoteHandStates[p.identity] = data['value']);
         } else if (data['type'] == 'reaction') {
           _showReactionEffect(data['value']);
+        } else if (data['type'] == 'whiteboard_draw') {
+          _handleRemoteDraw(data);
+        } else if (data['type'] == 'whiteboard_clear') {
+          setState(() => _whiteboardStrokes.clear());
         } else if (data['type'] == 'control_mic' && (data['target'] == widget.userName || data['target'] == null)) {
           if (!widget.isTeacher) {
+            bool lock = data['lock'] ?? false;
             _room?.localParticipant?.setMicrophoneEnabled(data['value']);
-            setState(() => _isMicEnabled = data['value']);
+            setState(() {
+              _isMicEnabled = data['value'];
+              _isMicLocked = lock;
+            });
+            if (lock) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(children: const [Icon(Icons.lock, color: Colors.white, size: 18), SizedBox(width: 8), Text("المدرس قام بقفل الميكروفونات")]),
+                  backgroundColor: Colors.redAccent,
+                  behavior: SnackBarBehavior.floating,
+                )
+              );
+            } else if (data['value'] == true) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("المدرس سمح لك بالتحدث الآن"), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating)
+              );
+            }
           }
         } else if (data['type'] == 'control_chat') {
           setState(() => _isChatLocked = data['value']);
@@ -162,6 +192,13 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     if (_room == null) return;
     final bytes = utf8.encode(jsonEncode(data));
     await _room!.localParticipant?.publishData(bytes);
+  }
+
+  void _handleRemoteDraw(Map<String, dynamic> data) {
+    if (data['points'] != null) {
+      List<Offset> stroke = (data['points'] as List).map((p) => Offset(p['x'].toDouble(), p['y'].toDouble())).toList();
+      setState(() => _whiteboardStrokes.add(stroke));
+    }
   }
 
   void _createPoll(String question, List<String> options) {
@@ -319,8 +356,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               remoteHands: _remoteHandStates,
               localHand: _isHandRaised,
               isTeacher: widget.isTeacher,
-              onControlMic: (id, val) => _sendData({'type': 'control_mic', 'target': id, 'value': val}),
+              isWhiteboardOpen: _isWhiteboardOpen,
+              onControlMic: (id, val) => _sendData({'type': 'control_mic', 'target': id, 'value': val, 'lock': false}),
             ),
+          if (_isWhiteboardOpen) _buildWhiteboardLayer(),
           ..._reactionParticles,
           if (_isChatOpen) _buildChatPanel(),
           if (_isParticipantsOpen) _buildParticipantsPanel(),
@@ -329,6 +368,78 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           _buildTopBar(inSubRoom),
           _buildBottomControls(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildWhiteboardLayer() {
+    return Positioned.fill(
+      top: 100,
+      bottom: 120,
+      child: Container(
+        margin: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 20)],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            children: [
+              GestureDetector(
+                onPanStart: (details) {
+                  setState(() {
+                    _currentStroke = [details.localPosition];
+                  });
+                },
+                onPanUpdate: (details) {
+                  setState(() {
+                    _currentStroke.add(details.localPosition);
+                  });
+                },
+                onPanEnd: (details) {
+                  _sendData({
+                    'type': 'whiteboard_draw',
+                    'points': _currentStroke.map((p) => {'x': p.dx, 'y': p.dy}).toList(),
+                  });
+                  setState(() {
+                    _whiteboardStrokes.add(List.from(_currentStroke));
+                    _currentStroke = [];
+                  });
+                },
+                child: CustomPaint(
+                  painter: WhiteboardPainter(strokes: _whiteboardStrokes, currentStroke: _currentStroke),
+                  size: Size.infinite,
+                ),
+              ),
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Column(
+                  children: [
+                    FloatingActionButton.small(
+                      heroTag: "clear_wb",
+                      onPressed: () {
+                        setState(() => _whiteboardStrokes.clear());
+                        _sendData({'type': 'whiteboard_clear'});
+                      },
+                      backgroundColor: Colors.red,
+                      child: const Icon(Icons.delete),
+                    ),
+                    const SizedBox(height: 8),
+                    FloatingActionButton.small(
+                      heroTag: "close_wb",
+                      onPressed: () => setState(() => _isWhiteboardOpen = false),
+                      backgroundColor: Colors.grey,
+                      child: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -394,6 +505,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     },
                   ),
                 IconButton(
+                  icon: Icon(Icons.edit_note, color: _isWhiteboardOpen ? Colors.blue : Colors.white70),
+                  tooltip: "السبورة الذكية",
+                  onPressed: () => setState(() { 
+                    _isWhiteboardOpen = !_isWhiteboardOpen;
+                    _isChatOpen = false;
+                    _isParticipantsOpen = false;
+                    _isPollsOpen = false;
+                  }),
+                ),
+                IconButton(
                   icon: Icon(IconlyLight.graph, color: _isPollsOpen ? Colors.blue : Colors.white70),
                   tooltip: "التصويت المباشر",
                   onPressed: () => setState(() { 
@@ -401,6 +522,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     _isChatOpen = false; 
                     _isParticipantsOpen = false; 
                     _isBreakoutOpen = false; 
+                    _isWhiteboardOpen = false;
                   }),
                 ),
                 if (widget.isTeacher)
@@ -596,11 +718,33 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           children: [
             if (widget.isTeacher) Padding(
               padding: const EdgeInsets.all(8.0),
-              child: ElevatedButton.icon(
-                onPressed: () => _sendData({'type': 'control_mic', 'value': false}),
-                icon: const Icon(Icons.mic_off, size: 16),
-                label: const Text("كتم الجميع", style: TextStyle(fontSize: 12)),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          _sendData({'type': 'control_mic', 'value': false, 'lock': true});
+                          setState(() => _isMicLocked = true);
+                        },
+                        icon: const Icon(Icons.lock, size: 14),
+                        label: const Text("قفل المايكات", style: TextStyle(fontSize: 11)),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          _sendData({'type': 'control_mic', 'value': false, 'lock': false});
+                          setState(() => _isMicLocked = false);
+                        },
+                        icon: const Icon(Icons.lock_open, size: 14),
+                        label: const Text("فتح القفل", style: TextStyle(fontSize: 11)),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                      ),
+                    ],
+                  ),
+                  const Divider(color: Colors.white10),
+                ],
               ),
             ),
             Expanded(
@@ -716,59 +860,71 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       bottom: 40,
       left: 0,
       right: 0,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _buildCircleBtn(
-            _isMicEnabled ? IconlyBold.voice : IconlyBold.voice_2,
-            _isMicEnabled ? Colors.white12 : Colors.red,
-            tooltip: _isMicEnabled ? "كتم المايك" : "فتح المايك",
-                () async {
-              await _room?.localParticipant?.setMicrophoneEnabled(!_isMicEnabled);
-              setState(() => _isMicEnabled = !_isMicEnabled);
-            },
-          ),
-          const SizedBox(width: 16),
-          _buildCircleBtn(
-            _isCamEnabled ? IconlyBold.video : IconlyBold.hide,
-            _isCamEnabled ? Colors.white12 : Colors.red,
-            tooltip: _isCamEnabled ? "إغلاق الكاميرا" : "فتح الكاميرا",
-                () async {
-              await _room?.localParticipant?.setCameraEnabled(!_isCamEnabled);
-              setState(() => _isCamEnabled = !_isCamEnabled);
-            },
-          ),
-          const SizedBox(width: 16),
-          _buildCircleBtn(
-            Icons.back_hand,
-            _isHandRaised ? Colors.orange : Colors.white12,
-            tooltip: _isHandRaised ? "خفض اليد" : "رفع اليد",
-                () {
-              final newState = !_isHandRaised;
-              setState(() => _isHandRaised = newState);
-              _sendData({'type': 'hand_raise', 'value': newState});
-            },
-          ),
-          const SizedBox(width: 16),
-          _buildCircleBtn(
-            Icons.screen_share,
-            _isScreenSharing ? Colors.green : Colors.white12,
-            tooltip: _isScreenSharing ? "إيقاف المشاركة" : "مشاركة الشاشة",
-                () async {
-              final newState = !_isScreenSharing;
-              await _room?.localParticipant?.setScreenShareEnabled(newState);
-              setState(() => _isScreenSharing = newState);
-            },
-          ),
-          const SizedBox(width: 32),
-          _buildCircleBtn(
-            IconlyBold.call_missed, 
-            Colors.red, 
-            tooltip: "إنهاء المكالمة",
-            () => Navigator.pop(context), 
-            isLarge: true,
-          ),
-        ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1F26).withOpacity(0.8),
+          borderRadius: BorderRadius.circular(40),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildCircleBtn(
+              _isMicLocked && !widget.isTeacher ? Icons.mic_off : (_isMicEnabled ? IconlyBold.voice : IconlyBold.voice_2),
+              _isMicLocked && !widget.isTeacher ? Colors.grey : (_isMicEnabled ? Colors.white12 : Colors.red),
+              tooltip: _isMicLocked && !widget.isTeacher ? "المايك مقفل من المدرس" : (_isMicEnabled ? "كتم المايك" : "فتح المايك"),
+                  () async {
+                if (_isMicLocked && !widget.isTeacher) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("الميكروفون مغلق بواسطة المدرس"), behavior: SnackBarBehavior.floating));
+                  return;
+                }
+                await _room?.localParticipant?.setMicrophoneEnabled(!_isMicEnabled);
+                setState(() => _isMicEnabled = !_isMicEnabled);
+              },
+            ),
+            const SizedBox(width: 16),
+            _buildCircleBtn(
+              _isCamEnabled ? IconlyBold.video : IconlyBold.hide,
+              _isCamEnabled ? Colors.white12 : Colors.red,
+              tooltip: _isCamEnabled ? "إغلاق الكاميرا" : "فتح الكاميرا",
+                  () async {
+                await _room?.localParticipant?.setCameraEnabled(!_isCamEnabled);
+                setState(() => _isCamEnabled = !_isCamEnabled);
+              },
+            ),
+            const SizedBox(width: 16),
+            _buildCircleBtn(
+              Icons.back_hand,
+              _isHandRaised ? Colors.orange : Colors.white12,
+              tooltip: _isHandRaised ? "خفض اليد" : "رفع اليد",
+                  () {
+                final newState = !_isHandRaised;
+                setState(() => _isHandRaised = newState);
+                _sendData({'type': 'hand_raise', 'value': newState});
+              },
+            ),
+            const SizedBox(width: 16),
+            _buildCircleBtn(
+              Icons.screen_share,
+              _isScreenSharing ? Colors.green : Colors.white12,
+              tooltip: _isScreenSharing ? "إيقاف المشاركة" : "مشاركة الشاشة",
+                  () async {
+                final newState = !_isScreenSharing;
+                await _room?.localParticipant?.setScreenShareEnabled(newState);
+                setState(() => _isScreenSharing = newState);
+              },
+            ),
+            const SizedBox(width: 24),
+            _buildCircleBtn(
+              IconlyBold.call_missed, 
+              Colors.red, 
+              tooltip: "إنهاء المكالمة",
+              () => Navigator.pop(context), 
+              isLarge: true,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -778,10 +934,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       message: tooltip ?? "",
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(30),
         child: Container(
-          padding: EdgeInsets.all(isLarge ? 18 : 14),
+          padding: EdgeInsets.all(isLarge ? 14 : 12),
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          child: Icon(icon, color: Colors.white, size: isLarge ? 30 : 22),
+          child: Icon(icon, color: Colors.white, size: isLarge ? 24 : 20),
         ),
       ),
     );
@@ -793,6 +950,7 @@ class ParticipantLayout extends StatelessWidget {
   final Map<String, bool> remoteHands;
   final bool localHand;
   final bool isTeacher;
+  final bool isWhiteboardOpen;
   final Function(String, bool) onControlMic;
 
   const ParticipantLayout({
@@ -801,6 +959,7 @@ class ParticipantLayout extends StatelessWidget {
     required this.remoteHands,
     required this.localHand,
     required this.isTeacher,
+    required this.isWhiteboardOpen,
     required this.onControlMic,
   });
 
@@ -852,7 +1011,7 @@ class ParticipantLayout extends StatelessWidget {
               child: GridView.builder(
                 padding: const EdgeInsets.all(20),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: screenSharePub != null ? 3 : 2,
+                  crossAxisCount: (screenSharePub != null || isWhiteboardOpen) ? 4 : 2,
                   childAspectRatio: 1.0,
                   mainAxisSpacing: 10,
                   crossAxisSpacing: 10,
@@ -915,7 +1074,7 @@ class ParticipantLayout extends StatelessWidget {
                             top: 5,
                             left: 5,
                             child: Tooltip(
-                              message: p.isMicrophoneEnabled() ? "كتم مايك الطالب" : "فتح مايك الطالب",
+                              message: p.isMicrophoneEnabled() ? "كتم مايك الطالب" : "فتح مايك الطالب (السماح بالتحدث)",
                               child: GestureDetector(
                                 onTap: () => onControlMic(
                                   p.identity,
@@ -970,6 +1129,34 @@ class ParticipantLayout extends StatelessWidget {
       },
     );
   }
+}
+
+class WhiteboardPainter extends CustomPainter {
+  final List<List<Offset>> strokes;
+  final List<Offset> currentStroke;
+
+  WhiteboardPainter({required this.strokes, required this.currentStroke});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    Paint paint = Paint()
+      ..color = Colors.blue
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 3.0;
+
+    for (var stroke in strokes) {
+      for (int i = 0; i < stroke.length - 1; i++) {
+        canvas.drawLine(stroke[i], stroke[i + 1], paint);
+      }
+    }
+
+    for (int i = 0; i < currentStroke.length - 1; i++) {
+      canvas.drawLine(currentStroke[i], currentStroke[i + 1], paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
 class _FloatingEmoji extends StatefulWidget {

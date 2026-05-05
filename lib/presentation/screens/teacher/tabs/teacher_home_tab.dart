@@ -321,11 +321,36 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(_nextSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                     Text("بدأت في $startTimeStr وتستمر حتى ${intl.DateFormat('hh:mm a').format(_nextSession!.endTime)}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: _nextSession!.classCode));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("تم نسخ كود الحصة"), duration: Duration(seconds: 1))
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.copy, color: Colors.white, size: 14),
+                            const SizedBox(width: 6),
+                            Text("كود الحصة: ${_nextSession!.classCode}", style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
                   ])),
                 ],
               ),
               const SizedBox(height: 24),
-              SizedBox(
+              SliverToBoxAdapter(child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => _startLive(_nextSession!, teacherName),
@@ -336,7 +361,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                   ),
                   child: Text(isUpcoming ? "فتح غرفة البث" : "دخول البث المباشر الآن", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
-              ),
+              )),
             ],
           ),
         ),

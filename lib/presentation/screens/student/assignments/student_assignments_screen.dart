@@ -72,7 +72,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
 
   Future<void> _handleSubmission(String assignmentId) async {
     // تم التعديل لتجنب خطأ .platform
-    final result = await FilePicker.platform.pickFiles(withData: true);
+    final result = await FilePicker.pickFiles(withData: true);
     if (result == null) return;
 
     if (!mounted) return;

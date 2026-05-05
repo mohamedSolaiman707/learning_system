@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DatabaseService {
@@ -69,10 +70,11 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('sessions')
-          .select('*, profiles:teacher_id(full_name)')
+          .select('*, profiles!teacher_id(full_name)')
           .order('start_time', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
+      debugPrint("Error fetching sessions: $e");
       rethrow;
     }
   }
@@ -101,7 +103,7 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('enrollments')
-          .select('*, sessions(*, profiles:teacher_id(full_name), rooms(is_active))')
+          .select('*, sessions(*, profiles!teacher_id(full_name), rooms(is_active))')
           .eq('student_id', studentId);
       
       return List<Map<String, dynamic>>.from(response);
@@ -118,7 +120,7 @@ class DatabaseService {
 
       final response = await _supabase
           .from('sessions')
-          .select('*, profiles:teacher_id(full_name), rooms(is_active)')
+          .select('*, profiles!teacher_id(full_name), rooms(is_active)')
           .eq('teacher_id', teacherId)
           .gte('start_time', startBoundary)
           .lte('start_time', endBoundary)

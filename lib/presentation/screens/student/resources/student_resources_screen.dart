@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/models/resource_model.dart';
-import '../../../../core/services/resources_service.dart';
 
 class StudentResourcesScreen extends StatefulWidget {
   final String sessionId;
@@ -19,8 +18,8 @@ class StudentResourcesScreen extends StatefulWidget {
 }
 
 class _StudentResourcesScreenState extends State<StudentResourcesScreen> {
-  final _resourcesService = ResourcesService();
-  List<ResourceModel> _resources = [];
+  final supabase = Supabase.instance.client;
+  List<Map<String, dynamic>> _resources = [];
   bool _isLoading = true;
 
   @override
@@ -31,23 +30,19 @@ class _StudentResourcesScreenState extends State<StudentResourcesScreen> {
 
   Future<void> _loadResources() async {
     setState(() => _isLoading = true);
-    final data = await _resourcesService.getResources(widget.sessionId);
-    setState(() {
-      _resources = data;
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _downloadResource(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("تعذر فتح الرابط")),
-        );
-      }
+    try {
+      final response = await supabase
+          .from('resources')
+          .select()
+          .eq('session_id', widget.sessionId)
+          .order('created_at', ascending: false);
+      setState(() {
+        _resources = List<Map<String, dynamic>>.from(response);
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Error: $e");
+      setState(() => _isLoading = false);
     }
   }
 
@@ -55,9 +50,14 @@ class _StudentResourcesScreenState extends State<StudentResourcesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      appBar: AppBar(title: Text("مصادر $widget.subjectName")),
+      appBar: AppBar(
+        title: Text("مكتبة: ${widget.subjectName}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : _resources.isEmpty
               ? _buildEmptyState()
               : ListView.builder(
@@ -65,25 +65,36 @@ class _StudentResourcesScreenState extends State<StudentResourcesScreen> {
                   itemCount: _resources.length,
                   itemBuilder: (context, index) {
                     final res = _resources[index];
-                    return Card(
+                    return Container(
                       margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+                      ),
                       child: ListTile(
-                        leading: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                          child: Icon(_getFileIcon(res.fileType), color: Colors.blue),
-                        ),
-                        title: Text(res.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(res.fileType.toUpperCase(), style: const TextStyle(fontSize: 12)),
+                        leading: _buildFileIcon(res['file_type']),
+                        title: Text(res['title'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        subtitle: Text("${res['file_type']?.toString().toUpperCase()} • ${res['created_at'].toString().split('T')[0]}", style: const TextStyle(fontSize: 12)),
                         trailing: IconButton(
-                          icon: const Icon(IconlyLight.download, color: Colors.grey),
-                          onPressed: () => _downloadResource(res.fileUrl),
+                          icon: const Icon(IconlyLight.download, color: Colors.blue),
+                          onPressed: () => launchUrl(Uri.parse(res['file_url'])),
                         ),
                       ),
                     );
                   },
                 ),
+    );
+  }
+
+  Widget _buildFileIcon(String? type) {
+    IconData icon = IconlyBold.document;
+    Color color = Colors.blue;
+    if (type == 'pdf') { icon = Icons.picture_as_pdf; color = Colors.red; }
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+      child: Icon(icon, color: color, size: 24),
     );
   }
 
@@ -94,18 +105,9 @@ class _StudentResourcesScreenState extends State<StudentResourcesScreen> {
         children: [
           Icon(IconlyLight.folder, size: 60, color: Colors.grey.shade300),
           const SizedBox(height: 16),
-          const Text("لا توجد ملفات مرفوعة لهذه المادة حتى الآن", style: TextStyle(color: Colors.grey)),
+          const Text("لا توجد ملفات متوفرة حالياً", style: TextStyle(color: Colors.grey)),
         ],
       ),
     );
-  }
-
-  IconData _getFileIcon(String ext) {
-    switch (ext.toLowerCase()) {
-      case 'pdf': return Icons.picture_as_pdf;
-      case 'jpg': case 'jpeg': case 'png': return Icons.image;
-      case 'mp4': case 'mov': return Icons.video_library;
-      default: return Icons.insert_drive_file;
-    }
   }
 }

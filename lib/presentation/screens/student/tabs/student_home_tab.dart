@@ -72,7 +72,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
             if (initial) _isLoading = false;
           });
 
-          // حساب الواجبات المعلقة فقط (التي لم يسلمها الطالب)
           int pendingCount = 0;
           for (var session in _sessions) {
              final assignments = await assignService.getAssignments(session.id);
@@ -174,7 +173,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
             _buildOptionTile(IconlyLight.document, "الواجبات المدرسية", Colors.blue, () async {
               Navigator.pop(context);
               await Navigator.push(context, MaterialPageRoute(builder: (context) => StudentAssignmentsScreen(sessionId: session.id, subjectName: session.subjectName)));
-              _loadStudentData(initial: false); // تحديث العداد عند العودة
+              _loadStudentData(initial: false);
             }),
             const Divider(),
             _buildOptionTile(IconlyLight.folder, "المصادر والكتب", Colors.orange, () {
@@ -296,6 +295,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
             title: "بث مباشر: ${_nextSession!.subjectName}",
             roomName: "room_${_nextSession!.id}",
             userName: userName,
+            isTeacher: false, // التأكد من أن الطالب ليس لديه صلاحيات مدرس
           ),
         ));
       },

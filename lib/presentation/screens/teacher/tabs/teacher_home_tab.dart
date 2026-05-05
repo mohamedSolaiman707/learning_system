@@ -13,6 +13,7 @@ import '../../../../core/models/session_model.dart';
 import '../widgets/teacher_stat_card.dart';
 import '../attendance/attendance_screen.dart';
 import '../assignments/teacher_assignments_screen.dart'; 
+import '../resources/teacher_resources_screen.dart';
 import '../../video_room/video_room_screen.dart';
 
 class TeacherHomeTab extends StatefulWidget {
@@ -33,7 +34,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   void initState() {
     super.initState();
     _loadData();
-    // تحديث الحالة كل دقيقة للتأكد من اختفاء الحصص المنتهية تلقائياً وتحديث الوقت
     _refreshTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) _checkSessionStatus();
     });
@@ -48,11 +48,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   void _checkSessionStatus() {
     if (_nextSession != null) {
       final now = DateTime.now();
-      // إذا انتهى وقت الحصة الحالية، نعيد تحميل البيانات لإخفائها
       if (now.isAfter(_nextSession!.endTime)) {
         _loadData();
       } else {
-        setState(() {}); // تحديث الواجهة (مثل العدادات أو حالة الزر)
+        setState(() {});
       }
     }
   }
@@ -76,7 +75,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
             _totalStudents = (results[1] as Map<String, dynamic>)['totalStudents'] ?? 0;
 
             final now = DateTime.now();
-            // فلترة الحصص: اختيار أول حصة لم تنتهِ بعد
             final activeSessions = _sessions.where((s) => s.endTime.isAfter(now)).toList();
 
             if (activeSessions.isNotEmpty) {
@@ -115,8 +113,11 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(type == 'attendance' ? "اختر حصة للتحضير" : "اختر حصة لإضافة واجب", 
-                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              type == 'attendance' ? "اختر حصة للتحضير" : 
+              type == 'assignment' ? "اختر حصة للواجبات" : "اختر حصة للمكتبة", 
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+            ),
             const SizedBox(height: 16),
             Flexible(
               child: ListView.builder(
@@ -127,27 +128,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                   return ListTile(
                     leading: CircleAvatar(backgroundColor: Colors.blue.withOpacity(0.1), child: const Icon(IconlyLight.video, color: Colors.blue)),
                     title: Text(s.subjectName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(intl.DateFormat('hh:mm a').format(s.startTime)),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Text("كود: ${s.classCode}", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
-                            const SizedBox(width: 8),
-                            InkWell(
-                              onTap: () {
-                                Clipboard.setData(ClipboardData(text: s.classCode));
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ الكود")));
-                              },
-                              child: const Icon(Icons.copy, size: 14, color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    isThreeLine: true,
+                    subtitle: Text(intl.DateFormat('hh:mm a').format(s.startTime)),
                     onTap: () {
                       Navigator.pop(context);
                       _navigateToActionScreen(type, s);
@@ -167,6 +148,8 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: session.id, subjectName: session.subjectName)));
     } else if (type == 'assignment') {
       Navigator.push(context, MaterialPageRoute(builder: (context) => TeacherAssignmentsScreen(sessionId: session.id, subjectName: session.subjectName)));
+    } else if (type == 'resources') {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => TeacherResourcesScreen(sessionId: session.id, subjectName: session.subjectName)));
     }
   }
 
@@ -176,7 +159,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       await db.toggleRoomStatus(session.id, true);
       if (!mounted) return;
       Navigator.push(context, MaterialPageRoute(
-        builder: (context) => VideoRoomScreen(title: session.subjectName, roomName: "room_${session.id}", userName: "أ. $teacherName")
+        builder: (context) => VideoRoomScreen(
+          title: session.subjectName, 
+          roomName: "room_${session.id}", 
+          userName: "أ. $teacherName",
+          isTeacher: true,
+        )
       )).then((_) => _showEndLiveDialog(session.id));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل بدء البث المباشر")));
@@ -304,7 +292,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     final isSoon = isUpcoming && _nextSession!.startTime.difference(now).inMinutes <= 15;
 
     final startTimeStr = intl.DateFormat('hh:mm a').format(_nextSession!.startTime);
-    final dateStr = intl.DateFormat('EEEE, d MMMM').format(_nextSession!.startTime);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,62 +320,23 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                   const SizedBox(width: 16),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(_nextSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    if (isUpcoming)
-                      Text("موعدنا: $dateStr الساعة $startTimeStr", style: const TextStyle(color: Colors.white70, fontSize: 13))
-                    else
-                      Text("بدأت في $startTimeStr وتستمر حتى ${intl.DateFormat('hh:mm a').format(_nextSession!.endTime)}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                    const SizedBox(height: 8),
-                    // عرض كود الحصة في البطاقة الرئيسية
-                    Row(
-                      children: [
-                        const Text("كود الحصة: ", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(6)),
-                          child: Text(_nextSession!.classCode, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-                        ),
-                        const SizedBox(width: 8),
-                        InkWell(
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: _nextSession!.classCode));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ كود الحصة")));
-                          },
-                          child: const Icon(Icons.copy, color: Colors.white70, size: 16),
-                        ),
-                      ],
-                    ),
+                    Text("بدأت في $startTimeStr وتستمر حتى ${intl.DateFormat('hh:mm a').format(_nextSession!.endTime)}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
                   ])),
                 ],
               ),
               const SizedBox(height: 24),
-              if (isUpcoming && !isSoon)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(IconlyLight.time_circle, color: Colors.white, size: 18),
-                      const SizedBox(width: 8),
-                      const Text("تفتح الغرفة قبل الموعد بـ 15 دقيقة", style: TextStyle(color: Colors.white, fontSize: 13)),
-                    ],
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => _startLive(_nextSession!, teacherName),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white, foregroundColor: isUpcoming ? Colors.blue : Colors.red,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                )
-              else
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => _startLive(_nextSession!, teacherName),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white, foregroundColor: isUpcoming ? Colors.blue : Colors.red,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      elevation: 0,
-                    ),
-                    child: Text(isUpcoming ? "فتح غرفة البث مبكراً" : "دخول البث المباشر الآن", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
+                  child: Text(isUpcoming ? "فتح غرفة البث" : "دخول البث المباشر الآن", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
+              ),
             ],
           ),
         ),
@@ -406,15 +354,13 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
         const SizedBox(height: 12),
         _buildActionCard(IconlyLight.document, "إضافة واجب", Colors.green, () => _handleQuickAction('assignment')),
         const SizedBox(height: 12),
-        _buildActionCard(IconlyLight.folder, "المكتبة التعليمية", Colors.blue, () {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("قريباً: شاشة المكتبة التعليمية تحت التطوير")));
-        }),
+        _buildActionCard(IconlyLight.folder, "المكتبة التعليمية", Colors.blue, () => _handleQuickAction('resources')),
       ],
     );
   }
 
   void _showNoSessionAlert() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لا توجد حصص مسجلة لك اليوم للقيام بهذا الإجراء")));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لا توجد حصص مسجلة لك اليوم")));
   }
 
   Widget _buildActionCard(IconData icon, String title, Color color, VoidCallback onTap) {
@@ -431,20 +377,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   }
 
   Widget _buildLoadingSkeleton() {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey.shade300, highlightColor: Colors.grey.shade100,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Container(height: 150, width: double.infinity, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24))),
-            const SizedBox(height: 20),
-            Row(children: List.generate(2, (i) => Expanded(child: Container(height: 100, margin: const EdgeInsets.all(5), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)))))),
-            const SizedBox(height: 30),
-            ...List.generate(3, (i) => Container(height: 70, margin: const EdgeInsets.only(bottom: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)))),
-          ],
-        ),
-      ),
-    );
+    return const Center(child: CircularProgressIndicator());
   }
 }

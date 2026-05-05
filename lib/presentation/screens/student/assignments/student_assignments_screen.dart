@@ -75,6 +75,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
       final result = await FilePicker.pickFiles(
         type: FileType.any,
         allowMultiple: false,
+        withData: true,
       );
 
       if (result == null) return;

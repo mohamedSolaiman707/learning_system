@@ -35,17 +35,38 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           .select('student_id, profiles:student_id(full_name)')
           .eq('session_id', widget.sessionId);
 
-      setState(() {
-        _students = (response as List).map((e) => {
-          'id': e['student_id'],
-          'name': e['profiles']['full_name'],
-          'present': true, // الحالة الافتراضية
-        }).toList();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _students = (response as List).map((e) {
+            // التعامل مع احتمال أن يكون ملف الطالب غير متاح بسبب RLS
+            final profile = e['profiles'];
+            String studentName = "طالب غير مسجل الاسم";
+
+            if (profile != null) {
+              if (profile is List && profile.isNotEmpty) {
+                studentName = profile[0]['full_name'] ?? studentName;
+              } else if (profile is Map) {
+                studentName = profile['full_name'] ?? studentName;
+              }
+            }
+
+            return {
+              'id': e['student_id'],
+              'name': studentName,
+              'present': true, // الحالة الافتراضية
+            };
+          }).toList();
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      print("Error loading students: $e");
-      setState(() => _isLoading = false);
+      debugPrint("Error loading students: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("حدث خطأ أثناء جلب قائمة الطلاب")),
+        );
+      }
     }
   }
 

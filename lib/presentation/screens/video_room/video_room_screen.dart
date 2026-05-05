@@ -2,16 +2,19 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:iconly/iconly.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/livekit_service.dart';
+import '../teacher/attendance/attendance_screen.dart';
 
 class VideoRoomScreen extends StatefulWidget {
   final String title;
   final String roomName;
   final String userName;
   final bool isTeacher;
+  final String? sessionId;
 
   const VideoRoomScreen({
     super.key,
@@ -19,6 +22,7 @@ class VideoRoomScreen extends StatefulWidget {
     required this.roomName,
     required this.userName,
     this.isTeacher = false,
+    this.sessionId,
   });
 
   @override
@@ -41,6 +45,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   bool _isBreakoutOpen = false;
   bool _isScreenSharing = false;
   bool _isChatLocked = false;
+  String? _classCode;
 
   // Poll State
   Map<String, dynamic>? _activePoll;
@@ -64,6 +69,18 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     _chatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (_isChatOpen) _fetchMessages();
     });
+    if (widget.isTeacher && widget.sessionId != null) {
+      _fetchClassCode();
+    }
+  }
+
+  Future<void> _fetchClassCode() async {
+    try {
+      final res = await supabase.from('sessions').select('class_code').eq('id', widget.sessionId!).single();
+      if (mounted) setState(() => _classCode = res['class_code']);
+    } catch (e) {
+      debugPrint("Error fetching class code: $e");
+    }
   }
 
   Future<void> _connectToRoom(String roomName) async {
@@ -237,6 +254,47 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     } catch (e) { debugPrint("Insert error: $e"); }
   }
 
+  void _shareInvite() {
+    if (_classCode == null) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("دعوة الطلاب"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("شارك كود الحصة مع الطلاب لينضموا إليك:"),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Text(
+                _classCode!,
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2, color: Colors.blue),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إغلاق")),
+          ElevatedButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: _classCode!));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ الكود بنجاح")));
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.copy),
+            label: const Text("نسخ الكود"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _listener?.dispose();
@@ -320,6 +378,20 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     icon: const Icon(Icons.exit_to_app, color: Colors.orange),
                     onPressed: () => _connectToRoom(widget.roomName),
                     tooltip: "العودة للقاعة الرئيسية",
+                  ),
+                if (widget.isTeacher && _classCode != null)
+                  IconButton(
+                    icon: const Icon(Icons.share, color: Colors.white70),
+                    tooltip: "دعوة طلاب",
+                    onPressed: _shareInvite,
+                  ),
+                if (widget.isTeacher && widget.sessionId != null)
+                  IconButton(
+                    icon: const Icon(Icons.playlist_add_check, color: Colors.white70),
+                    tooltip: "تحضير الطلاب",
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: widget.sessionId!, subjectName: widget.title)));
+                    },
                   ),
                 IconButton(
                   icon: Icon(IconlyLight.graph, color: _isPollsOpen ? Colors.blue : Colors.white70),

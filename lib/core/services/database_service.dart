@@ -132,6 +132,21 @@ class DatabaseService {
     }
   }
 
+  // جلب الطلاب المسجلين في حصة معينة للمدرس
+  Future<List<Map<String, dynamic>>> getEnrolledStudents(String sessionId) async {
+    try {
+      final response = await _supabase
+          .from('enrollments')
+          .select('student_id, profiles:student_id(full_name, email)')
+          .eq('session_id', sessionId);
+      
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint("Error fetching enrolled students: $e");
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> getTeacherStats(String teacherId) async {
     try {
       final response = await _supabase
@@ -149,32 +164,26 @@ class DatabaseService {
     }
   }
 
-  // تفعيل أو إغلاق الغرفة (طريقة يدوية أكثر استقراراً)
+  // تفعيل أو إغلاق الغرفة
   Future<void> toggleRoomStatus(String sessionId, bool isActive, {String? roomName}) async {
     try {
-      // 1. فحص وجود الغرفة مسبقاً
       final existing = await _supabase.from('rooms')
           .select('id')
           .eq('session_id', sessionId)
           .maybeSingle();
 
       if (existing == null) {
-        // 2. إذا لم توجد، نقوم بإنشائها
         await _supabase.from('rooms').insert({
           'session_id': sessionId,
           'room_name': roomName ?? "room_$sessionId",
           'is_active': isActive,
         });
       } else {
-        // 3. إذا وجدت، نقوم بتحديث الحالة فقط
         await _supabase.from('rooms').update({
           'is_active': isActive,
         }).eq('id', existing['id']);
       }
-      
-      print("Room status synced: $sessionId -> $isActive");
     } catch (e) {
-      print("Database Error (ToggleRoom): $e");
       rethrow;
     }
   }
@@ -205,7 +214,6 @@ class DatabaseService {
         'session_id': sessionId
       });
     } catch (e) {
-      print("Enroll Error: $e");
       rethrow;
     }
   }

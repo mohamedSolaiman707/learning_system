@@ -164,6 +164,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
           roomName: "room_${session.id}", 
           userName: "أ. $teacherName",
           isTeacher: true,
+          sessionId: session.id,
         )
       )).then((_) => _showEndLiveDialog(session.id));
     } catch (e) {
@@ -350,7 +351,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                 ],
               ),
               const SizedBox(height: 24),
-              SliverToBoxAdapter(child: SizedBox(
+              SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => _startLive(_nextSession!, teacherName),
@@ -361,7 +362,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                   ),
                   child: Text(isUpcoming ? "فتح غرفة البث" : "دخول البث المباشر الآن", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
-              )),
+              ),
             ],
           ),
         ),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconly/iconly.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/livekit_service.dart';
 
@@ -1543,7 +1544,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   }
 }
 
-class ParticipantLayout extends StatelessWidget {
+class ParticipantLayout extends StatefulWidget {
   final Room room;
   final Map<String, bool> remoteHands;
   final bool localHand;
@@ -1562,14 +1563,53 @@ class ParticipantLayout extends StatelessWidget {
   });
 
   @override
+  State<ParticipantLayout> createState() => _ParticipantLayoutState();
+}
+
+class _ParticipantLayoutState extends State<ParticipantLayout> {
+  final PageController _pageController = PageController();
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: room,
+      listenable: widget.room,
       builder: (context, _) {
         final List<Participant> participants = [
-          if (room.localParticipant != null) room.localParticipant!,
-          ...room.remoteParticipants.values,
+          if (widget.room.localParticipant != null) widget.room.localParticipant!,
+          ...widget.room.remoteParticipants.values,
         ];
+
+        // تحديد من هو المعلم
+        // إذا كان المستخدم الحالي هو المعلم، فهو الـ localParticipant
+        // إذا كان طالباً، سنفترض أن المعلم هو أول مشارك remote (أو نبحث عن المعلم بصفة أدق لاحقاً)
+        // حالياً سنعتمد على widget.isTeacher لمعرفة لو الـ local هو المعلم
+        Participant? teacher;
+        List<Participant> students = [];
+
+        if (widget.isTeacher) {
+          teacher = widget.room.localParticipant;
+          students = widget.room.remoteParticipants.values.toList();
+        } else {
+          // محاولة العثور على المعلم في الـ remote
+          // ملاحظة: هنا نحتاج لطريقة لتمييز المعلم، سأفترض أول Remote هو المعلم مؤقتاً
+          // أو الأفضل: إذا كان هناك مشارك واحد Remote فهو المعلم في أغلب الحالات الفردية
+          // لكن الأصح هو البحث عن identity معينة. سأفترض أن المعلم دائماً هو الـ Remote الوحيد لو طالب داخل
+          if (widget.room.remoteParticipants.isNotEmpty) {
+             teacher = widget.room.remoteParticipants.values.first;
+             students = [
+               if (widget.room.localParticipant != null) widget.room.localParticipant!,
+               ...widget.room.remoteParticipants.values.skip(1),
+             ];
+          } else {
+            teacher = widget.room.localParticipant; // لو لوحده
+          }
+        }
 
         TrackPublication? screenSharePub;
         for (var p in participants) {
@@ -1584,7 +1624,19 @@ class ParticipantLayout extends StatelessWidget {
 
         return Column(
           children: [
-            const SizedBox(height: 120),
+            const SizedBox(height: 100),
+            
+            // 1. Teacher Hero View (المدرس في مربع أكبر)
+            if (teacher != null && !widget.isWhiteboardOpen)
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  child: _buildParticipantTile(teacher, isHero: true),
+                ),
+              ),
+
+            // 2. Screen Share (لو موجود يظهر بدل أو بجانب الطلاب)
             if (screenSharePub != null)
               Expanded(
                 flex: 4,
@@ -1604,131 +1656,209 @@ class ParticipantLayout extends StatelessWidget {
                   ),
                 ),
               ),
-            Expanded(
-              flex: 2,
-              child: GridView.builder(
-                padding: const EdgeInsets.all(20),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: (screenSharePub != null || isWhiteboardOpen)
-                      ? 4
-                      : 2,
-                  childAspectRatio: 1.0,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                ),
-                itemCount: participants.length,
-                itemBuilder: (context, i) {
-                  final p = participants[i];
-                  final bool isLocal =
-                      room.localParticipant != null &&
-                          p.identity == room.localParticipant!.identity;
-                  final bool isHandUp = isLocal
-                      ? localHand
-                      : (remoteHands[p.identity] ?? false);
-                  final cameraPub = p.videoTrackPublications
-                      .where((pub) => pub.source == TrackSource.camera)
-                      .firstOrNull;
-                  VideoTrack? cameraTrack = cameraPub?.track as VideoTrack?;
 
-                  return Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(
-                        color: p.isSpeaking
-                            ? Colors.blue
-                            : (isHandUp ? Colors.orange : Colors.white10),
-                        width: 2,
+            // 3. Students Pagination Grid (ظهور شاشة 8 طلاب ولو فيه باقي يكون ف صفحة تانية)
+            if (!widget.isWhiteboardOpen && students.isNotEmpty)
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: (students.length / 8).ceil(),
+                        itemBuilder: (context, pageIndex) {
+                          final start = pageIndex * 8;
+                          final end = (start + 8) > students.length ? students.length : (start + 8);
+                          final pageStudents = students.sublist(start, end);
+
+                          return GridView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 4,
+                              childAspectRatio: 1.0,
+                              mainAxisSpacing: 10,
+                              crossAxisSpacing: 10,
+                            ),
+                            itemCount: pageStudents.length,
+                            itemBuilder: (context, i) => _buildParticipantTile(pageStudents[i]),
+                          );
+                        },
                       ),
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Stack(
-                      children: [
-                        if (cameraTrack != null)
-                          VideoTrackRenderer(
-                            cameraTrack,
-                            fit: VideoViewFit.cover,
-                          )
-                        else
-                          Container(
-                            color: Colors.black,
-                            child: const Center(
-                              child: Icon(
-                                IconlyBold.profile,
-                                color: Colors.white24,
-                                size: 30,
-                              ),
-                            ),
-                          ),
-                        if (isHandUp)
-                          const Positioned(
-                            top: 8,
-                            right: 8,
-                            child: Icon(
-                              Icons.back_hand,
-                              color: Colors.orange,
-                              size: 16,
-                            ),
-                          ),
-                        if (isTeacher && !isLocal)
-                          Positioned(
-                            top: 5,
-                            left: 5,
-                            child: Tooltip(
-                              message: p.isMicrophoneEnabled()
-                                  ? "كتم مايك الطالب"
-                                  : "فتح مايك الطالب (السماح بالتحدث)",
-                              child: GestureDetector(
-                                onTap: () => onControlMic(
-                                  p.identity,
-                                  !p.isMicrophoneEnabled(),
-                                ),
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color:
-                                    (p.isMicrophoneEnabled()
-                                        ? Colors.green
-                                        : Colors.red)
-                                        .withOpacity(0.8),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    p.isMicrophoneEnabled()
-                                        ? Icons.mic
-                                        : Icons.mic_off,
-                                    color: Colors.white,
-                                    size: 14,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            color: Colors.black45,
-                            child: Text(
-                              isLocal ? "أنت" : p.identity,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                              ),
-                            ),
+                    if (students.length > 8)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: SmoothPageIndicator(
+                          controller: _pageController,
+                          count: (students.length / 8).ceil(),
+                          effect: const WormEffect(
+                            dotHeight: 8,
+                            dotWidth: 8,
+                            activeDotColor: Colors.blue,
+                            dotColor: Colors.white24,
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                },
+                      ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 100),
+            
+            const SizedBox(height: 110),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildParticipantTile(Participant p, {bool isHero = false}) {
+    final bool isLocal = widget.room.localParticipant != null &&
+        p.identity == widget.room.localParticipant!.identity;
+    final bool isHandUp = isLocal
+        ? widget.localHand
+        : (widget.remoteHands[p.identity] ?? false);
+    
+    final cameraPub = p.videoTrackPublications
+        .where((pub) => pub.source == TrackSource.camera)
+        .firstOrNull;
+    VideoTrack? cameraTrack = cameraPub?.track as VideoTrack?;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(isHero ? 24 : 15),
+        border: Border.all(
+          color: p.isSpeaking
+              ? Colors.blue
+              : (isHandUp ? Colors.orange : Colors.white10),
+          width: isHero ? 3 : 2,
+        ),
+        boxShadow: isHero ? [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.2),
+            blurRadius: 20,
+            spreadRadius: 2,
+          )
+        ] : null,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          if (cameraTrack != null)
+            VideoTrackRenderer(
+              cameraTrack,
+              fit: VideoViewFit.cover,
+            )
+          else
+            Container(
+              color: const Color(0xFF1C1F26),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      IconlyBold.profile,
+                      color: Colors.white24,
+                      size: isHero ? 80 : 30,
+                    ),
+                    if (isHero) ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        "الكاميرا مغلقة",
+                        style: TextStyle(color: Colors.white38, fontSize: 12),
+                      )
+                    ]
+                  ],
+                ),
+              ),
+            ),
+          
+          // المدرس Hero Label
+          if (isHero)
+            Positioned(
+              top: 15,
+              right: 15,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.star, color: Colors.white, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      "المعلم",
+                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          if (isHandUp)
+             Positioned(
+              top: 10,
+              left: isHero ? null : 10,
+              right: isHero ? 15 : null,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+                child: const Icon(Icons.back_hand, color: Colors.white, size: 16),
+              ),
+            ),
+
+          if (widget.isTeacher && !isLocal)
+            Positioned(
+              top: 5,
+              left: 5,
+              child: GestureDetector(
+                onTap: () => widget.onControlMic(
+                  p.identity,
+                  !p.isMicrophoneEnabled(),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: (p.isMicrophoneEnabled() ? Colors.green : Colors.red).withOpacity(0.8),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    p.isMicrophoneEnabled() ? Icons.mic : Icons.mic_off,
+                    color: Colors.white,
+                    size: 14,
+                  ),
+                ),
+              ),
+            ),
+            
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: isHero ? 10 : 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+                ),
+              ),
+              child: Text(
+                isLocal ? "أنت (${p.identity})" : p.identity,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isHero ? 14 : 10,
+                  fontWeight: isHero ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

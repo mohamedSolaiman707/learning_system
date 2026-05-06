@@ -28,6 +28,7 @@ dependencies:
   animations: ^2.0.8
   file_picker: ^11.0.2
   url_launcher: ^6.3.2
+  smooth_page_indicator: ^1.1.0
 
 dev_dependencies:
   flutter_test:

@@ -17,9 +17,9 @@ import 'core/localization/app_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await initializeDateFormatting('ar_EG', null);
-  
+
   const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
@@ -85,16 +85,38 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   bool _isRedirecting = false;
   bool _linkProcessed = false;
+  Map<String, String>? _capturedParams;
 
   @override
   void initState() {
     super.initState();
+    // 1. التقاط البارامترات فوراً عند تشغيل الـ Widget
+    _capturedParams = _extractParams();
+
+    // إذا وجدنا رابطاً، نضع حالة "جاري التحويل" فوراً لمنع ظهور الـ Dashboard
+    if (_capturedParams!.containsKey('session_id') || _capturedParams!.containsKey('lms_id')) {
+      _isRedirecting = true;
+    }
+
     _checkLink();
   }
 
+  // وظيفة دقيقة لاستخراج البارامترات في الويب (تدعم الـ Hash والـ Query)
+  Map<String, String> _extractParams() {
+    final fullUri = Uri.base;
+    Map<String, String> params = Map.from(fullUri.queryParameters);
+
+    // فحص ما بعد علامة # (مثل /#/?session_id=...)
+    if (fullUri.fragment.contains('?')) {
+      final queryPart = fullUri.fragment.split('?').last;
+      params.addAll(Uri.splitQueryString(queryPart));
+    }
+    return params;
+  }
+
   void _checkLink() {
-    // تأخير ثانية واحدة لضمان استقرار الرابط في المتصفح (مهم جداً للويب)
-    Future.delayed(const Duration(milliseconds: 1000), () {
+    // نستخدم Delay لضمان استقرار حالة الـ AuthProvider
+    Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) _handleIncomingLink();
     });
   }
@@ -103,20 +125,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (_linkProcessed) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    // إذا لم يكن مسجلاً، ننتظر تسجيل الدخول (سيتم إعادة الفحص تلقائياً من الـ build)
-    if (!authProvider.isAuthenticated) return;
+
+    // إذا لم يكن مسجلاً، نتوقف ونظهر صفحة الدخول
+    if (!authProvider.isAuthenticated) {
+      if (mounted) setState(() => _isRedirecting = false);
+      return;
+    }
 
     final dbService = Provider.of<DatabaseService>(context, listen: false);
-
-    // 1. استخراج البارامترات بكل الطرق الممكنة (Query + Fragment)
-    final fullUri = Uri.base;
-    Map<String, String> params = Map.from(fullUri.queryParameters);
-    
-    // دعم روابط Vercel مثل /#/?session_id=...
-    if (fullUri.fragment.contains('?')) {
-      final queryPart = fullUri.fragment.split('?').last;
-      params.addAll(Uri.splitQueryString(queryPart));
-    }
+    final params = _capturedParams ?? _extractParams();
 
     final sessionId = params['session_id'];
     final lmsId = params['lms_id'];
@@ -124,11 +141,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (sessionId != null || lmsId != null) {
       _linkProcessed = true;
       if (mounted) setState(() => _isRedirecting = true);
-      
+
       try {
-        debugPrint("Link Detected: session=$sessionId, lms=$lmsId");
-        
-        final session = sessionId != null 
+        final session = sessionId != null
             ? await dbService.getSessionById(sessionId)
             : await dbService.getSessionByLmsId(lmsId!);
 
@@ -143,30 +158,31 @@ class _AuthWrapperState extends State<AuthWrapper> {
             }
           }
 
-          // التوجيه مع مسح الشاشة السابقة لضمان الدخول المباشر
+          // الانتقال النهائي للقاعة التعليمية
           Navigator.of(context).pushNamedAndRemoveUntil(
             AppRoutes.videoRoom,
-            (route) => false,
+                (route) => false,
             arguments: {
               'roomName': roomName ?? 'room_${session['id']}',
               'title': session['title'] ?? 'قاعة تعليمية',
-              'userName': authProvider.profile?['full_name'] ?? 'Guest',
+              'userName': authProvider.profile?['full_name'] ?? 'User',
               'userId': authProvider.user?.id ?? '',
               'isTeacher': authProvider.role == 'teacher',
               'sessionId': session['id'],
             },
           );
+          return;
         } else {
-          // إذا لم يجد الجلسة، نظهر تنبيه بسيط
+          // لم نجد الجلسة، نلغي التحويل ونظهر تنبيه
           if (mounted) {
+            setState(() => _isRedirecting = false);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('عذراً، لم نتمكن من العثور على هذه الحصة في النظام')),
+              const SnackBar(content: Text('عذراً، لم نتمكن من الوصول لبيانات هذه الحصة')),
             );
           }
         }
       } catch (e) {
-        debugPrint("Error handling link: $e");
-      } finally {
+        debugPrint("Link Processing Error: $e");
         if (mounted) setState(() => _isRedirecting = false);
       }
     }
@@ -176,12 +192,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
 
-    // إذا تم تسجيل الدخول لاحقاً، نفحص الرابط مجدداً
-    if (authProvider.isAuthenticated && !_linkProcessed) {
+    // إذا سجل الدخول لاحقاً وكان هناك رابط قيد الانتظار، نعيد المحاولة
+    bool hasWaitingLink = _capturedParams != null &&
+        (_capturedParams!.containsKey('session_id') || _capturedParams!.containsKey('lms_id'));
+
+    if (authProvider.isAuthenticated && !_linkProcessed && hasWaitingLink) {
       _checkLink();
     }
 
-    if (authProvider.isLoading || _isRedirecting) {
+    // إذا كان هناك تحويل جاري، نبقى في شاشة التحميل (هذا يمنع ظهور الـ Dashboard)
+    if (_isRedirecting || authProvider.isLoading) {
       return const Scaffold(
         body: Center(
           child: Column(
@@ -189,8 +209,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 20),
-              Text("جاري تحضير القاعة التعليمية...", 
-                style: TextStyle(fontFamily: 'Cairo', fontSize: 16)),
+              Text("جاري تحضير القاعة التعليمية...",
+                  style: TextStyle(fontFamily: 'Cairo', fontSize: 16)),
             ],
           ),
         ),
@@ -201,6 +221,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return const LoginScreen();
     }
 
+    // التوجيه الافتراضي للواجهة الرئيسية حسب الرتبة
     final role = authProvider.role;
     if (role == 'admin') return const AdminDashboard();
     if (role == 'teacher') return const TeacherMainLayout();

@@ -1,20 +1,17 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconly/iconly.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/intl.dart' as intl;
-import 'package:shimmer/shimmer.dart';
-
+import 'package:provider/provider.dart';
+import '../../../../core/models/session_model.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/services/database_service.dart';
 import '../../../../core/utils/responsive.dart';
-import '../../../../core/models/session_model.dart';
-import '../widgets/teacher_stat_card.dart';
+import '../assignments/teacher_assignments_screen.dart';
 import '../attendance/attendance_screen.dart';
-import '../assignments/teacher_assignments_screen.dart'; 
 import '../resources/teacher_resources_screen.dart';
 import '../../video_room/video_room_screen.dart';
+import '../widgets/teacher_stat_card.dart';
 
 class TeacherHomeTab extends StatefulWidget {
   const TeacherHomeTab({super.key});
@@ -28,32 +25,11 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   List<SessionModel> _sessions = [];
   SessionModel? _nextSession;
   int _totalStudents = 0;
-  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadData();
-    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      if (mounted) _checkSessionStatus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    super.dispose();
-  }
-
-  void _checkSessionStatus() {
-    if (_nextSession != null) {
-      final now = DateTime.now();
-      if (now.isAfter(_nextSession!.endTime)) {
-        _loadData();
-      } else {
-        setState(() {});
-      }
-    }
   }
 
   Future<void> _loadData() async {
@@ -101,6 +77,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     } else {
       _showSessionPicker(type);
     }
+  }
+
+  void _showNoSessionAlert() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("لا توجد حصص مسجلة لديك حالياً"))
+    );
   }
 
   void _showSessionPicker(String type) {
@@ -206,7 +188,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       body: _isLoading 
-          ? _buildLoadingSkeleton()
+          ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadData,
               child: CustomScrollView(
@@ -297,6 +279,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     final isUpcoming = _nextSession!.startTime.isAfter(now);
     
     final startTimeStr = intl.DateFormat('hh:mm a').format(_nextSession!.startTime);
+    final String liveLink = "https://learning-system-cz8hhsedk-real-estat.vercel.app/#/live?sessionId=${_nextSession!.id}";
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,50 +310,58 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                     Text(_nextSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                     Text("بدأت في $startTimeStr وتستمر حتى ${intl.DateFormat('hh:mm a').format(_nextSession!.endTime)}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: _nextSession!.classCode));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("تم نسخ كود الحصة"), duration: Duration(seconds: 1))
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white24),
+                    Row(
+                      children: [
+                        _buildCopyBadge(
+                          label: "كود: ${_nextSession!.classCode}", 
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: _nextSession!.classCode));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ كود الحصة")));
+                          }
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.copy, color: Colors.white, size: 14),
-                            const SizedBox(width: 6),
-                            Text("كود الحصة: ${_nextSession!.classCode}", style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          ],
+                        const SizedBox(width: 8),
+                        _buildCopyBadge(
+                          label: "نسخ الرابط 🔗", 
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: liveLink));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ رابط الحصة المباشر")));
+                          }
                         ),
-                      ),
+                      ],
                     ),
                   ])),
                 ],
               ),
               const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _startLive(_nextSession!, teacherName),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white, foregroundColor: isUpcoming ? Colors.blue : Colors.red,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: Text(isUpcoming ? "فتح غرفة البث" : "دخول البث المباشر الآن", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ElevatedButton(
+                onPressed: () => _startLive(_nextSession!, teacherName),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: isUpcoming ? Colors.blue.shade700 : Colors.red,
+                  minimumSize: const Size(double.infinity, 56),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  elevation: 0,
                 ),
+                child: Text(isUpcoming ? "بدء البث المباشر" : "دخول البث المباشر", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCopyBadge({required String label, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500)),
+      ),
     );
   }
 
@@ -380,33 +371,43 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       children: [
         const Text("إجراءات سريعة", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
-        _buildActionCard(IconlyLight.user_1, "تحضير الطلاب", Colors.orange, () => _handleQuickAction('attendance')),
-        const SizedBox(height: 12),
-        _buildActionCard(IconlyLight.document, "إضافة واجب", Colors.green, () => _handleQuickAction('assignment')),
-        const SizedBox(height: 12),
-        _buildActionCard(IconlyLight.folder, "المكتبة التعليمية", Colors.blue, () => _handleQuickAction('resources')),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 16,
+          childAspectRatio: 1.3,
+          children: [
+            _buildActionCard("التحضير", IconlyLight.user, Colors.blue, 'attendance'),
+            _buildActionCard("الواجبات", IconlyLight.document, Colors.orange, 'assignment'),
+            _buildActionCard("المكتبة", IconlyLight.folder, Colors.purple, 'resources'),
+            _buildActionCard("التقارير", IconlyLight.chart, Colors.green, 'reports'),
+          ],
+        ),
       ],
     );
   }
 
-  void _showNoSessionAlert() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لا توجد حصص مسجلة لك اليوم")));
-  }
-
-  Widget _buildActionCard(IconData icon, String title, Color color, VoidCallback onTap) {
-    return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]),
-      child: ListTile(
-        onTap: onTap,
-        leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color, size: 22)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+  Widget _buildActionCard(String title, IconData icon, Color color, String type) {
+    return InkWell(
+      onTap: () => _handleQuickAction(type),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.grey.shade100),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 8),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ],
+        ),
       ),
     );
-  }
-
-  Widget _buildLoadingSkeleton() {
-    return const Center(child: CircularProgressIndicator());
   }
 }

@@ -474,21 +474,31 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
 
   void _shareInvite() {
     if (_classCode == null) return;
+    
+    // إنشاء رابط مباشر للحصة
+    final String appUrl = "https://learning-system-cz8hhsedk-real-estat.vercel.app";
+    final String liveLink = "$appUrl/#/live?sessionId=${widget.sessionId}";
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("دعوة الطلاب"),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text("دعوة الطلاب", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("شارك كود الحصة مع الطلاب لينضموا إليك:"),
-            const SizedBox(height: 16),
+            const Text("شارك كود الحصة أو الرابط المباشر مع الطلاب:", textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            
+            // كود الحصة
+            const Text("كود الحصة", style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.shade200),
+                color: Colors.blue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.blue.withOpacity(0.2)),
               ),
               child: Text(
                 _classCode!,
@@ -500,23 +510,80 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                 ),
               ),
             ),
+            
+            const SizedBox(height: 24),
+            
+            // رابط الحصة
+            const Text("الرابط المباشر", style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                liveLink,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("إغلاق"),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("إغلاق", style: TextStyle(color: Colors.grey)),
+                ),
+              ),
+            ],
           ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: _classCode!));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("تم نسخ الكود بنجاح")),
-              );
-              Navigator.pop(context);
-            },
-            icon: const Icon(Icons.copy),
-            label: const Text("نسخ الكود"),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _classCode!));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("تم نسخ الكود بنجاح"), behavior: SnackBarBehavior.floating),
+                    );
+                  },
+                  icon: const Icon(Icons.copy, size: 18),
+                  label: const Text("نسخ الكود"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.blue,
+                    elevation: 0,
+                    side: const BorderSide(color: Colors.blue),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: liveLink));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("تم نسخ رابط الحصة"), behavior: SnackBarBehavior.floating),
+                    );
+                  },
+                  icon: const Icon(Icons.link, size: 18),
+                  label: const Text("نسخ الرابط"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

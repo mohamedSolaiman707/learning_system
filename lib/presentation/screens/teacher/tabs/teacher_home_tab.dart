@@ -155,14 +155,19 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
 
   Future<void> _startLive(SessionModel session, String teacherName) async {
     try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final userId = auth.user?.id ?? "";
       final db = Provider.of<DatabaseService>(context, listen: false);
+      
       await db.toggleRoomStatus(session.id, true);
       if (!mounted) return;
+      
       Navigator.push(context, MaterialPageRoute(
         builder: (context) => VideoRoomScreen(
           title: session.subjectName, 
           roomName: "room_${session.id}", 
           userName: "أ. $teacherName",
+          userId: userId, 
           isTeacher: true,
           sessionId: session.id,
         )
@@ -290,8 +295,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     }
     final now = DateTime.now();
     final isUpcoming = _nextSession!.startTime.isAfter(now);
-    final isSoon = isUpcoming && _nextSession!.startTime.difference(now).inMinutes <= 15;
-
+    
     final startTimeStr = intl.DateFormat('hh:mm a').format(_nextSession!.startTime);
 
     return Column(

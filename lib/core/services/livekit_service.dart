@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class LiveKitService {
-  // استخدام String.fromEnvironment بدلاً من dotenv لضمان عملها على الويب
   static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const String supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-  static const String liveKitUrl = String.fromEnvironment('LIVEKIT_URL');
 
-  Future<String?> getRoomToken(String roomName, String userName) async {
+  Future<String?> getRoomToken({
+    required String roomName,
+    required String userId,
+    required String userName,
+  }) async {
     try {
       if (supabaseUrl.isEmpty) {
         print('Error: SUPABASE_URL is not set.');
@@ -22,7 +24,8 @@ class LiveKitService {
         },
         body: jsonEncode({
           'roomName': roomName,
-          'userName': userName,
+          'userId': userId, // نستخدم الـ UUID كـ Identity
+          'userName': userName, // نرسل الاسم كـ Metadata أو ليتم معالجته في الـ Edge Function
         }),
       );
 

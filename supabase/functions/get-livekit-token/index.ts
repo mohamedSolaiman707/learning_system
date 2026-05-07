@@ -2,7 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { AccessToken } from "https://esm.sh/livekit-server-sdk@1.2.7"
 
 serve(async (req) => {
-  // التعامل مع طلبات CORS (للسماح بالاتصال من المتصفح أو تطبيق فلاتر)
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: {
       'Access-Control-Allow-Origin': '*',
@@ -12,21 +11,21 @@ serve(async (req) => {
   }
 
   try {
-    const { roomName, userName } = await req.json()
+    const { roomName, userId, userName } = await req.json()
 
     const apiKey = Deno.env.get('LIVEKIT_API_KEY')
     const apiSecret = Deno.env.get('LIVEKIT_API_SECRET')
 
     if (!apiKey || !apiSecret) {
-      throw new Error("LiveKit API Key or Secret not set in environment variables")
+      throw new Error("LiveKit API Key or Secret not set")
     }
 
-    // إنشاء توكن الدخول
+    // نستخدم الـ userId كـ identity فريد والـ userName للعرض فقط
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: userName,
+      identity: userId,
+      name: userName, // سيظهر هذا الاسم في القائمة بدلاً من الـ UUID
     })
 
-    // إعطاء صلاحيات الدخول للغرفة
     at.addGrant({ 
       roomJoin: true, 
       room: roomName, 
@@ -37,23 +36,14 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ token: at.toJwt() }),
       { 
-        headers: { 
-          "Content-Type": "application/json",
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: { "Content-Type": "application/json", 'Access-Control-Allow-Origin': '*' },
         status: 200 
       }
     )
   } catch (error) {
     return new Response(
       JSON.stringify({ error: error.message }),
-      { 
-        headers: { 
-          "Content-Type": "application/json",
-          'Access-Control-Allow-Origin': '*',
-        },
-        status: 400 
-      }
+      { headers: { "Content-Type": "application/json", 'Access-Control-Allow-Origin': '*' }, status: 400 }
     )
   }
 })

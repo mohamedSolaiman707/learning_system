@@ -247,6 +247,10 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       );
     }
 
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userName = authProvider.profile?['full_name'] ?? "Student";
+    final userId = authProvider.user?.id ?? "";
+
     return ListView.builder(
       padding: const EdgeInsets.all(20),
       itemCount: sessions.length,
@@ -289,7 +293,10 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                       builder: (context) => VideoRoomScreen(
                         title: session.subjectName,
                         roomName: "room_${session.id}",
-                        userName: Provider.of<AuthProvider>(context, listen: false).profile?['full_name'] ?? "Student",
+                        userName: userName,
+                        userId: userId, // تمرير الـ UUID الجديد
+                        isTeacher: false,
+                        sessionId: session.id,
                       ),
                     ));
                   },

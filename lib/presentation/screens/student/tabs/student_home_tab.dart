@@ -199,6 +199,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final userName = authProvider.profile?['full_name'] ?? "الطالب";
+    final userId = authProvider.user?.id ?? ""; // جلب الـ UUID
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
@@ -220,7 +221,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                           if (_nextSession != null) 
                             GestureDetector(
                               onTap: () => _showSessionOptions(_nextSession!),
-                              child: _buildNextClassSection(userName),
+                              child: _buildNextClassSection(userName, userId),
                             )
                           else
                             _buildNoClassesCard(),
@@ -283,7 +284,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     );
   }
 
-  Widget _buildNextClassSection(String userName) {
+  Widget _buildNextClassSection(String userName, String userId) {
     return NextClassCard(
       subject: _nextSession!.subjectName,
       teacher: _nextSession!.teacherName,
@@ -295,7 +296,9 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
             title: "بث مباشر: ${_nextSession!.subjectName}",
             roomName: "room_${_nextSession!.id}",
             userName: userName,
-            isTeacher: false, // التأكد من أن الطالب ليس لديه صلاحيات مدرس
+            userId: userId, // تمرير الـ UUID
+            isTeacher: false,
+            sessionId: _nextSession!.id,
           ),
         ));
       },

@@ -13,6 +13,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _user != null;
 
   String get role => _profile?['role'] ?? 'student';
+  String? get externalId => _profile?['external_id'];
 
   AuthProvider() {
     _user = _supabase.auth.currentUser;
@@ -20,7 +21,7 @@ class AuthProvider extends ChangeNotifier {
       _loadProfile();
     }
     
-    // الاستماع لتغييرات حالة المصادقة
+    // الاستماع لتغييرات حالة المصادقة (مهم جداً للربط مع LTI)
     _supabase.auth.onAuthStateChange.listen((data) {
       _user = data.session?.user;
       if (_user != null) {
@@ -48,12 +49,42 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // تحديث بيانات الملف الشخصي
+  // ميثود جديدة للتحقق من وجود مستخدم LMS أو إنشائه
+  // سيتم استدعاؤها من الـ الـ Web Router عند اكتشاف بارامترات LTI
+  Future<bool> handleExternalAuth(String externalId, String email, String fullName, String role) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      // 1. البحث عن المستخدم بـ externalId
+      final existingProfile = await _supabase
+          .from('profiles')
+          .select()
+          .eq('external_id', externalId)
+          .maybeSingle();
+
+      if (existingProfile != null) {
+        // المستخدم موجود، Supabase SDK سيتعامل مع الجلسة
+        await _loadProfile();
+        return true;
+      }
+      
+      // إذا لم يكن موجوداً، فالتعامل يكون غالباً عبر الـ Edge Function 
+      // التي تقوم بعمل Auto-provisioning للمستخدم وترجع Session.
+      return false;
+    } catch (e) {
+      debugPrint("External Auth Error: $e");
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> updateProfile(Map<String, dynamic> data) async {
     if (_user == null) return;
     try {
       await _supabase.from('profiles').update(data).eq('id', _user!.id);
-      await _loadProfile(); // إعادة تحميل البيانات بعد التحديث
+      await _loadProfile();
     } catch (e) {
       rethrow;
     }

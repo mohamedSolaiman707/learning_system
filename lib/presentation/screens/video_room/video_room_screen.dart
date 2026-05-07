@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconly/iconly.dart';
 import 'package:livekit_client/livekit_client.dart';
-import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/livekit_service.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
 // موديل الرسم الاحترافي
 class Stroke {
@@ -21,6 +21,7 @@ class VideoRoomScreen extends StatefulWidget {
   final String title;
   final String roomName;
   final String userName;
+  final String userId; // تم إضافة UUID
   final bool isTeacher;
   final String? sessionId;
 
@@ -29,6 +30,7 @@ class VideoRoomScreen extends StatefulWidget {
     required this.title,
     required this.roomName,
     required this.userName,
+    required this.userId, // مطلوب الآن
     this.isTeacher = false,
     this.sessionId,
   });
@@ -108,9 +110,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   Future<void> _connectToRoom(String roomName) async {
     setState(() => _isLoading = true);
     try {
+      // تعديل استدعاء التوكن لاستخدام الـ UUID والاسم
       final token = await LiveKitService().getRoomToken(
-        roomName,
-        widget.userName,
+        roomName: roomName,
+        userId: widget.userId,
+        userName: widget.userName,
       );
       if (token == null) throw "فشل الحصول على تصريح الدخول (Token)";
 
@@ -148,7 +152,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             if (!widget.isTeacher) _isPollsOpen = false;
           });
         } else if (data['type'] == 'breakout_invite' &&
-            data['target'] == widget.userName) {
+            data['target'] == widget.userId) { // استخدام الـ UUID كهدف
           _showBreakoutInvitation(data['room'], data['groupName']);
         } else if (data['type'] == 'hand_raise') {
           final p = event.participant;
@@ -168,7 +172,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         } else if (data['type'] == 'whiteboard_redo') {
           _executeRedo(remote: true);
         } else if (data['type'] == 'control_mic' &&
-            (data['target'] == widget.userName || data['target'] == null)) {
+            (data['target'] == widget.userId || data['target'] == null)) {
           if (!widget.isTeacher) {
             bool lock = data['lock'] ?? false;
             bool val = data['value'] ?? false;
@@ -280,9 +284,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     bool isOn = p.isMicrophoneEnabled();
     _sendData({
       'type': 'control_mic',
-      'target': p.identity,
+      'target': p.identity, // identity هنا هي UUID
       'value': !isOn,
-      'lock': isOn, // لو بنقفله يبقا بنعمله Lock
+      'lock': isOn,
     });
   }
 
@@ -295,7 +299,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       return;
     }
 
-    // نستثني المدرس من قائمة التحضير
     final List<Participant> studentParticipants = _room!.remoteParticipants.values.toList();
 
     if (studentParticipants.isEmpty) {
@@ -308,34 +311,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     setState(() => _isLoading = true);
 
     try {
-      // 1. جلب الـ UUID الخاص بكل طالب من جدول profiles بناءً على اسمه (الـ identity)
-      final names = studentParticipants.map((p) => p.identity).toList();
-      final profilesResponse = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .filter('full_name', 'in', names);
+      // استخدام الـ identity مباشرة لأنه أصبح UUID
+      final List<Map<String, dynamic>> attendanceData = studentParticipants.map((p) {
+        return {
+          'session_id': widget.sessionId,
+          'student_id': p.identity,
+          'status': 'present',
+          'marked_at': DateTime.now().toIso8601String(),
+        };
+      }).toList();
 
-      final Map<String, String> nameToIdMap = {
-        for (var row in profilesResponse) row['full_name']: row['id']
-      };
-
-      // 2. تجهيز بيانات الحضور باستخدام الـ student_id الفعلي (UUID)
-      final List<Map<String, dynamic>> attendanceData = [];
-      for (var p in studentParticipants) {
-        final studentUuid = nameToIdMap[p.identity];
-        if (studentUuid != null) {
-          attendanceData.add({
-            'session_id': widget.sessionId,
-            'student_id': studentUuid, // تم تصحيح الاسم هنا ليتوافق مع قاعدة بياناتك
-            'status': 'present',
-            'marked_at': DateTime.now().toIso8601String(),
-          });
-        }
-      }
-
-      if (attendanceData.isEmpty) throw "لم يتم العثور على حسابات الطلاب في قاعدة البيانات";
-
-      // 3. تخزين البيانات في Supabase
       await supabase.from('attendance').upsert(
         attendanceData,
         onConflict: 'session_id, student_id',
@@ -344,7 +329,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("تم تحضير ${attendanceData.length} طالب بنجاح ✅"),
+            content: Text("تم تحضير ${attendanceData.length} طالب بنجاح (UUID) ✅"),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
           ),
@@ -570,7 +555,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                 'lock': false,
               }),
             ),
+          
           if (_isWhiteboardOpen) _buildWhiteboardLayer(),
+          
           ..._reactionParticles,
           if (_isChatOpen) _buildChatPanel(),
           if (_isParticipantsOpen) _buildParticipantsPanel(),
@@ -640,9 +627,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                   size: Size.infinite,
                 ),
               ),
-              Positioned(top: 20, left: 20, child: _buildWhiteboardToolbar()),
+              Positioned(top: 110, left: 20, child: _buildWhiteboardToolbar()),
               Positioned(
-                top: 20,
+                top: 110,
                 right: 20,
                 child: FloatingActionButton.small(
                   heroTag: "close_wb",
@@ -1099,7 +1086,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         ),
         child: Column(
           children: [
-            // Header Professional
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               decoration: BoxDecoration(
@@ -1205,7 +1191,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                               radius: 20,
                               backgroundColor: isLocal ? Colors.blue.withOpacity(0.2) : Colors.white10,
                               child: Text(
-                                p.identity[0].toUpperCase(),
+                                (p.name != null && p.name!.isNotEmpty) 
+                                    ? p.name![0].toUpperCase() 
+                                    : p.identity[0].toUpperCase(),
                                 style: TextStyle(
                                   color: isLocal ? Colors.blue : Colors.white70,
                                   fontSize: 16,
@@ -1235,7 +1223,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isLocal ? "${p.identity} (أنت)" : p.identity,
+                                isLocal 
+                                    ? "${p.name ?? p.identity} (أنت)" 
+                                    : (p.name ?? p.identity),
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 14,
@@ -1585,10 +1575,6 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
           ...widget.room.remoteParticipants.values,
         ];
 
-        // تحديد من هو المعلم
-        // إذا كان المستخدم الحالي هو المعلم، فهو الـ localParticipant
-        // إذا كان طالباً، سنفترض أن المعلم هو أول مشارك remote (أو نبحث عن المعلم بصفة أدق لاحقاً)
-        // حالياً سنعتمد على widget.isTeacher لمعرفة لو الـ local هو المعلم
         Participant? teacher;
         List<Participant> students = [];
 
@@ -1596,10 +1582,6 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
           teacher = widget.room.localParticipant;
           students = widget.room.remoteParticipants.values.toList();
         } else {
-          // محاولة العثور على المعلم في الـ remote
-          // ملاحظة: هنا نحتاج لطريقة لتمييز المعلم، سأفترض أول Remote هو المعلم مؤقتاً
-          // أو الأفضل: إذا كان هناك مشارك واحد Remote فهو المعلم في أغلب الحالات الفردية
-          // لكن الأصح هو البحث عن identity معينة. سأفترض أن المعلم دائماً هو الـ Remote الوحيد لو طالب داخل
           if (widget.room.remoteParticipants.isNotEmpty) {
              teacher = widget.room.remoteParticipants.values.first;
              students = [
@@ -1607,7 +1589,7 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
                ...widget.room.remoteParticipants.values.skip(1),
              ];
           } else {
-            teacher = widget.room.localParticipant; // لو لوحده
+            teacher = widget.room.localParticipant;
           }
         }
 
@@ -1622,12 +1604,32 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
           }
         }
 
+        if (widget.isWhiteboardOpen) {
+          return Positioned(
+            top: 100,
+            left: 0,
+            right: 0,
+            height: 100,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: participants.length,
+              itemBuilder: (context, i) {
+                return Container(
+                  width: 100,
+                  margin: const EdgeInsets.only(right: 12),
+                  child: _buildParticipantTile(participants[i], isCompact: true),
+                );
+              },
+            ),
+          );
+        }
+
         return Column(
           children: [
             const SizedBox(height: 100),
             
-            // 1. Teacher Hero View (المدرس في مربع أكبر)
-            if (teacher != null && !widget.isWhiteboardOpen)
+            if (teacher != null)
               Expanded(
                 flex: 3,
                 child: Padding(
@@ -1636,7 +1638,6 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
                 ),
               ),
 
-            // 2. Screen Share (لو موجود يظهر بدل أو بجانب الطلاب)
             if (screenSharePub != null)
               Expanded(
                 flex: 4,
@@ -1652,13 +1653,13 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
                     child: VideoTrackRenderer(
                       screenSharePub.track as VideoTrack,
                       fit: VideoViewFit.contain,
+                      key: ValueKey("screenshare_${screenSharePub.sid}"),
                     ),
                   ),
                 ),
               ),
 
-            // 3. Students Pagination Grid (ظهور شاشة 8 طلاب ولو فيه باقي يكون ف صفحة تانية)
-            if (!widget.isWhiteboardOpen && students.isNotEmpty)
+            if (students.isNotEmpty)
               Expanded(
                 flex: 2,
                 child: Column(
@@ -1712,7 +1713,7 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
     );
   }
 
-  Widget _buildParticipantTile(Participant p, {bool isHero = false}) {
+  Widget _buildParticipantTile(Participant p, {bool isHero = false, bool isCompact = false}) {
     final bool isLocal = widget.room.localParticipant != null &&
         p.identity == widget.room.localParticipant!.identity;
     final bool isHandUp = isLocal
@@ -1725,7 +1726,9 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
     VideoTrack? cameraTrack = cameraPub?.track as VideoTrack?;
 
     return Container(
+      key: ValueKey("participant_tile_${p.identity}"),
       decoration: BoxDecoration(
+        color: const Color(0xFF1C1F26),
         borderRadius: BorderRadius.circular(isHero ? 24 : 15),
         border: Border.all(
           color: p.isSpeaking
@@ -1733,13 +1736,6 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
               : (isHandUp ? Colors.orange : Colors.white10),
           width: isHero ? 3 : 2,
         ),
-        boxShadow: isHero ? [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.2),
-            blurRadius: 20,
-            spreadRadius: 2,
-          )
-        ] : null,
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
@@ -1748,33 +1744,14 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
             VideoTrackRenderer(
               cameraTrack,
               fit: VideoViewFit.cover,
+              key: ValueKey("video_track_${p.identity}"),
             )
           else
-            Container(
-              color: const Color(0xFF1C1F26),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      IconlyBold.profile,
-                      color: Colors.white24,
-                      size: isHero ? 80 : 30,
-                    ),
-                    if (isHero) ...[
-                      const SizedBox(height: 10),
-                      const Text(
-                        "الكاميرا مغلقة",
-                        style: TextStyle(color: Colors.white38, fontSize: 12),
-                      )
-                    ]
-                  ],
-                ),
-              ),
+            const Center(
+              child: Icon(IconlyBold.profile, color: Colors.white10, size: 30),
             ),
           
-          // المدرس Hero Label
-          if (isHero)
+          if (isHero && !isCompact)
             Positioned(
               top: 15,
               right: 15,
@@ -1798,62 +1775,17 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
               ),
             ),
 
-          if (isHandUp)
-             Positioned(
-              top: 10,
-              left: isHero ? null : 10,
-              right: isHero ? 15 : null,
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
-                child: const Icon(Icons.back_hand, color: Colors.white, size: 16),
-              ),
-            ),
-
-          if (widget.isTeacher && !isLocal)
-            Positioned(
-              top: 5,
-              left: 5,
-              child: GestureDetector(
-                onTap: () => widget.onControlMic(
-                  p.identity,
-                  !p.isMicrophoneEnabled(),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: (p.isMicrophoneEnabled() ? Colors.green : Colors.red).withOpacity(0.8),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    p.isMicrophoneEnabled() ? Icons.mic : Icons.mic_off,
-                    color: Colors.white,
-                    size: 14,
-                  ),
-                ),
-              ),
-            ),
-            
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: isHero ? 10 : 6),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Colors.black.withOpacity(0.8), Colors.transparent],
-                ),
-              ),
+              padding: const EdgeInsets.all(6),
+              color: Colors.black45,
               child: Text(
-                isLocal ? "أنت (${p.identity})" : p.identity,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: isHero ? 14 : 10,
-                  fontWeight: isHero ? FontWeight.bold : FontWeight.normal,
-                ),
+                isLocal ? "${p.name ?? p.identity} (أنت)" : (p.name ?? p.identity),
+                style: const TextStyle(color: Colors.white, fontSize: 10),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),

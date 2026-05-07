@@ -40,6 +40,20 @@ class DatabaseService {
     }
   }
 
+  Future<Map<String, dynamic>?> getProfileByExternalId(String externalId) async {
+    try {
+      final response = await _supabase
+          .from('profiles')
+          .select()
+          .eq('external_id', externalId)
+          .maybeSingle();
+      return response;
+    } catch (e) {
+      debugPrint("Error fetching profile by external_id: $e");
+      return null;
+    }
+  }
+
   Future<void> updateUserRole(String id, String newRole) async {
     try {
       await _supabase.from('profiles').update({'role': newRole}).eq('id', id);
@@ -76,6 +90,32 @@ class DatabaseService {
     } catch (e) {
       debugPrint("Error fetching sessions: $e");
       rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getSessionById(String sessionId) async {
+    try {
+      final response = await _supabase
+          .from('sessions')
+          .select('*, profiles!teacher_id(full_name), rooms(is_active, room_name)')
+          .eq('id', sessionId)
+          .maybeSingle();
+      return response;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getSessionByLmsId(String lmsId) async {
+    try {
+      final response = await _supabase
+          .from('sessions')
+          .select('*, profiles!teacher_id(full_name), rooms(is_active, room_name)')
+          .eq('lms_id', lmsId)
+          .maybeSingle();
+      return response;
+    } catch (e) {
+      return null;
     }
   }
 
@@ -132,7 +172,6 @@ class DatabaseService {
     }
   }
 
-  // جلب الطلاب المسجلين في حصة معينة للمدرس
   Future<List<Map<String, dynamic>>> getEnrolledStudents(String sessionId) async {
     try {
       final response = await _supabase
@@ -164,7 +203,6 @@ class DatabaseService {
     }
   }
 
-  // تفعيل أو إغلاق الغرفة
   Future<void> toggleRoomStatus(String sessionId, bool isActive, {String? roomName}) async {
     try {
       final existing = await _supabase.from('rooms')
@@ -188,7 +226,6 @@ class DatabaseService {
     }
   }
 
-  // تسجيل طالب بكود الحصة
   Future<void> enrollStudentByCode(String studentId, String classCode) async {
     try {
       final cleanCode = classCode.trim().toUpperCase();

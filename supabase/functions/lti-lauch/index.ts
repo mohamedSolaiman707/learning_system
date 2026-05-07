@@ -5,54 +5,88 @@ import * as djwt from "https://deno.land/x/djwt@v2.8/mod.ts"
 serve(async (req) => {
   if (req.method !== 'POST') return new Response("Method not allowed", { status: 405 })
 
-  const formData = await req.formData()
-  const id_token = formData.get('id_token') as string
+  try {
+    const formData = await req.formData()
+    const id_token = formData.get('id_token') as string
 
-  // 1. فك التوكن بدون تحقق أولاً لمعرفة من هو الـ Issuer
-  const [header, payload, signature] = djwt.decode(id_token)
-  const iss = (payload as any).iss
-  const sub = (payload as any).sub // ID المستخدم في Moodle
-  const email = (payload as any).email
-  const name = (payload as any).name
+    if (!id_token) throw new Error("Missing id_token")
 
-  // جلب إعدادات المنصة من قاعدة البيانات
-  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const { data: config } = await supabase.from('lms_configs').select('*').eq('issuer', iss).single()
+    // 1. فك التوكن واستخراج البيانات
+    const [header, payload, signature] = djwt.decode(id_token) as any
+    const sub = payload.sub 
+    const email = payload.email
+    const name = payload.name
+    
+    const context = payload['https://purl.imsglobal.org/spec/lti/claim/context'] || {}
+    const lms_id = context.id 
+    const courseTitle = context.title || "حصة دراسية"
+    const roles = payload['https://purl.imsglobal.org/spec/lti/claim/roles'] || []
+    const isInstructor = roles.some((role: string) => role.includes('Instructor'))
 
-  // ملاحظة: هنا يجب إضافة كود للتحقق من التوقيع (Signature Validation) باستخدام JWKS الخاص بـ Moodle
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    )
 
-  // 2. البحث عن المستخدم أو إنشاؤه في Supabase Auth
-  // نستخدم الـ 'sub' كـ external_id الذي أضفناه للجداول سابقاً
-  let { data: profile } = await supabase.from('profiles').select('id').eq('external_id', sub).maybeSingle()
+    // 2. إدارة المستخدم (Provisioning)
+    let { data: profile } = await supabase.from('profiles').select('id, role').eq('external_id', sub).maybeSingle()
 
-  if (!profile) {
-    // إنشاء مستخدم جديد صامتاً
-    const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-      email: email,
-      email_confirm: true,
-      user_metadata: { full_name: name },
-      password: crypto.randomUUID() // باسورد عشوائي لأن الدخول عبر LTI
-    })
+    if (!profile) {
+      const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+        email: email,
+        email_confirm: true,
+        user_metadata: { full_name: name },
+        password: crypto.randomUUID()
+      })
+      if (authError || !authUser.user) throw authError || new Error("User creation failed")
 
-    if (newUser.user) {
-      await supabase.from('profiles').update({
+      const { data: newProfile } = await supabase.from('profiles').update({
         external_id: sub,
-        role: (payload as any)['https://purl.imsglobal.org/spec/lti/claim/roles'].includes('Instructor') ? 'teacher' : 'student'
-      }).eq('id', newUser.user.id)
-      profile = { id: newUser.user.id }
+        role: isInstructor ? 'teacher' : 'student'
+      }).eq('id', authUser.user.id).select().single()
+      profile = newProfile
     }
+
+    // 3. إدارة الحصة (Auto-Session)
+    let { data: session } = await supabase.from('sessions').select('id').eq('lms_id', lms_id).maybeSingle()
+
+    if (!session && isInstructor) {
+      const { data: newSession } = await supabase.from('sessions').insert({
+        lms_id: lms_id,
+        title: courseTitle,
+        teacher_id: profile.id,
+        start_time: new Date().toISOString(),
+        class_code: Math.random().toString(36).substring(2, 8).toUpperCase()
+      }).select().single()
+      session = newSession
+    }
+
+    // --- ميزة التحضير التلقائي (Automatic Attendance) ---
+    if (session && profile.role === 'student') {
+      await supabase.from('attendance').upsert({
+        session_id: session.id,
+        student_id: profile.id,
+        status: 'present',
+        joined_at: new Date().toISOString()
+      }, { onConflict: 'session_id,student_id' })
+    }
+
+    // 4. تسجيل الدخول السحري
+    const { data: loginData, error: linkError } = await supabase.auth.admin.generateLink({
+      type: 'magiclink',
+      email: email,
+    })
+    if (linkError) throw linkError
+
+    // 5. التحويل النهائي
+    const appUrl = Deno.env.get('APP_URL') || "https://your-app.vercel.app"
+    const redirectUrl = `${appUrl}/#/?lms_id=${lms_id}`
+    const finalUrl = `${loginData.properties.action_link}&redirect_to=${encodeURIComponent(redirectUrl)}`
+
+    return Response.redirect(finalUrl, 302)
+
+  } catch (error) {
+    console.error("LTI Launch Error:", error)
+    return new Response(`Error: ${error.message}`, { status: 500 })
   }
-
-  // 3. إنشاء Session للمستخدم للتحويل للتطبيق
-  const { data: loginData } = await supabase.auth.admin.generateLink({
-    type: 'magiclink',
-    email: email
-  })
-
-  // 4. التحويل لغرفة الفيديو في تطبيق Flutter Web
-  // الرابط النهائي الذي سيضعه العميل في Moodle
-  const lms_id = (payload as any)['https://purl.imsglobal.org/spec/lti/claim/context'].id
-  const redirectUrl = `${Deno.env.get('APP_URL')}/#/video-room?lms_id=${lms_id}`
-
-  return Response.redirect(loginData.properties.action_link + "&redirect_to=" + encodeURIComponent(redirectUrl), 302)
 })

@@ -7,7 +7,11 @@ import 'package:iconly/iconly.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/livekit_service.dart';
+import '../../../core/services/database_service.dart';
+import '../../../core/models/question_model.dart';
+import '../../../core/models/quiz_model.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
+import 'package:provider/provider.dart';
 
 // موديل الرسم الاحترافي
 class Stroke {
@@ -21,7 +25,7 @@ class VideoRoomScreen extends StatefulWidget {
   final String title;
   final String roomName;
   final String userName;
-  final String userId; // تم إضافة UUID
+  final String userId;
   final bool isTeacher;
   final String? sessionId;
 
@@ -30,7 +34,7 @@ class VideoRoomScreen extends StatefulWidget {
     required this.title,
     required this.roomName,
     required this.userName,
-    required this.userId, // مطلوب الآن
+    required this.userId,
     this.isTeacher = false,
     this.sessionId,
   });
@@ -50,6 +54,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   bool _isCamEnabled = false;
   bool _isHandRaised = false;
   bool _isChatOpen = false;
+  bool _isQAOpen = false;
   bool _isParticipantsOpen = false;
   bool _isPollsOpen = false;
   bool _isBreakoutOpen = false;
@@ -57,7 +62,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   bool _isScreenSharing = false;
   bool _isChatLocked = false;
   bool _isMicLocked = false;
+  bool _isRecording = false;
   String? _classCode;
+
+  // Quiz State
+  QuizModel? _activeQuiz;
+  int _quizTimeLeft = 0;
+  Timer? _quizTimer;
+  int? _selectedQuizOption;
+  bool _quizSubmitted = false;
+  List<QuizResultModel> _quizResults = [];
 
   // Whiteboard State
   final List<Stroke> _whiteboardStrokes = [];
@@ -73,6 +87,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   String? _myVote;
 
   final _messageController = TextEditingController();
+  final _questionController = TextEditingController();
   final supabase = Supabase.instance.client;
 
   List<Map<String, dynamic>> _messages = [];
@@ -89,28 +104,49 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     _chatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (_isChatOpen) _fetchMessages();
     });
-    if (widget.isTeacher && widget.sessionId != null) {
-      _fetchClassCode();
+    if (widget.sessionId != null) {
+      _fetchSessionDetails();
     }
   }
 
-  Future<void> _fetchClassCode() async {
+  Future<void> _fetchSessionDetails() async {
     try {
       final res = await supabase
           .from('sessions')
-          .select('class_code')
+          .select('class_code, is_recording_enabled')
           .eq('id', widget.sessionId!)
           .single();
-      if (mounted) setState(() => _classCode = res['class_code']);
+      
+      if (mounted) {
+        setState(() => _classCode = res['class_code']);
+        if (widget.isTeacher && res['is_recording_enabled'] == true) {
+          _startRecordingSession();
+        }
+      }
     } catch (e) {
-      debugPrint("Error fetching class code: $e");
+      debugPrint("Error fetching session details: $e");
+    }
+  }
+
+  Future<void> _startRecordingSession() async {
+    final success = await LiveKitService().startRecording(widget.roomName, widget.sessionId!);
+    if (success && mounted) {
+      setState(() => _isRecording = true);
+      _sendData({'type': 'recording_status', 'value': true});
+    }
+  }
+
+  Future<void> _stopRecordingSession() async {
+    if (widget.isTeacher && _isRecording) {
+      await LiveKitService().stopRecording(widget.roomName, widget.sessionId!);
+      if (mounted) setState(() => _isRecording = false);
+      _sendData({'type': 'recording_status', 'value': false});
     }
   }
 
   Future<void> _connectToRoom(String roomName) async {
     setState(() => _isLoading = true);
     try {
-      // تعديل استدعاء التوكن لاستخدام الـ UUID والاسم
       final token = await LiveKitService().getRoomToken(
         roomName: roomName,
         userId: widget.userId,
@@ -138,6 +174,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             _myVote = null;
             _isPollsOpen = true;
             _isChatOpen = false;
+            _isQAOpen = false;
             _isParticipantsOpen = false;
             _isWhiteboardOpen = false;
           });
@@ -151,8 +188,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             _activePoll = null;
             if (!widget.isTeacher) _isPollsOpen = false;
           });
+        } else if (data['type'] == 'quiz_create') {
+          _handleIncomingQuiz(data['quiz']);
         } else if (data['type'] == 'breakout_invite' &&
-            data['target'] == widget.userId) { // استخدام الـ UUID كهدف
+            data['target'] == widget.userId) {
           _showBreakoutInvitation(data['room'], data['groupName']);
         } else if (data['type'] == 'hand_raise') {
           final p = event.participant;
@@ -185,10 +224,18 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           }
         } else if (data['type'] == 'control_chat') {
           setState(() => _isChatLocked = data['value']);
+        } else if (data['type'] == 'recording_status') {
+          setState(() => _isRecording = data['value']);
         }
       });
 
       await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
+
+      // تسجيل دخول الطالب آلياً للحضور
+      if (!widget.isTeacher && widget.sessionId != null) {
+        final db = DatabaseService();
+        await db.logStudentEntry(widget.sessionId!, widget.userId);
+      }
 
       if (widget.isTeacher || roomName != widget.roomName) {
         await room.localParticipant?.setCameraEnabled(true);
@@ -210,6 +257,134 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         _isLoading = false;
       });
     }
+  }
+
+  // --- Quiz Logic ---
+  void _handleIncomingQuiz(Map<String, dynamic> quizData) {
+    setState(() {
+      _activeQuiz = QuizModel.fromMap(quizData);
+      _quizTimeLeft = _activeQuiz!.timeLimitSeconds;
+      _selectedQuizOption = null;
+      _quizSubmitted = false;
+    });
+    
+    _quizTimer?.cancel();
+    _quizTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        if (_quizTimeLeft > 0) {
+          _quizTimeLeft--;
+        } else {
+          _quizTimer?.cancel();
+          if (!_quizSubmitted && !widget.isTeacher) {
+            _submitQuizAnswer();
+          }
+        }
+      });
+    });
+  }
+
+  Future<void> _submitQuizAnswer() async {
+    if (_quizSubmitted || _activeQuiz == null) return;
+    setState(() => _quizSubmitted = true);
+    
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    final isCorrect = _selectedQuizOption == _activeQuiz!.correctOptionIndex;
+    
+    await db.submitQuizAnswer({
+      'quiz_id': _activeQuiz!.id,
+      'student_id': widget.userId,
+      'student_name': widget.userName,
+      'selected_option_index': _selectedQuizOption,
+      'is_correct': isCorrect,
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isCorrect ? "إجابة صحيحة! 🎉" : "إجابة خاطئة، حظاً أوفر"),
+          backgroundColor: isCorrect ? Colors.green : Colors.redAccent,
+        )
+      );
+    }
+  }
+
+  void _showCreateQuizDialog() {
+    final questionController = TextEditingController();
+    final optionControllers = List.generate(4, (_) => TextEditingController());
+    int correctIndex = 0;
+    int duration = 60;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1C1F26),
+          title: const Text("إنشاء اختبار سريع", style: TextStyle(color: Colors.white)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: questionController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(labelText: "السؤال", labelStyle: TextStyle(color: Colors.grey)),
+                ),
+                const SizedBox(height: 20),
+                ...List.generate(4, (i) => Row(
+                  children: [
+                    Radio<int>(
+                      value: i,
+                      groupValue: correctIndex,
+                      onChanged: (val) => setDialogState(() => correctIndex = val!),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: optionControllers[i],
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(hintText: "الاختيار ${i + 1}", hintStyle: const TextStyle(color: Colors.grey)),
+                      ),
+                    ),
+                  ],
+                )),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    const Text("المدة (ثواني): ", style: TextStyle(color: Colors.white)),
+                    const SizedBox(width: 10),
+                    DropdownButton<int>(
+                      dropdownColor: const Color(0xFF1C1F26),
+                      value: duration,
+                      items: [30, 60, 90, 120, 180].map((s) => DropdownMenuItem(value: s, child: Text("$s", style: const TextStyle(color: Colors.white)))).toList(),
+                      onChanged: (val) => setDialogState(() => duration = val!),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+            ElevatedButton(
+              onPressed: () async {
+                final db = Provider.of<DatabaseService>(context, listen: false);
+                final quizData = await db.createQuiz({
+                  'session_id': widget.sessionId,
+                  'question': questionController.text,
+                  'options': optionControllers.map((c) => c.text).toList(),
+                  'correct_option_index': correctIndex,
+                  'time_limit_seconds': duration,
+                });
+                
+                _sendData({'type': 'quiz_create', 'quiz': quizData});
+                _handleIncomingQuiz(quizData);
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text("بدء الاختبار"),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showAuthoritySnackBar(bool lock, bool val) {
@@ -284,13 +459,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     bool isOn = p.isMicrophoneEnabled();
     _sendData({
       'type': 'control_mic',
-      'target': p.identity, // identity هنا هي UUID
+      'target': p.identity,
       'value': !isOn,
       'lock': isOn,
     });
   }
 
-  // تحضير جميع الطلاب المعتمد على الـ UUID
   Future<void> _markAllAsPresent() async {
     if (widget.sessionId == null || _room == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -311,7 +485,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     setState(() => _isLoading = true);
 
     try {
-      // استخدام الـ identity مباشرة لأنه أصبح UUID
       final List<Map<String, dynamic>> attendanceData = studentParticipants.map((p) {
         return {
           'session_id': widget.sessionId,
@@ -329,7 +502,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("تم تحضير ${attendanceData.length} طالب بنجاح (UUID) ✅"),
+            content: Text("تم تحضير ${attendanceData.length} طالب بنجاح ✅"),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
           ),
@@ -475,7 +648,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   void _shareInvite() {
     if (_classCode == null) return;
     
-    // إنشاء رابط مباشر للحصة
     final String appUrl = "https://learning-system-cz8hhsedk-real-estat.vercel.app";
     final String liveLink = "$appUrl/#/live?sessionId=${widget.sessionId}";
 
@@ -489,8 +661,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           children: [
             const Text("شارك كود الحصة أو الرابط المباشر مع الطلاب:", textAlign: TextAlign.center),
             const SizedBox(height: 20),
-            
-            // كود الحصة
             const Text("كود الحصة", style: TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 8),
             Container(
@@ -510,10 +680,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                 ),
               ),
             ),
-            
             const SizedBox(height: 24),
-            
-            // رابط الحصة
             const Text("الرابط المباشر", style: TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 8),
             Container(
@@ -592,10 +759,17 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
 
   @override
   void dispose() {
+    // تسجيل خروج الطالب لحساب مدة الحضور
+    if (!widget.isTeacher && widget.sessionId != null) {
+      DatabaseService().logStudentExit(widget.sessionId!, widget.userId);
+    }
+    _stopRecordingSession();
+    _quizTimer?.cancel();
     _listener?.dispose();
     _room?.disconnect();
     _chatTimer?.cancel();
     _messageController.dispose();
+    _questionController.dispose();
     super.dispose();
   }
 
@@ -630,10 +804,117 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           if (_isParticipantsOpen) _buildParticipantsPanel(),
           if (_isPollsOpen) _buildPollsPanel(),
           if (_isBreakoutOpen) _buildBreakoutPanel(),
+          if (_isQAOpen) _buildQAPanel(),
+          
+          if (_activeQuiz != null) _buildQuizOverlay(),
+
           _buildTopBar(inSubRoom),
           _buildBottomControls(),
         ],
       ),
+    );
+  }
+
+  Widget _buildQuizOverlay() {
+    final bool isFinished = _quizTimeLeft == 0 || _quizSubmitted;
+    return Positioned.fill(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+        child: Container(
+          color: Colors.black54,
+          alignment: Alignment.center,
+          child: Container(
+            width: 400,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1F26),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("اختبار سريع 📝", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(color: _quizTimeLeft < 10 ? Colors.red : Colors.blue, borderRadius: BorderRadius.circular(12)),
+                      child: Text("$_quizTimeLeft s", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Text(_activeQuiz!.question, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                const SizedBox(height: 24),
+                if (widget.isTeacher)
+                   _buildTeacherQuizStats()
+                else
+                   ...List.generate(_activeQuiz!.options.length, (i) => Padding(
+                     padding: const EdgeInsets.only(bottom: 12),
+                     child: InkWell(
+                       onTap: isFinished ? null : () => setState(() => _selectedQuizOption = i),
+                       child: Container(
+                         padding: const EdgeInsets.all(16),
+                         decoration: BoxDecoration(
+                           color: _selectedQuizOption == i ? Colors.blue.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+                           borderRadius: BorderRadius.circular(12),
+                           border: Border.all(color: _selectedQuizOption == i ? Colors.blue : Colors.white10),
+                         ),
+                         child: Row(
+                           children: [
+                             Text("${String.fromCharCode(65 + i)}.", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                             const SizedBox(width: 12),
+                             Expanded(child: Text(_activeQuiz!.options[i], style: const TextStyle(color: Colors.white))),
+                           ],
+                         ),
+                       ),
+                     ),
+                   )),
+                const SizedBox(height: 24),
+                if (!widget.isTeacher && !isFinished)
+                  ElevatedButton(
+                    onPressed: _selectedQuizOption == null ? null : _submitQuizAnswer,
+                    style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
+                    child: const Text("تسليم الإجابة"),
+                  ),
+                if (isFinished || widget.isTeacher)
+                   TextButton(
+                     onPressed: () => setState(() => _activeQuiz = null),
+                     child: const Text("إغلاق", style: TextStyle(color: Colors.grey)),
+                   ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeacherQuizStats() {
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: db.watchQuizResults(_activeQuiz!.id),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const CircularProgressIndicator();
+        final results = snapshot.data!.map((r) => QuizResultModel.fromMap(r)).toList();
+        final correctCount = results.where((r) => r.isCorrect).length;
+        
+        return Column(
+          children: [
+            Text("إجابات الطلاب: ${results.length}", style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: results.isEmpty ? 0 : correctCount / results.length,
+              backgroundColor: Colors.white10,
+              color: Colors.green,
+            ),
+            const SizedBox(height: 8),
+            Text("نسبة الإجابة الصحيحة: ${results.isEmpty ? 0 : (correctCount / results.length * 100).toInt()}%", style: const TextStyle(color: Colors.green, fontSize: 12)),
+          ],
+        );
+      },
     );
   }
 
@@ -835,15 +1116,37 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    inSubRoom
-                        ? "غرفة فرعية: $_currentActiveRoom"
-                        : widget.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                  child: Row(
+                    children: [
+                      Text(
+                        inSubRoom
+                            ? "غرفة فرعية: $_currentActiveRoom"
+                            : widget.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (_isRecording) ...[
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.withOpacity(0.5)),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.circle, color: Colors.red, size: 8),
+                              SizedBox(width: 4),
+                              Text("REC", style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 if (inSubRoom)
@@ -858,6 +1161,27 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     tooltip: "دعوة طلاب",
                     onPressed: _shareInvite,
                   ),
+                if (widget.isTeacher)
+                   IconButton(
+                    icon: const Icon(Icons.quiz_outlined, color: Colors.white70),
+                    tooltip: "اختبار سريع",
+                    onPressed: _showCreateQuizDialog,
+                  ),
+                IconButton(
+                  icon: Icon(
+                    Icons.question_answer_outlined,
+                    color: _isQAOpen ? Colors.blue : Colors.white70,
+                  ),
+                  tooltip: "الأسئلة والأجوبة",
+                  onPressed: () => setState(() {
+                    _isQAOpen = !_isQAOpen;
+                    _isChatOpen = false;
+                    _isParticipantsOpen = false;
+                    _isPollsOpen = false;
+                    _isBreakoutOpen = false;
+                    _isWhiteboardOpen = false;
+                  }),
+                ),
                 IconButton(
                   icon: Icon(
                     Icons.edit_note,
@@ -867,6 +1191,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                   onPressed: () => setState(() {
                     _isWhiteboardOpen = !_isWhiteboardOpen;
                     _isChatOpen = false;
+                    _isQAOpen = false;
                     _isParticipantsOpen = false;
                     _isPollsOpen = false;
                   }),
@@ -880,6 +1205,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                   onPressed: () => setState(() {
                     _isPollsOpen = !_isPollsOpen;
                     _isChatOpen = false;
+                    _isQAOpen = false;
                     _isParticipantsOpen = false;
                     _isBreakoutOpen = false;
                     _isWhiteboardOpen = false;
@@ -895,6 +1221,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     onPressed: () => setState(() {
                       _isBreakoutOpen = !_isBreakoutOpen;
                       _isChatOpen = false;
+                      _isQAOpen = false;
                       _isParticipantsOpen = false;
                       _isPollsOpen = false;
                     }),
@@ -908,6 +1235,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                   onPressed: () => setState(() {
                     _isParticipantsOpen = !_isParticipantsOpen;
                     _isChatOpen = false;
+                    _isQAOpen = false;
                     _isPollsOpen = false;
                     _isBreakoutOpen = false;
                   }),
@@ -920,6 +1248,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                   tooltip: "الدردشة",
                   onPressed: () => setState(() {
                     _isChatOpen = !_isChatOpen;
+                    _isQAOpen = false;
                     _isParticipantsOpen = false;
                     _isPollsOpen = false;
                     _isBreakoutOpen = false;
@@ -934,6 +1263,160 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildQAPanel() {
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    return Positioned(
+      top: 110,
+      right: 20,
+      bottom: 120,
+      child: Container(
+        width: 350,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1F26).withOpacity(0.95),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text("الأسئلة والأجوبة (Q&A)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+            const Divider(color: Colors.white10, height: 1),
+            Expanded(
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: db.watchQuestions(widget.sessionId!),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                  final questions = snapshot.data!.map((q) => QuestionModel.fromMap(q)).toList();
+                  
+                  if (questions.isEmpty) return const Center(child: Text("لا توجد أسئلة حالياً", style: TextStyle(color: Colors.grey)));
+                  
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: questions.length,
+                    itemBuilder: (context, i) => _buildQuestionItem(questions[i]),
+                  );
+                },
+              ),
+            ),
+            if (!widget.isTeacher)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _questionController,
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        decoration: const InputDecoration(
+                          hintText: "اسأل سؤالاً...",
+                          hintStyle: TextStyle(color: Colors.grey),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(IconlyBold.send, color: Colors.blue),
+                      onPressed: () async {
+                        if (_questionController.text.isEmpty) return;
+                        await db.submitQuestion({
+                          'session_id': widget.sessionId,
+                          'student_id': widget.userId,
+                          'student_name': widget.userName,
+                          'content': _questionController.text,
+                        });
+                        _questionController.clear();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuestionItem(QuestionModel q) {
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: q.isPinned ? Colors.blue.withOpacity(0.1) : Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: q.isPinned ? Colors.blue.withOpacity(0.3) : Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(q.studentName, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11)),
+              const Spacer(),
+              if (q.isPinned) const Icon(Icons.push_pin, color: Colors.blue, size: 14),
+              if (widget.isTeacher) ...[
+                IconButton(
+                  icon: Icon(Icons.push_pin_outlined, size: 16, color: q.isPinned ? Colors.blue : Colors.grey),
+                  onPressed: () => db.togglePinQuestion(q.id, !q.isPinned),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                  onPressed: () => db.deleteQuestion(q.id),
+                ),
+              ],
+            ],
+          ),
+          Text(q.content, style: const TextStyle(color: Colors.white, fontSize: 13)),
+          if (q.isAnswered) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.green, size: 14),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(q.answer!, style: const TextStyle(color: Colors.greenAccent, fontSize: 12))),
+                ],
+              ),
+            ),
+          ] else if (widget.isTeacher) ...[
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => _showAnswerDialog(q),
+              child: const Text("الرد على السؤال", style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showAnswerDialog(QuestionModel q) {
+    final ansController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("الرد على السؤال"),
+        content: TextField(controller: ansController, decoration: const InputDecoration(hintText: "اكتب إجابتك هنا...")),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          ElevatedButton(
+            onPressed: () async {
+              if (ansController.text.isEmpty) return;
+              await Provider.of<DatabaseService>(context, listen: false).answerQuestion(q.id, ansController.text);
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text("إرسال الرد"),
+          ),
+        ],
       ),
     );
   }

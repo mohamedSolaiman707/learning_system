@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/services/attendance_pdf_service.dart';
+
 class AttendanceScreen extends StatefulWidget {
   final String sessionId;
   final String subjectName;
+  final String? teacherName;
 
   const AttendanceScreen({
     super.key,
     required this.sessionId,
     required this.subjectName,
+    this.teacherName,
   });
 
   @override
@@ -36,10 +40,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           .select('student_id, profiles:student_id(full_name)')
           .eq('session_id', widget.sessionId);
 
-      // 2. جلب سجلات الحضور الحالية (التي سجلتها الـ Edge Function تلقائياً)
+      // 2. جلب سجلات الحضور الحالية (التي سجلتها الـ VideoRoomScreen تلقائياً)
       final attendanceRecords = await supabase
           .from('attendance')
-          .select('student_id, status')
+          .select('student_id, status, joined_at, left_at, total_duration_minutes')
           .eq('session_id', widget.sessionId);
 
       final List<dynamic> attendanceList = attendanceRecords as List;
@@ -50,7 +54,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             final profile = e['profiles'] as Map<String, dynamic>?;
             final studentId = e['student_id'];
             
-            // التحقق مما إذا كان الطالب قد تم تحضيره تلقائياً
+            // البحث عن سجل الحضور
             final record = attendanceList.firstWhere(
               (r) => r['student_id'] == studentId, 
               orElse: () => null
@@ -60,13 +64,38 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               'id': studentId,
               'name': profile != null ? profile['full_name'] : "طالب غير معروف",
               'present': record != null && record['status'] == 'present', 
-              'isAutoMarked': record != null, // علامة تدل على أنه حضر من مودل
+              'joined_at': record?['joined_at'],
+              'left_at': record?['left_at'],
+              'duration': record?['total_duration_minutes'],
+              'isAutoMarked': record != null,
             };
           }).toList();
         });
       }
     } catch (e) {
       debugPrint("Attendance Load Error: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _exportToPdf() async {
+    if (_students.isEmpty) return;
+    
+    setState(() => _isLoading = true);
+    try {
+      final pdfService = AttendancePdfService();
+      await pdfService.generateReport(
+        subjectName: widget.subjectName,
+        teacherName: widget.teacherName ?? "مدرس المادة",
+        studentsData: _students,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("خطأ أثناء إنشاء ملف PDF: $e"), backgroundColor: Colors.red),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -82,7 +111,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         'status': s['present'] ? 'present' : 'absent',
       }).toList();
 
-      // استخدام upsert لتحديث السجلات الموجودة أو إضافة جديدة
       await supabase.from('attendance').upsert(attendanceData, onConflict: 'session_id,student_id');
       
       if (!mounted) return;
@@ -107,12 +135,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         backgroundColor: Colors.white, elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          if (!_isLoading && _students.isNotEmpty)
+          if (!_isLoading && _students.isNotEmpty) ...[
+            IconButton(
+              onPressed: _exportToPdf,
+              icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+              tooltip: "تحميل التقرير PDF",
+            ),
             TextButton.icon(
               onPressed: _saveAttendance,
               icon: const Icon(Icons.done_all),
               label: const Text("اعتماد الكشف"),
-            )
+            ),
+          ]
         ],
       ),
       body: _isLoading
@@ -126,7 +160,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     children: [
                       Icon(Icons.info_outline, size: 16, color: Colors.blue),
                       SizedBox(width: 8),
-                      Text("الطلاب المفعلين باللون الأخضر تم تحضيرهم تلقائياً من مودل", style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
+                      Text("الطلاب المسجل دخولهم تلقائياً تظهر بيانات انضمامهم في تقرير PDF", style: TextStyle(fontSize: 11, color: Colors.blueGrey)),
                     ],
                   ),
                 ),
@@ -182,9 +216,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           child: Text(s['name'][0].toUpperCase(), style: TextStyle(color: isAuto ? Colors.green : Colors.blue)),
         ),
         title: Text(s['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(
-          isAuto ? "تم التحضير تلقائياً من Moodle" : (s['present'] ? "حاضر" : "غائب"),
-          style: TextStyle(color: s['present'] ? Colors.green : Colors.red, fontSize: 11),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isAuto ? "تم التحضير تلقائياً" : (s['present'] ? "حاضر" : "غائب"),
+              style: TextStyle(color: s['present'] ? Colors.green : Colors.red, fontSize: 11),
+            ),
+            if (isAuto && s['duration'] != null)
+              Text("المدة: ${s['duration']} دقيقة", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+          ],
         ),
         trailing: Switch(
           value: s['present'],

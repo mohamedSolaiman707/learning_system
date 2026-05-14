@@ -12,6 +12,7 @@ import '../../../../core/models/session_model.dart';
 import '../widgets/next_class_card.dart';
 import '../widgets/upcoming_class_item.dart';
 import '../../video_room/video_room_screen.dart';
+import '../../video_room/waiting_room_screen.dart';
 import '../assignments/student_assignments_screen.dart';
 import '../resources/student_resources_screen.dart';
 
@@ -199,7 +200,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final userName = authProvider.profile?['full_name'] ?? "الطالب";
-    final userId = authProvider.user?.id ?? ""; // جلب الـ UUID
+    final userId = authProvider.user?.id ?? ""; 
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
@@ -289,18 +290,28 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
       subject: _nextSession!.subjectName,
       teacher: _nextSession!.teacherName,
       startTime: intl.DateFormat('hh:mm a').format(_nextSession!.startTime),
-      isLive: _nextSession!.isLive,
+      isLive: _nextSession!.isLive || _nextSession!.isActive,
       onJoin: () {
-        Navigator.push(context, MaterialPageRoute(
-          builder: (context) => VideoRoomScreen(
-            title: "بث مباشر: ${_nextSession!.subjectName}",
-            roomName: "room_${_nextSession!.id}",
-            userName: userName,
-            userId: userId, // تمرير الـ UUID
-            isTeacher: false,
-            sessionId: _nextSession!.id,
-          ),
-        ));
+        if (_nextSession!.status == 'waiting') {
+           Navigator.push(context, MaterialPageRoute(
+            builder: (context) => WaitingRoomScreen(
+              session: _nextSession!,
+              userName: userName,
+              userId: userId,
+            ),
+          ));
+        } else {
+          Navigator.push(context, MaterialPageRoute(
+            builder: (context) => VideoRoomScreen(
+              title: "بث مباشر: ${_nextSession!.subjectName}",
+              roomName: "room_${_nextSession!.id}",
+              userName: userName,
+              userId: userId,
+              isTeacher: false,
+              sessionId: _nextSession!.id,
+            ),
+          ));
+        }
       },
     );
   }

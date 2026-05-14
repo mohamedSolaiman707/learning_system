@@ -24,8 +24,8 @@ class LiveKitService {
         },
         body: jsonEncode({
           'roomName': roomName,
-          'userId': userId, // نستخدم الـ UUID كـ Identity
-          'userName': userName, // نرسل الاسم كـ Metadata أو ليتم معالجته في الـ Edge Function
+          'userId': userId,
+          'userName': userName,
         }),
       );
 
@@ -39,6 +39,48 @@ class LiveKitService {
     } catch (e) {
       print('Exception getting token: $e');
       return null;
+    }
+  }
+
+  Future<bool> startRecording(String roomName, String sessionId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$supabaseUrl/functions/v1/livekit-recording'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $supabaseAnonKey',
+        },
+        body: jsonEncode({
+          'action': 'start',
+          'roomName': roomName,
+          'sessionId': sessionId,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error starting recording: $e');
+      return false;
+    }
+  }
+
+  Future<bool> stopRecording(String roomName, String sessionId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$supabaseUrl/functions/v1/livekit-recording'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $supabaseAnonKey',
+        },
+        body: jsonEncode({
+          'action': 'stop',
+          'roomName': roomName,
+          'sessionId': sessionId,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error stopping recording: $e');
+      return false;
     }
   }
 }

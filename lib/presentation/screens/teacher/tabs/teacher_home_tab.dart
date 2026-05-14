@@ -135,6 +135,170 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     }
   }
 
+  void _showAddSessionDialog() {
+    final nameController = TextEditingController();
+    DateTime startDate = DateTime.now();
+    TimeOfDay startTime = TimeOfDay.now();
+    int selectedDurationMinutes = 60;
+    bool isRecordingEnabled = true;
+
+    final List<Map<String, dynamic>> durations = [
+      {'label': '30 دقيقة', 'value': 30},
+      {'label': '45 دقيقة', 'value': 45},
+      {'label': 'ساعة واحدة', 'value': 60},
+      {'label': 'ساعة ونصف', 'value': 90},
+      {'label': 'ساعتين', 'value': 120},
+      {'label': '3 ساعات', 'value': 180},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text("جدولة حصة جديدة", style: TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: "اسم المادة/الحصة",
+                    prefixIcon: const Icon(IconlyLight.edit),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text("توقيت البدء", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                _buildDateTimePicker(
+                  label: "تاريخ ووقت البدء",
+                  date: startDate,
+                  time: startTime,
+                  onTap: () async {
+                    final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 90)));
+                    if (d != null) {
+                      final t = await showTimePicker(context: context, initialTime: startTime);
+                      if (t != null) setDialogState(() { startDate = d; startTime = t; });
+                    }
+                  },
+                ),
+                const SizedBox(height: 20),
+                const Text("مدة الحصة", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<int>(
+                      value: selectedDurationMinutes,
+                      isExpanded: true,
+                      items: durations.map((d) => DropdownMenuItem<int>(
+                        value: d['value'],
+                        child: Text(d['label']),
+                      )).toList(),
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => selectedDurationMinutes = val);
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SwitchListTile(
+                  title: const Text("تسجيل الحصة تلقائياً", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  subtitle: const Text("سيتم حفظ الفيديو في مكتبة الحصص", style: TextStyle(fontSize: 11)),
+                  value: isRecordingEnabled,
+                  onChanged: (val) => setDialogState(() => isRecordingEnabled = val),
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: Colors.red,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء", style: TextStyle(color: Colors.grey))),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text.isEmpty) return;
+                final start = DateTime(startDate.year, startDate.month, startDate.day, startTime.hour, startTime.minute);
+                final end = start.add(Duration(minutes: selectedDurationMinutes));
+                
+                final auth = Provider.of<AuthProvider>(context, listen: false);
+                final db = Provider.of<DatabaseService>(context, listen: false);
+                
+                await db.saveSession({
+                  'subject_name': nameController.text,
+                  'teacher_id': auth.user!.id,
+                  'start_time': start.toIso8601String(),
+                  'end_time': end.toIso8601String(),
+                  'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString().padLeft(6, '0'),
+                  'status': 'waiting',
+                  'is_recording_enabled': isRecordingEnabled,
+                });
+                if (mounted) { Navigator.pop(context); _loadData(); }
+              },
+              style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+              child: const Text("حفظ الحصة"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateTimePicker({required String label, required DateTime date, required TimeOfDay time, required VoidCallback onTap}) {
+    final formatted = "${intl.DateFormat('yyyy-MM-dd').format(date)} ${time.format(context)}";
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
+        child: Row(
+          children: [
+            const Icon(IconlyLight.calendar, size: 20, color: Colors.blue),
+            const SizedBox(width: 12),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(formatted, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _quickStartLive(String teacherName) async {
+    setState(() => _isLoading = true);
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final db = Provider.of<DatabaseService>(context, listen: false);
+      
+      final sessionData = await db.saveSession({
+        'subject_name': "بث مباشر سريع - $teacherName",
+        'teacher_id': auth.user!.id,
+        'start_time': DateTime.now().toIso8601String(),
+        'end_time': DateTime.now().add(const Duration(hours: 1)).toIso8601String(),
+        'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString().padLeft(6, '0'),
+        'status': 'active',
+        'is_recording_enabled': true,
+      });
+
+      if (sessionData != null && mounted) {
+        final sessionModel = SessionModel.fromMap(sessionData);
+        await _startLive(sessionModel, teacherName);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل بدء البث السريع")));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _startLive(SessionModel session, String teacherName) async {
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -230,7 +394,20 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
         title: Text("لوحة المدرس", style: TextStyle(color: Colors.black.withOpacity(0.8), fontWeight: FontWeight.bold, fontSize: 18)),
         centerTitle: false,
       ),
-      actions: [IconButton(onPressed: () {}, icon: const Badge(child: Icon(IconlyLight.notification))), const SizedBox(width: 15)],
+      actions: [
+        IconButton(
+          onPressed: _showAddSessionDialog, 
+          icon: const Icon(IconlyLight.plus, color: Colors.blue),
+          tooltip: "إضافة حصة مجدولة",
+        ),
+        IconButton(
+          onPressed: () => _quickStartLive(name), 
+          icon: const Icon(Icons.bolt, color: Colors.amber, size: 28),
+          tooltip: "بث مباشر سريع",
+        ),
+        IconButton(onPressed: () {}, icon: const Badge(child: Icon(IconlyLight.notification))), 
+        const SizedBox(width: 15)
+      ],
     );
   }
 
@@ -281,11 +458,36 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     final startTimeStr = intl.DateFormat('hh:mm a').format(_nextSession!.startTime);
     final String liveLink = "https://learning-system-cz8hhsedk-real-estat.vercel.app/#/live?sessionId=${_nextSession!.id}";
 
+    final db = Provider.of<DatabaseService>(context, listen: false);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(isUpcoming ? "الحصة القادمة" : "بث مباشر الآن 🔴",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isUpcoming ? Colors.black : Colors.red)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(isUpcoming ? "الحصة القادمة" : "بث مباشر الآن 🔴",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isUpcoming ? Colors.black : Colors.red)),
+            if (_nextSession!.isWaiting)
+              StreamBuilder<int>(
+                stream: db.watchWaitingCount(_nextSession!.id),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data == 0) return const SizedBox.shrink();
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(20)),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.people_outline, size: 16, color: Colors.orange),
+                        const SizedBox(width: 4),
+                        Text("${snapshot.data} طالب في الانتظار", style: const TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  );
+                }
+              ),
+          ],
+        ),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(24),
@@ -308,7 +510,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                   const SizedBox(width: 16),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(_nextSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    Text("بدأت في $startTimeStr وتستمر حتى ${intl.DateFormat('hh:mm a').format(_nextSession!.endTime)}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    Text("تبدأ في $startTimeStr وتستمر حتى ${intl.DateFormat('hh:mm a').format(_nextSession!.endTime)}", style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -342,7 +544,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                   elevation: 0,
                 ),
-                child: Text(isUpcoming ? "بدء البث المباشر" : "دخول البث المباشر", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: Text(
+                  _nextSession!.isActive ? "دخول البث المباشر" : "بدء البث المباشر", 
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
+                ),
               ),
             ],
           ),

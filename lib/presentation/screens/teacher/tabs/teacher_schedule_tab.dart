@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/models/session_model.dart';
+import '../attendance/attendance_screen.dart';
 
 class TeacherScheduleTab extends StatefulWidget {
   const TeacherScheduleTab({super.key});
@@ -124,6 +125,18 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                   margin: const EdgeInsets.only(bottom: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   child: ListTile(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AttendanceScreen(
+                            sessionId: session.id,
+                            subjectName: session.subjectName,
+                            teacherName: supabase.auth.currentUser!.userMetadata?['full_name'],
+                          ),
+                        ),
+                      );
+                    },
                     contentPadding: const EdgeInsets.all(16),
                     leading: Container(
                       padding: const EdgeInsets.all(10),
@@ -140,3 +153,4 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
     );
   }
 }
+

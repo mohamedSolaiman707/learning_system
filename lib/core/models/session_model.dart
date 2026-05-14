@@ -6,6 +6,9 @@ class SessionModel {
   final DateTime startTime;
   final DateTime endTime;
   final bool isLive;
+  final String status; // 'waiting' | 'active' | 'ended'
+  final String? recordingUrl;
+  final bool isRecordingEnabled;
 
   SessionModel({
     required this.id,
@@ -15,6 +18,9 @@ class SessionModel {
     required this.startTime,
     required this.endTime,
     this.isLive = false,
+    this.status = 'waiting',
+    this.recordingUrl,
+    this.isRecordingEnabled = true,
   });
 
   factory SessionModel.fromMap(Map<String, dynamic> map) {
@@ -26,16 +32,13 @@ class SessionModel {
       teacherName = map['profiles']['full_name'] ?? "مدرس";
     }
 
-    // منطق متطور للتحقق من حالة اللايف لضمان الدقة
     bool liveStatus = false;
     final roomsData = map['rooms'];
     
     if (roomsData != null) {
       if (roomsData is List && roomsData.isNotEmpty) {
-        // إذا رجعت كقائمة، نتحقق من أي غرفة نشطة
         liveStatus = roomsData.any((r) => r['is_active'] == true);
       } else if (roomsData is Map) {
-        // إذا رجعت ككائن واحد
         liveStatus = roomsData['is_active'] == true;
       }
     }
@@ -48,8 +51,13 @@ class SessionModel {
       startTime: startTime,
       endTime: endTime,
       isLive: liveStatus,
+      status: map['status'] ?? 'waiting',
+      recordingUrl: map['recording_url'],
+      isRecordingEnabled: map['is_recording_enabled'] ?? true,
     );
   }
 
-  bool get hasEnded => DateTime.now().isAfter(endTime);
+  bool get hasEnded => status == 'ended' || DateTime.now().isAfter(endTime);
+  bool get isActive => status == 'active';
+  bool get isWaiting => status == 'waiting';
 }

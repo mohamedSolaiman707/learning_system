@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class DatabaseService {
   final _supabase = Supabase.instance.client;
 
-  // --- إحصائيات الإدمن ---
+  // --- Admin Stats ---
   Future<Map<String, int>> getAdminStats() async {
     try {
       final now = DateTime.now();
@@ -26,7 +26,7 @@ class DatabaseService {
     }
   }
 
-  // --- إدارة المستخدمين ---
+  // --- User Management ---
   Future<List<Map<String, dynamic>>> getAllUsers() async {
     try {
       final response = await _supabase.from('profiles').select().order('created_at', ascending: false);
@@ -77,7 +77,7 @@ class DatabaseService {
     }
   }
 
-  // --- إدارة الحصص ---
+  // --- Session Management ---
   Future<List<Map<String, dynamic>>> getAllSessions() async {
     try {
       final response = await _supabase.from('sessions').select('*, profiles!teacher_id(full_name)').order('start_time', ascending: false);
@@ -100,6 +100,20 @@ class DatabaseService {
       return await _supabase.from('sessions').select('*, profiles!teacher_id(full_name), rooms(is_active, room_name)').eq('lms_id', lmsId).maybeSingle();
     } catch (e) {
       return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getActiveSessions() async {
+    try {
+      // جلب الحصص التي لها غرفة نشطة حالياً
+      final response = await _supabase
+          .from('sessions')
+          .select('*, profiles!teacher_id(full_name), rooms!inner(is_active, room_name)')
+          .eq('rooms.is_active', true);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint("Error fetching active sessions: $e");
+      return [];
     }
   }
 
@@ -143,7 +157,7 @@ class DatabaseService {
       } else {
         await _supabase.from('rooms').update({'is_active': isActive}).eq('id', existing['id']);
       }
-
+      
       await updateSessionStatus(sessionId, isActive ? 'active' : 'ended');
     } catch (e) {
       rethrow;
@@ -179,13 +193,49 @@ class DatabaseService {
       final res = await _supabase.from('sessions').select('id').eq('class_code', classCode.trim().toUpperCase());
       if (res.isEmpty) throw Exception("كود الحصة غير صحيح");
       final sessionId = res[0]['id'];
-      await _supabase.from('enrollments').insert({'student_id': studentId, 'session_id': sessionId});
+      await enrollStudentBySessionId(studentId, sessionId);
     } catch (e) {
       rethrow;
     }
   }
 
-  // --- ميزات الحضور والتقارير ---
+  Stream<int> watchWaitingCount(String sessionId) {
+    return _supabase.from('session_waiting_participants').stream(primaryKey: ['id']).eq('session_id', sessionId).map((data) => data.length);
+  }
+
+
+  Future<void> leaveWaitingRoom(String sessionId, String studentId) async {
+    try {
+      await _supabase.from('session_waiting_participants').delete().eq('session_id', sessionId).eq('student_id', studentId);
+    } catch (e) {
+      debugPrint("Error leaving waiting room: $e");
+    }
+  }
+  Future<void> joinWaitingRoom(String sessionId, String studentId) async {
+    try {
+      await _supabase.from('session_waiting_participants').upsert({'session_id': sessionId, 'student_id': studentId});
+    } catch (e) {
+      debugPrint("Error joining waiting room: $e");
+    }
+  }
+  // --- ميزات غرفة الانتظار ---
+  Stream<Map<String, dynamic>> watchSessionStatus(String sessionId) {
+    return _supabase.from('sessions').stream(primaryKey: ['id']).eq('id', sessionId).map((data) => data.first);
+  }
+
+  Future<void> enrollStudentBySessionId(String studentId, String sessionId) async {
+    try {
+      await _supabase.from('enrollments').upsert({
+        'student_id': studentId,
+        'session_id': sessionId,
+      }, onConflict: 'student_id, session_id');
+    } catch (e) {
+      debugPrint("Enrollment error: $e");
+      rethrow;
+    }
+  }
+
+  // --- Attendance Features ---
   Future<void> logStudentEntry(String sessionId, String studentId) async {
     try {
       await _supabase.from('attendance').upsert({
@@ -233,32 +283,7 @@ class DatabaseService {
     }
   }
 
-  // --- ميزات غرفة الانتظار ---
-  Stream<Map<String, dynamic>> watchSessionStatus(String sessionId) {
-    return _supabase.from('sessions').stream(primaryKey: ['id']).eq('id', sessionId).map((data) => data.first);
-  }
-
-  Future<void> joinWaitingRoom(String sessionId, String studentId) async {
-    try {
-      await _supabase.from('session_waiting_participants').upsert({'session_id': sessionId, 'student_id': studentId});
-    } catch (e) {
-      debugPrint("Error joining waiting room: $e");
-    }
-  }
-
-  Future<void> leaveWaitingRoom(String sessionId, String studentId) async {
-    try {
-      await _supabase.from('session_waiting_participants').delete().eq('session_id', sessionId).eq('student_id', studentId);
-    } catch (e) {
-      debugPrint("Error leaving waiting room: $e");
-    }
-  }
-
-  Stream<int> watchWaitingCount(String sessionId) {
-    return _supabase.from('session_waiting_participants').stream(primaryKey: ['id']).eq('session_id', sessionId).map((data) => data.length);
-  }
-
-  // --- ميزات الأسئلة والأجوبة (Q&A) ---
+  // --- Q&A Features ---
   Future<void> submitQuestion(Map<String, dynamic> questionData) async {
     try {
       await _supabase.from('questions').insert(questionData);
@@ -295,7 +320,7 @@ class DatabaseService {
     return _supabase.from('questions').stream(primaryKey: ['id']).eq('session_id', sessionId).order('is_pinned', ascending: false).order('created_at', ascending: false);
   }
 
-  // --- ميزات الاختبار المباشر (Quiz) ---
+  // --- Quiz Features ---
   Future<Map<String, dynamic>> createQuiz(Map<String, dynamic> quizData) async {
     try {
       return await _supabase.from('quizzes').insert(quizData).select().single();

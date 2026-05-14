@@ -25,7 +25,8 @@ class StudentHomeTab extends StatefulWidget {
 
 class _StudentHomeTabState extends State<StudentHomeTab> {
   bool _isLoading = true;
-  List<SessionModel> _sessions = [];
+  List<SessionModel> _enrolledSessions = [];
+  List<SessionModel> _allActiveSessions = [];
   SessionModel? _nextSession;
   int _pendingAssignmentsCount = 0;
   Timer? _refreshTimer;
@@ -35,7 +36,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     super.initState();
     _loadStudentData(initial: true);
     
-    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       _loadStudentData(initial: false);
     });
   }
@@ -56,16 +57,26 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
       final assignService = AssignmentsService();
       
       if (auth.user != null) {
-        final response = await db.getStudentSchedule(auth.user!.id);
+        // 1. جلب حصص الطالب المسجل فيها
+        final enrolledResponse = await db.getStudentSchedule(auth.user!.id);
         
+        // 2. جلب جميع الحصص المباشرة حالياً في النظام
+        final activeResponse = await db.getActiveSessions();
+
         if (mounted) {
           setState(() {
-            _sessions = response.map((e) => SessionModel.fromMap(e['sessions'])).toList();
-            _sessions.sort((a, b) => a.startTime.compareTo(b.startTime));
+            _enrolledSessions = enrolledResponse.map((e) => SessionModel.fromMap(e['sessions'])).toList();
+            _enrolledSessions.sort((a, b) => a.startTime.compareTo(b.startTime));
+
+            _allActiveSessions = activeResponse.map((e) => SessionModel.fromMap(e)).toList();
 
             final now = DateTime.now();
             try {
-              _nextSession = _sessions.firstWhere((s) => s.endTime.isAfter(now));
+              // الأولوية للحصص المباشرة من حصص الطالب
+              _nextSession = _enrolledSessions.firstWhere(
+                (s) => (s.isLive || s.isActive) && s.endTime.isAfter(now),
+                orElse: () => _enrolledSessions.firstWhere((s) => s.endTime.isAfter(now)),
+              );
             } catch (_) {
               _nextSession = null;
             }
@@ -73,8 +84,9 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
             if (initial) _isLoading = false;
           });
 
+          // حساب الواجبات المعلقة
           int pendingCount = 0;
-          for (var session in _sessions) {
+          for (var session in _enrolledSessions) {
              final assignments = await assignService.getAssignments(session.id);
              for (var assignment in assignments) {
                final submission = await assignService.getStudentSubmission(assignment.id, auth.user!.id);
@@ -88,6 +100,37 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
       }
     } catch (e) {
       if (mounted && initial) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _joinActiveSession(SessionModel session) async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    
+    // تسجيل الطالب في الحصة أولاً إذا لم يكن مسجلاً
+    await db.enrollStudentBySessionId(auth.user!.id, session.id);
+    
+    if (!mounted) return;
+
+    if (session.status == 'waiting') {
+      Navigator.push(context, MaterialPageRoute(
+        builder: (context) => WaitingRoomScreen(
+          session: session,
+          userName: auth.profile?['full_name'] ?? "الطالب",
+          userId: auth.user!.id,
+        ),
+      ));
+    } else {
+      Navigator.push(context, MaterialPageRoute(
+        builder: (context) => VideoRoomScreen(
+          title: "بث مباشر: ${session.subjectName}",
+          roomName: "room_${session.id}",
+          userName: auth.profile?['full_name'] ?? "الطالب",
+          userId: auth.user!.id,
+          isTeacher: false,
+          sessionId: session.id,
+        ),
+      ));
     }
   }
 
@@ -219,18 +262,30 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                         children: [
                           _buildWelcomeSection(userName),
                           const SizedBox(height: 30),
-                          if (_nextSession != null) 
+                          
+                          // قسم الحصص المباشرة الآن (لأي حصة في النظام)
+                          if (_allActiveSessions.isNotEmpty) ...[
+                            _buildSectionHeader("بث مباشر الآن 🔴", isLive: true),
+                            const SizedBox(height: 15),
+                            _buildActiveSessionsList(),
+                            const SizedBox(height: 30),
+                          ],
+
+                          if (_nextSession != null) ...[
+                            _buildSectionHeader("حصتك القادمة"),
+                            const SizedBox(height: 15),
                             GestureDetector(
                               onTap: () => _showSessionOptions(_nextSession!),
                               child: _buildNextClassSection(userName, userId),
-                            )
-                          else
+                            ),
+                          ] else
                             _buildNoClassesCard(),
+                          
                           const SizedBox(height: 40),
                           _buildStatsAndProgress(),
                           const SizedBox(height: 40),
-                          if (_sessions.isNotEmpty) ...[
-                            _buildUpcomingClassesHeader(),
+                          if (_enrolledSessions.isNotEmpty) ...[
+                            _buildSectionHeader("جدول حصصك"),
                             const SizedBox(height: 15),
                             _buildUpcomingGrid(),
                           ],
@@ -268,7 +323,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   }
 
   Widget _buildWelcomeSection(String name) {
-    int todayCount = _sessions.where((s) {
+    int todayCount = _enrolledSessions.where((s) {
       final now = DateTime.now();
       return s.startTime.day == now.day && s.startTime.month == now.month;
     }).length;
@@ -285,34 +340,67 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     );
   }
 
+  Widget _buildSectionHeader(String title, {bool isLive = false}) {
+    return Row(
+      children: [
+        Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isLive ? Colors.red : Colors.black87)),
+        if (isLive) ...[
+          const SizedBox(width: 8),
+          Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
+        ]
+      ],
+    );
+  }
+
+  Widget _buildActiveSessionsList() {
+    return SizedBox(
+      height: 160,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _allActiveSessions.length,
+        itemBuilder: (context, index) {
+          final session = _allActiveSessions[index];
+          return Container(
+            width: 280,
+            margin: const EdgeInsets.only(left: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFFE91E63), Color(0xFF9C27B0)]),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [BoxShadow(color: Colors.purple.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(child: Text(session.subjectName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), overflow: TextOverflow.ellipsis)),
+                    Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)), child: const Text("LIVE", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+                  ],
+                ),
+                Text(session.teacherName, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                ElevatedButton(
+                  onPressed: () => _joinActiveSession(session),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.purple, minimumSize: const Size(double.infinity, 36), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: const Text("انضمام الآن", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildNextClassSection(String userName, String userId) {
     return NextClassCard(
       subject: _nextSession!.subjectName,
       teacher: _nextSession!.teacherName,
       startTime: intl.DateFormat('hh:mm a').format(_nextSession!.startTime),
       isLive: _nextSession!.isLive || _nextSession!.isActive,
-      onJoin: () {
-        if (_nextSession!.status == 'waiting') {
-           Navigator.push(context, MaterialPageRoute(
-            builder: (context) => WaitingRoomScreen(
-              session: _nextSession!,
-              userName: userName,
-              userId: userId,
-            ),
-          ));
-        } else {
-          Navigator.push(context, MaterialPageRoute(
-            builder: (context) => VideoRoomScreen(
-              title: "بث مباشر: ${_nextSession!.subjectName}",
-              roomName: "room_${_nextSession!.id}",
-              userName: userName,
-              userId: userId,
-              isTeacher: false,
-              sessionId: _nextSession!.id,
-            ),
-          ));
-        }
-      },
+      onJoin: () => _joinActiveSession(_nextSession!),
     );
   }
 
@@ -334,9 +422,9 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
   Widget _buildStatsAndProgress() {
     return Row(
       children: [
-        Expanded(child: _buildStatItem("الحصص", "${_sessions.length}", Icons.collections_bookmark, Colors.green)),
+        Expanded(child: _buildStatItem("حصصي", "${_enrolledSessions.length}", Icons.collections_bookmark, Colors.green)),
         const SizedBox(width: 16),
-        Expanded(child: _buildStatItem("الواجبات", "$_pendingAssignmentsCount", Icons.assignment, Colors.orange)),
+        Expanded(child: _buildStatItem("واجباتي", "$_pendingAssignmentsCount", Icons.assignment, Colors.orange)),
       ],
     );
   }
@@ -358,12 +446,8 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
     );
   }
 
-  Widget _buildUpcomingClassesHeader() {
-    return const Text("حصصك القادمة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold));
-  }
-
   Widget _buildUpcomingGrid() {
-    final upcoming = _sessions.where((s) => s.id != _nextSession?.id).toList();
+    final upcoming = _enrolledSessions.where((s) => s.id != _nextSession?.id).toList();
     if (upcoming.isEmpty) return const SizedBox.shrink();
 
     return GridView.builder(

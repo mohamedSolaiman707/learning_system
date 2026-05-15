@@ -490,7 +490,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           'session_id': widget.sessionId,
           'student_id': p.identity,
           'status': 'present',
-          'marked_at': DateTime.now().toIso8601String(),
+          'joined_at': DateTime.now().toIso8601String(), // استخدام joined_at للتوحيد
         };
       }).toList();
 

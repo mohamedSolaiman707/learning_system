@@ -87,6 +87,19 @@ class DatabaseService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getTeacherSessionsAll(String teacherId) async {
+    try {
+      final response = await _supabase
+          .from('sessions')
+          .select('*, profiles!teacher_id(full_name)')
+          .eq('teacher_id', teacherId)
+          .order('start_time', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>?> getSessionById(String sessionId) async {
     try {
       return await _supabase.from('sessions').select('*, profiles!teacher_id(full_name), rooms(is_active, room_name)').eq('id', sessionId).maybeSingle();
@@ -105,7 +118,6 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getActiveSessions() async {
     try {
-      // جلب الحصص التي لها غرفة نشطة حالياً
       final response = await _supabase
           .from('sessions')
           .select('*, profiles!teacher_id(full_name), rooms!inner(is_active, room_name)')
@@ -141,11 +153,36 @@ class DatabaseService {
 
   Future<Map<String, dynamic>> getTeacherStats(String teacherId) async {
     try {
-      final response = await _supabase.from('enrollments').select('student_id, sessions!inner(teacher_id)').eq('sessions.teacher_id', teacherId).count(CountOption.exact);
-      return {'totalStudents': response.count, 'rating': '5.0'};
-    } catch (_) {
-      return {'totalStudents': 0, 'rating': '5.0'};
+      final response = await _supabase
+          .from('enrollments')
+          .select('student_id, sessions!inner(teacher_id)')
+          .eq('sessions.teacher_id', teacherId);
+      
+      final uniqueStudents = (response as List).map((e) => e['student_id']).toSet().length;
+      
+      return {
+        'totalStudents': uniqueStudents,
+        'rating': '5.0',
+        'todaySessionsCount': await _getTodaySessionsCount(teacherId)
+      };
+    } catch (e) {
+      debugPrint("Error getting teacher stats: $e");
+      return {'totalStudents': 0, 'rating': '5.0', 'todaySessionsCount': 0};
     }
+  }
+
+  Future<int> _getTodaySessionsCount(String teacherId) async {
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+    final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59).toUtc().toIso8601String();
+    
+    final res = await _supabase.from('sessions')
+        .select()
+        .eq('teacher_id', teacherId)
+        .gte('start_time', startOfToday)
+        .lte('start_time', endOfToday)
+        .count(CountOption.exact);
+    return res.count;
   }
 
   Future<void> toggleRoomStatus(String sessionId, bool isActive, {String? roomName}) async {
@@ -283,6 +320,17 @@ class DatabaseService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getSessionEnrollments(String sessionId) async {
+    try {
+      return await _supabase
+          .from('enrollments')
+          .select('student_id, profiles:student_id(full_name)')
+          .eq('session_id', sessionId);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // --- Q&A Features ---
   Future<void> submitQuestion(Map<String, dynamic> questionData) async {
     try {
@@ -339,5 +387,16 @@ class DatabaseService {
 
   Stream<List<Map<String, dynamic>>> watchQuizResults(String quizId) {
     return _supabase.from('quiz_results').stream(primaryKey: ['id']).eq('quiz_id', quizId);
+  }
+
+  Future<List<Map<String, dynamic>>> getSessionQuizResults(String sessionId) async {
+    try {
+      return await _supabase
+          .from('quiz_results')
+          .select('*, quizzes!inner(session_id)')
+          .eq('quizzes.session_id', sessionId);
+    } catch (e) {
+      return [];
+    }
   }
 }

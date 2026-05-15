@@ -35,43 +35,72 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     setState(() => _isLoading = true);
     try {
       // 1. جلب جميع الطلاب المسجلين في هذه الحصة
-      final enrollments = await supabase
+      final enrollmentsRes = await supabase
           .from('enrollments')
           .select('student_id, profiles:student_id(full_name)')
           .eq('session_id', widget.sessionId);
 
       // 2. جلب سجلات الحضور الحالية (التي سجلتها الـ VideoRoomScreen تلقائياً)
-      final attendanceRecords = await supabase
+      final attendanceRes = await supabase
           .from('attendance')
-          .select('student_id, status, joined_at, left_at, total_duration_minutes')
+          .select('student_id, status, joined_at, left_at, total_duration_minutes, profiles:student_id(full_name)')
           .eq('session_id', widget.sessionId);
 
-      final List<dynamic> attendanceList = attendanceRecords as List;
+      final List<dynamic> enrollments = enrollmentsRes as List;
+      final List<dynamic> attendanceList = attendanceRes as List;
 
-      if (enrollments != null) {
-        setState(() {
-          _students = (enrollments as List).map((e) {
-            final profile = e['profiles'] as Map<String, dynamic>?;
-            final studentId = e['student_id'];
-            
-            // البحث عن سجل الحضور
-            final record = attendanceList.firstWhere(
-              (r) => r['student_id'] == studentId, 
-              orElse: () => null
-            );
+      // دمج البيانات لضمان ظهور كل من سجل أو حضر
+      final Map<String, Map<String, dynamic>> studentsMap = {};
 
-            return {
-              'id': studentId,
-              'name': profile != null ? profile['full_name'] : "طالب غير معروف",
-              'present': record != null && record['status'] == 'present', 
-              'joined_at': record?['joined_at'],
-              'left_at': record?['left_at'],
-              'duration': record?['total_duration_minutes'],
-              'isAutoMarked': record != null,
-            };
-          }).toList();
-        });
+      // إضافة المسجلين أولاً
+      for (var e in enrollments) {
+        final studentId = e['student_id'];
+        final profile = e['profiles'] as Map<String, dynamic>?;
+        studentsMap[studentId] = {
+          'id': studentId,
+          'name': profile?['full_name'] ?? "طالب غير معروف",
+          'present': false,
+          'joined_at': null,
+          'left_at': null,
+          'duration': null,
+          'isAutoMarked': false,
+        };
       }
+
+      // إضافة أو تحديث بيانات من حضروا فعلياً
+      for (var a in attendanceList) {
+        final studentId = a['student_id'];
+        final profile = a['profiles'] as Map<String, dynamic>?;
+        
+        if (studentsMap.containsKey(studentId)) {
+          studentsMap[studentId]!['present'] = a['status'] == 'present';
+          studentsMap[studentId]!['joined_at'] = a['joined_at'];
+          studentsMap[studentId]!['left_at'] = a['left_at'];
+          studentsMap[studentId]!['duration'] = a['total_duration_minutes'];
+          studentsMap[studentId]!['isAutoMarked'] = true;
+        } else {
+          // طالب حضر ولكنه غير مسجل في الحصة (دخل عبر رابط مباشر مثلاً)
+          studentsMap[studentId] = {
+            'id': studentId,
+            'name': profile?['full_name'] ?? "طالب زائر",
+            'present': a['status'] == 'present',
+            'joined_at': a['joined_at'],
+            'left_at': a['left_at'],
+            'duration': a['total_duration_minutes'],
+            'isAutoMarked': true,
+          };
+        }
+      }
+
+      setState(() {
+        _students = studentsMap.values.toList();
+        // ترتيب القائمة: الحاضرون أولاً ثم أبجدياً
+        _students.sort((a, b) {
+          if (a['present'] != b['present']) return b['present'] ? 1 : -1;
+          return a['name'].compareTo(b['name']);
+        });
+      });
+      
     } catch (e) {
       debugPrint("Attendance Load Error: $e");
     } finally {
@@ -237,6 +266,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Widget _buildEmptyState() {
-    return const Center(child: Text("لا يوجد طلاب مسجلين في هذه الحصة"));
+    return const Center(child: Text("لا يوجد طلاب مسجلين أو حاضرين في هذه الحصة"));
   }
 }

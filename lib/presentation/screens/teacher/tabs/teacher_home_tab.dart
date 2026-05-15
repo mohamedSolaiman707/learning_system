@@ -10,6 +10,7 @@ import '../../../../core/utils/responsive.dart';
 import '../assignments/teacher_assignments_screen.dart';
 import '../attendance/attendance_screen.dart';
 import '../resources/teacher_resources_screen.dart';
+import '../reports/teacher_reports_screen.dart';
 import '../../video_room/video_room_screen.dart';
 import '../widgets/teacher_stat_card.dart';
 
@@ -68,6 +69,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   }
 
   void _handleQuickAction(String type) {
+    // إذا كان الطلب هو التقارير، ننتقل مباشرة لصفحة التقارير العامة
+    if (type == 'reports') {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const TeacherReportsScreen()));
+      return;
+    }
+
     if (_sessions.isEmpty) {
       _showNoSessionAlert();
       return;

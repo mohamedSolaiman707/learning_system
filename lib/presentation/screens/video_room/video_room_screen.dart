@@ -2128,19 +2128,18 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
         Participant? teacher;
         List<Participant> students = [];
 
+        // تحديد المعلم والطلاب برمجياً
         if (widget.isTeacher) {
           teacher = widget.room.localParticipant;
           students = widget.room.remoteParticipants.values.toList();
         } else {
-          if (widget.room.remoteParticipants.isNotEmpty) {
-             teacher = widget.room.remoteParticipants.values.first;
-             students = [
-               if (widget.room.localParticipant != null) widget.room.localParticipant!,
-               ...widget.room.remoteParticipants.values.skip(1),
-             ];
-          } else {
-            teacher = widget.room.localParticipant;
-          }
+          // محاولة إيجاد المعلم من المشاركين الآخرين
+          final remoteTeacher = widget.room.remoteParticipants.values.firstOrNull;
+          teacher = remoteTeacher;
+          students = [
+            if (widget.room.localParticipant != null) widget.room.localParticipant!,
+            ...widget.room.remoteParticipants.values.where((p) => p.identity != remoteTeacher?.identity),
+          ];
         }
 
         TrackPublication? screenSharePub;
@@ -2154,116 +2153,82 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
           }
         }
 
-        if (widget.isWhiteboardOpen) {
-          return Positioned(
-            top: 100,
-            left: 0,
-            right: 0,
-            height: 100,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: participants.length,
-              itemBuilder: (context, i) {
-                return Container(
-                  width: 100,
-                  margin: const EdgeInsets.only(right: 12),
-                  child: _buildParticipantTile(participants[i], isCompact: true),
-                );
-              },
-            ),
-          );
-        }
-
-        return Column(
-          children: [
-            const SizedBox(height: 100),
-            
-            if (teacher != null)
-              Expanded(
-                flex: 3,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  child: _buildParticipantTile(teacher, isHero: true),
-                ),
-              ),
-
-            if (screenSharePub != null)
-              Expanded(
-                flex: 4,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.green, width: 2),
-                      color: Colors.black,
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: VideoTrackRenderer(
-                      screenSharePub.track as VideoTrack,
-                      fit: VideoViewFit.contain,
-                      key: ValueKey("screenshare_${screenSharePub.sid}"),
-                    ),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return Column(
+              children: [
+                const SizedBox(height: 100), // مسافة لشريط الـ TopBar
+                
+                // منطقة الفيديو الأساسية (المعلم أو مشاركة الشاشة)
+                Expanded(
+                  flex: 5,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    child: screenSharePub != null 
+                      ? _buildScreenShareView(screenSharePub)
+                      : (teacher != null 
+                          ? _buildParticipantTile(teacher, isHero: true)
+                          : const Center(child: Text("في انتظار المعلم...", style: TextStyle(color: Colors.white24)))),
                   ),
                 ),
-              ),
 
-            if (students.isNotEmpty)
-              Expanded(
-                flex: 2,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: (students.length / 8).ceil(),
-                        itemBuilder: (context, pageIndex) {
-                          final start = pageIndex * 8;
-                          final end = (start + 8) > students.length ? students.length : (start + 8);
-                          final pageStudents = students.sublist(start, end);
+                const SizedBox(height: 10),
 
-                          return GridView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 4,
-                              childAspectRatio: 1.0,
-                              mainAxisSpacing: 10,
-                              crossAxisSpacing: 10,
-                            ),
-                            itemCount: pageStudents.length,
-                            itemBuilder: (context, i) => _buildParticipantTile(pageStudents[i]),
-                          );
-                        },
+                // شريط الطلاب السفلي
+                if (students.isNotEmpty)
+                  SizedBox(
+                    height: constraints.maxHeight * 0.18,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 15),
+                      itemCount: students.length,
+                      itemBuilder: (context, index) => Container(
+                        width: (constraints.maxHeight * 0.18) * 1.5,
+                        margin: const EdgeInsets.only(left: 10, bottom: 10),
+                        child: _buildParticipantTile(students[index]),
                       ),
                     ),
-                    if (students.length > 8)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: SmoothPageIndicator(
-                          controller: _pageController,
-                          count: (students.length / 8).ceil(),
-                          effect: const WormEffect(
-                            dotHeight: 8,
-                            dotWidth: 8,
-                            activeDotColor: Colors.blue,
-                            dotColor: Colors.white24,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            
-            const SizedBox(height: 110),
-          ],
+                  ),
+                
+                const SizedBox(height: 110), // مسافة لشريط التحكم السفلي
+              ],
+            );
+          }
         );
       },
     );
   }
 
-  Widget _buildParticipantTile(Participant p, {bool isHero = false, bool isCompact = false}) {
+  Widget _buildScreenShareView(TrackPublication pub) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.withOpacity(0.5), width: 2),
+        color: Colors.black,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          VideoTrackRenderer(
+            pub.track as VideoTrack,
+            fit: VideoViewFit.contain,
+            key: ValueKey("screenshare_${pub.sid}"),
+          ),
+          Positioned(
+            top: 10,
+            left: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(6)),
+              child: const Text("مشاركة شاشة", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildParticipantTile(Participant p, {bool isHero = false}) {
     final bool isLocal = widget.room.localParticipant != null &&
         p.identity == widget.room.localParticipant!.identity;
     final bool isHandUp = isLocal
@@ -2279,66 +2244,98 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
       key: ValueKey("participant_tile_${p.identity}"),
       decoration: BoxDecoration(
         color: const Color(0xFF1C1F26),
-        borderRadius: BorderRadius.circular(isHero ? 24 : 15),
+        borderRadius: BorderRadius.circular(isHero ? 24 : 12),
         border: Border.all(
           color: p.isSpeaking
               ? Colors.blue
-              : (isHandUp ? Colors.orange : Colors.white10),
-          width: isHero ? 3 : 2,
+              : (isHero ? Colors.blue.withOpacity(0.3) : (isHandUp ? Colors.orange : Colors.white10)),
+          width: isHero ? 2 : 1,
         ),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
+        fit: StackFit.expand,
         children: [
-          if (cameraTrack != null)
+          if (cameraTrack != null && p.isCameraEnabled())
             VideoTrackRenderer(
               cameraTrack,
-              fit: VideoViewFit.cover,
+              fit: VideoViewFit.cover, // هذا هو السر لملء الشاشة بالكامل دون فراغات سوداء
               key: ValueKey("video_track_${p.identity}"),
             )
           else
-            const Center(
-              child: Icon(IconlyBold.profile, color: Colors.white10, size: 30),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: isHero ? 40 : 20,
+                    backgroundColor: Colors.white10,
+                    child: Text(
+                      (p.name?.isNotEmpty == true) ? p.name![0].toUpperCase() : "?",
+                      style: TextStyle(color: Colors.white, fontSize: isHero ? 30 : 16),
+                    ),
+                  ),
+                  if (isHero) const SizedBox(height: 10),
+                  if (isHero) const Text("الكاميرا مغلقة", style: TextStyle(color: Colors.white24, fontSize: 12)),
+                ],
+              ),
             ),
           
-          if (isHero && !isCompact)
+          // علامة المعلم (نفس ستايل لقطة الشاشة)
+          if (isHero)
             Positioned(
               top: 15,
               right: 15,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(10),
+                  color: Colors.blue.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.star, color: Colors.white, size: 14),
-                    SizedBox(width: 4),
-                    Text(
-                      "المعلم",
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
+                    Text("المعلم", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                    SizedBox(width: 5),
+                    Icon(Icons.star, color: Colors.white, size: 12),
                   ],
                 ),
               ),
             ),
 
+          // الاسم في الأسفل
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
             child: Container(
-              padding: const EdgeInsets.all(6),
-              color: Colors.black45,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+                ),
+              ),
               child: Text(
                 isLocal ? "${p.name ?? p.identity} (أنت)" : (p.name ?? p.identity),
-                style: const TextStyle(color: Colors.white, fontSize: 10),
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
+
+          // علامة رفع اليد
+          if (isHandUp)
+            Positioned(
+              top: 10,
+              left: 10,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+                child: const Icon(Icons.back_hand, color: Colors.white, size: 14),
+              ),
+            ),
         ],
       ),
     );

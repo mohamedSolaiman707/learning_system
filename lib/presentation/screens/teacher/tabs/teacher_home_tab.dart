@@ -456,7 +456,8 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     final isUpcoming = _nextSession!.startTime.isAfter(now);
     
     final startTimeStr = intl.DateFormat('hh:mm a').format(_nextSession!.startTime);
-    final String liveLink = "https://learning-system-cz8hhsedk-real-estat.vercel.app/#/live?sessionId=${_nextSession!.id}";
+    // جعل الرابط ديناميكياً بناءً على الـ Domain الحالي
+    final String liveLink = "${Uri.base.origin}/#/live?sessionId=${_nextSession!.id}";
 
     final db = Provider.of<DatabaseService>(context, listen: false);
 

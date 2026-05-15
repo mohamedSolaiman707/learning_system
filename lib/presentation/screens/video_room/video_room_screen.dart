@@ -648,7 +648,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   void _shareInvite() {
     if (_classCode == null) return;
     
-    final String appUrl = "https://learning-system-cz8hhsedk-real-estat.vercel.app";
+    // استخدام Uri.base لجعل الرابط ديناميكياً بناءً على الـ domain الحالي
+    final String appUrl = Uri.base.origin;
     final String liveLink = "$appUrl/#/live?sessionId=${widget.sessionId}";
 
     showDialog(

@@ -7,8 +7,8 @@ class VideoCallScreen extends StatefulWidget {
   final String subject;
 
   const VideoCallScreen({
-    super.key, 
-    required this.roomName, 
+    super.key,
+    required this.roomName,
     required this.subject
   });
 
@@ -24,7 +24,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101214), // لون خلفية أغمق وأكثر احترافية
+      backgroundColor: const Color(0xFF101214), // اللون الاحترافي الأصلي
       body: SafeArea(
         child: Column(
           children: [
@@ -33,7 +33,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    flex: 3,
+                    flex: 4, // توسيع مساحة العرض الرئيسية
                     child: _buildMainContent(),
                   ),
                   if (_isChatOpen && !Responsive.isMobile(context))
@@ -50,7 +50,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   Widget _buildTopBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8), // تقليل الارتفاع الرأسي
       child: Row(
         children: [
           Container(
@@ -70,6 +70,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           const SizedBox(width: 15),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(widget.subject, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
               Text("غرفة: ${widget.roomName}", style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
@@ -92,28 +93,26 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   Widget _buildMainContent() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // في حالة الشاشات الكبيرة، نضع المعلم في المنتصف بشكل بارز
         return Column(
           children: [
             Expanded(
-              flex: 5,
+              flex: 8, // المعلم يأخذ المساحة الأكبر
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 15),
+                padding: const EdgeInsets.fromLTRB(15, 5, 15, 10),
                 child: _buildParticipantCard(true, isMain: true),
               ),
             ),
-            const SizedBox(height: 10),
-            // شريط صغير للمشاركين الآخرين (الطلاب)
+            // شريط الطلاب (تصغير الارتفاع لإعطاء مساحة للمعلم)
             SizedBox(
-              height: constraints.maxHeight * 0.18,
+              height: constraints.maxHeight * 0.16,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 itemCount: 8,
                 itemBuilder: (context, index) => Container(
-                  width: (constraints.maxHeight * 0.18) * 1.5,
-                  margin: const EdgeInsets.only(left: 10, bottom: 5),
-                  child: _buildParticipantCard(false),
+                  width: (constraints.maxHeight * 0.16) * 1.5,
+                  margin: const EdgeInsets.only(left: 10, bottom: 8),
+                  child: _buildParticipantCard(false, studentIndex: index),
                 ),
               ),
             ),
@@ -123,21 +122,20 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     );
   }
 
-  Widget _buildParticipantCard(bool isTeacher, {bool isMain = false}) {
+  Widget _buildParticipantCard(bool isTeacher, {bool isMain = false, int? studentIndex}) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF2C2F33),
         borderRadius: BorderRadius.circular(12),
         border: isTeacher ? Border.all(color: Colors.blue.withOpacity(0.5), width: 1.5) : null,
         boxShadow: isMain ? [
-          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, spreadRadius: 2)
+          BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 15, spreadRadius: 2)
         ] : null,
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // خلفية محاكاة للفيديو
           Container(
             color: const Color(0xFF1A1C1E),
             child: Center(
@@ -147,8 +145,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
               ),
             ),
           ),
-          
-          // علامة المعلم في الزاوية العلوية (كما في الصورة)
+
           if (isTeacher)
             Positioned(
               top: 12,
@@ -170,24 +167,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
               ),
             ),
 
-          // اسم المشارك في الأسفل
-          Positioned(
-            bottom: 12,
-            left: 12,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                isTeacher ? "أ. محمد علي" : "طالب ${DateTime.now().millisecond % 100}",
-                style: const TextStyle(color: Colors.white, fontSize: 11),
-              ),
-            ),
-          ),
-          
-          // أيقونة المايك إذا كان مغلقاً
+          // تنبيه المايك المغلق (موجود ومفعل)
           if (isTeacher && !_isMicOn)
             const Positioned(
               top: 12,
@@ -198,6 +178,22 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                 child: Icon(Icons.mic_off, color: Colors.white, size: 16),
               ),
             ),
+
+          Positioned(
+            bottom: 12,
+            left: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                isTeacher ? "أ. محمد علي" : "طالب ${studentIndex ?? 0}",
+                style: const TextStyle(color: Colors.white, fontSize: 11),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -247,7 +243,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   Widget _buildBottomControls() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 25),
+      padding: const EdgeInsets.symmetric(vertical: 15), // تقليل الهامش لزيادة مساحة الفيديو
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -306,6 +302,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 5, offset: const Offset(0, 2))
+              ],
             ),
             child: Icon(icon, color: Colors.white, size: isEndCall ? 30 : 22),
           ),

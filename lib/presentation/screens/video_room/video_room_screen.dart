@@ -10,7 +10,6 @@ import '../../../core/services/livekit_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/models/question_model.dart';
 import '../../../core/models/quiz_model.dart';
-import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:provider/provider.dart';
 
 // موديل الرسم الاحترافي
@@ -78,7 +77,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   final List<Stroke> _redoStack = [];
   List<Offset> _currentStrokePoints = [];
   Color _selectedColor = Colors.black;
-  double _strokeWidth = 3.0;
+  final double _strokeWidth = 3.0;
   bool _isEraserMode = false;
 
   // Poll State
@@ -95,6 +94,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
 
   final Map<String, bool> _remoteHandStates = {};
   final List<Widget> _reactionParticles = [];
+
+  bool _isBreakoutActive = false;
 
   @override
   void initState() {
@@ -144,119 +145,170 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     }
   }
 
-  Future<void> _connectToRoom(String roomName) async {
-    setState(() => _isLoading = true);
-    try {
-      final token = await LiveKitService().getRoomToken(
-        roomName: roomName,
-        userId: widget.userId,
-        userName: widget.userName,
-      );
-      if (token == null) throw "فشل الحصول على تصريح الدخول (Token)";
+  Future<void> _connectToRoom(String roomName) async {setState(() => _isLoading = true);
+  try {
+    final token = await LiveKitService().getRoomToken(
+      roomName: roomName,
+      userId: widget.userId,
+      userName: widget.userName,
+    );
+    if (token == null) throw "فشل الحصول على تصريح الدخول (Token)";
 
-      if (_room != null) {
-        await _listener?.dispose();
-        await _room!.disconnect();
-      }
+    // تنظيف الاتصال القديم إذا وجد
+    if (_room != null) {
+      await _listener?.dispose();
+      await _room!.disconnect();
+    }
 
-      final room = Room();
-      _room = room;
-      _listener = room.createListener();
+    final room = Room();
+    _room = room;
+    _listener = room.createListener();
 
-      _listener!.on<DataReceivedEvent>((event) {
-        final decoded = utf8.decode(event.data);
-        final data = jsonDecode(decoded);
+    // الاستماع للبيانات المرسلة (Data Messages)
+    _listener!.on<DataReceivedEvent>((event) {
+      final decoded = utf8.decode(event.data);
+      final data = jsonDecode(decoded);
+      final String type = data['type'];
 
-        if (data['type'] == 'poll_create') {
-          setState(() {
+      setState(() {
+        switch (type) {
+          case 'poll_create':
             _activePoll = data['poll'];
             _pollResults = {for (var item in data['poll']['options']) item: 0};
             _myVote = null;
             _isPollsOpen = true;
-            _isChatOpen = false;
-            _isQAOpen = false;
-            _isParticipantsOpen = false;
-            _isWhiteboardOpen = false;
-          });
-        } else if (data['type'] == 'poll_vote') {
-          setState(() {
+            _closeOtherPanels(); // وظيفة مساعدة لإغلاق القوائم الأخرى
+            break;
+
+          case 'poll_vote':
             final option = data['option'];
             _pollResults[option] = (_pollResults[option] ?? 0) + 1;
-          });
-        } else if (data['type'] == 'poll_end') {
-          setState(() {
+            break;
+
+          case 'poll_end':
             _activePoll = null;
             if (!widget.isTeacher) _isPollsOpen = false;
-          });
-        } else if (data['type'] == 'quiz_create') {
-          _handleIncomingQuiz(data['quiz']);
-        } else if (data['type'] == 'breakout_invite' &&
-            data['target'] == widget.userId) {
-          _showBreakoutInvitation(data['room'], data['groupName']);
-        } else if (data['type'] == 'hand_raise') {
-          final p = event.participant;
-          if (p != null)
-            setState(() => _remoteHandStates[p.identity] = data['value']);
-        } else if (data['type'] == 'reaction') {
-          _showReactionEffect(data['value']);
-        } else if (data['type'] == 'whiteboard_draw') {
-          _handleRemoteDraw(data);
-        } else if (data['type'] == 'whiteboard_clear') {
-          setState(() {
+            break;
+
+          case 'new_question':
+            _showTopSnackBar("سؤال جديد من ${data['from']} ❓", Colors.blueGrey.shade900);
+            break;
+
+          case 'question_answered':
+            _showTopSnackBar("تم الرد على سؤالك ✅", Colors.green);
+            break;
+
+          case 'quiz_create':
+            _handleIncomingQuiz(data['quiz']);
+            break;
+
+          case 'hand_raise':
+            final p = event.participant;
+            if (p != null) _remoteHandStates[p.identity] = data['value'];
+            break;
+
+          case 'reaction':
+            _showReactionEffect(data['value']);
+            break;
+
+          case 'whiteboard_draw':
+            _handleRemoteDraw(data);
+            break;
+
+          case 'whiteboard_clear':
             _whiteboardStrokes.clear();
             _redoStack.clear();
-          });
-        } else if (data['type'] == 'whiteboard_undo') {
-          _executeUndo(remote: true);
-        } else if (data['type'] == 'whiteboard_redo') {
-          _executeRedo(remote: true);
-        } else if (data['type'] == 'control_mic' &&
-            (data['target'] == widget.userId || data['target'] == null)) {
-          if (!widget.isTeacher) {
-            bool lock = data['lock'] ?? false;
-            bool val = data['value'] ?? false;
-            _room?.localParticipant?.setMicrophoneEnabled(val);
-            setState(() {
+            break;
+
+          case 'whiteboard_undo':
+            _executeUndo(remote: true);
+            break;
+
+          case 'whiteboard_redo':
+            _executeRedo(remote: true);
+            break;
+
+          case 'control_mic':
+            if (!widget.isTeacher && (data['target'] == widget.userId || data['target'] == null)) {
+              bool lock = data['lock'] ?? false;
+              bool val = data['value'] ?? false;
+              _room?.localParticipant?.setMicrophoneEnabled(val);
               _isMicEnabled = val;
               _isMicLocked = lock;
-            });
-            _showAuthoritySnackBar(lock, val);
-          }
-        } else if (data['type'] == 'control_chat') {
-          setState(() => _isChatLocked = data['value']);
-        } else if (data['type'] == 'recording_status') {
-          setState(() => _isRecording = data['value']);
+              _showAuthoritySnackBar(lock, val);
+            }
+            break;
+
+          case 'control_chat':
+            _isChatLocked = data['value'];
+            break;
+
+          case 'recording_status':
+            _isRecording = data['value'];
+            break;
+
+          case 'breakout_invite':
+            if (data['target'] == widget.userId) {
+              _showBreakoutInvitation(data['room'], data['groupName']);
+            }
+            break;
+
+          case 'breakout_end':
+            _connectToRoom(widget.roomName);
+            _showTopSnackBar("انتهى وقت المجموعات، جاري العودة للقاعة الرئيسية...", Colors.orange);
+            break;
         }
       });
+    });
 
-      await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
+    await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
 
-      // تسجيل دخول الطالب آلياً للحضور
-      if (!widget.isTeacher && widget.sessionId != null) {
-        final db = DatabaseService();
-        await db.logStudentEntry(widget.sessionId!, widget.userId);
-      }
-
-      if (widget.isTeacher || roomName != widget.roomName) {
-        await room.localParticipant?.setCameraEnabled(true);
-        await room.localParticipant?.setMicrophoneEnabled(true);
-        if (mounted)
-          setState(() {
-            _isMicEnabled = true;
-            _isCamEnabled = true;
-          });
-      }
-
-      setState(() {
-        _isLoading = false;
-        _currentActiveRoom = roomName;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = "خطأ في الاتصال: $e";
-        _isLoading = false;
-      });
+    // تسجيل الحضور للطالب
+    if (!widget.isTeacher && widget.sessionId != null) {
+      DatabaseService().logStudentEntry(widget.sessionId!, widget.userId);
     }
+
+    // تفعيل الكاميرا والمايك عند الدخول لأول مرة أو كمعلم
+    if (widget.isTeacher || roomName != widget.roomName) {
+      await room.localParticipant?.setCameraEnabled(true);
+      await room.localParticipant?.setMicrophoneEnabled(true);
+      if (mounted) {
+        setState(() {
+          _isMicEnabled = true;
+          _isCamEnabled = true;
+        });
+      }
+    }
+
+    setState(() {
+      _isLoading = false;
+      _currentActiveRoom = roomName;
+    });
+  } catch (e) {
+    setState(() {
+      _errorMessage = "خطأ في الاتصال: $e";
+      _isLoading = false;
+    });
+  }
+  }
+
+// وظائف مساعدة لجعل الكود أنظف
+  void _closeOtherPanels() {
+    _isChatOpen = false;
+    _isQAOpen = false;
+    _isParticipantsOpen = false;
+    _isWhiteboardOpen = false;
+  }
+
+  void _showTopSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   // --- Quiz Logic ---
@@ -313,35 +365,48 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     final optionControllers = List.generate(4, (_) => TextEditingController());
     int correctIndex = 0;
     int duration = 60;
+    bool isSubmitting = false; // لحالة التحميل
 
     showDialog(
       context: context,
+      barrierDismissible: false, // منع إغلاق الديالوج أثناء التحميل
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1C1F26),
-          title: const Text("إنشاء اختبار سريع", style: TextStyle(color: Colors.white)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("إنشاء اختبار سريع",
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: questionController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(labelText: "السؤال", labelStyle: TextStyle(color: Colors.grey)),
+                  style: const TextStyle(color: Colors.white), // تصحيح اللون للأبيض
+                  decoration: const InputDecoration(
+                    labelText: "السؤال",
+                    labelStyle: TextStyle(color: Colors.grey),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                  ),
                 ),
                 const SizedBox(height: 20),
                 ...List.generate(4, (i) => Row(
                   children: [
                     Radio<int>(
                       value: i,
+                      activeColor: Colors.blue,
                       groupValue: correctIndex,
-                      onChanged: (val) => setDialogState(() => correctIndex = val!),
+                      onChanged: isSubmitting ? null : (val) => setDialogState(() => correctIndex = val!),
                     ),
                     Expanded(
                       child: TextField(
                         controller: optionControllers[i],
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(hintText: "الاختيار ${i + 1}", hintStyle: const TextStyle(color: Colors.grey)),
+                        style: const TextStyle(color: Colors.white), // تصحيح اللون للأبيض
+                        decoration: InputDecoration(
+                          hintText: "الاختيار ${i + 1}",
+                          hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
+                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                        ),
                       ),
                     ),
                   ],
@@ -349,13 +414,15 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                    const Text("المدة (ثواني): ", style: TextStyle(color: Colors.white)),
+                    const Text("المدة (ثواني): ", style: TextStyle(color: Colors.white70)),
                     const SizedBox(width: 10),
                     DropdownButton<int>(
                       dropdownColor: const Color(0xFF1C1F26),
                       value: duration,
-                      items: [30, 60, 90, 120, 180].map((s) => DropdownMenuItem(value: s, child: Text("$s", style: const TextStyle(color: Colors.white)))).toList(),
-                      onChanged: (val) => setDialogState(() => duration = val!),
+                      style: const TextStyle(color: Colors.white),
+                      items: [30, 60, 90, 120, 180].map((s) =>
+                          DropdownMenuItem(value: s, child: Text("$s"))).toList(),
+                      onChanged: isSubmitting ? null : (val) => setDialogState(() => duration = val!),
                     ),
                   ],
                 ),
@@ -363,23 +430,63 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+            TextButton(
+                onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                child: const Text("إلغاء", style: TextStyle(color: Colors.grey))
+            ),
             ElevatedButton(
-              onPressed: () async {
-                final db = Provider.of<DatabaseService>(context, listen: false);
-                final quizData = await db.createQuiz({
-                  'session_id': widget.sessionId,
-                  'question': questionController.text,
-                  'options': optionControllers.map((c) => c.text).toList(),
-                  'correct_option_index': correctIndex,
-                  'time_limit_seconds': duration,
-                });
-                
-                _sendData({'type': 'quiz_create', 'quiz': quizData});
-                _handleIncomingQuiz(quizData);
-                if (context.mounted) Navigator.pop(context);
+              onPressed: isSubmitting ? null : () async {
+                // 1. التحقق من المدخلات
+                if (questionController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("برجاء كتابة السؤال")));
+                  return;
+                }
+                final options = optionControllers.map((c) => c.text.trim()).toList();
+                if (options.any((opt) => opt.isEmpty)) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("برجاء ملء جميع الاختيارات")));
+                  return;
+                }
+
+                setDialogState(() => isSubmitting = true);
+
+                try {
+                  final db = Provider.of<DatabaseService>(context, listen: false);
+
+                  // التأكد من وجود sessionId
+                  if (widget.sessionId == null) throw "لا يوجد معرف للجلسة (Session ID)";
+
+                  final quizData = await db.createQuiz({
+                    'session_id': widget.sessionId,
+                    'question': questionController.text.trim(),
+                    'options': options,
+                    'correct_option_index': correctIndex,
+                    'time_limit_seconds': duration,
+                  });
+
+                  // إرسال البيانات عبر LiveKit للطلاب
+                  _sendData({'type': 'quiz_create', 'quiz': quizData});
+
+                  // تفعيل الاختبار لدى المدرس لمتابعة النتائج
+                  _handleIncomingQuiz(quizData);
+
+                  if (context.mounted) Navigator.pop(context);
+                } catch (e) {
+                  setDialogState(() => isSubmitting = false);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("خطأ: $e"), backgroundColor: Colors.redAccent)
+                    );
+                  }
+                }
               },
-              child: const Text("بدء الاختبار"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text("بدء الاختبار", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -574,6 +681,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     );
   }
 
+// 2. تحديث لوجيك البدء والإنهاء
   void _startBreakout(int groupCount) {
     final participants = _room!.remoteParticipants.values.toList();
     if (participants.isEmpty) return;
@@ -587,12 +695,61 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         'groupName': "المجموعة $groupId",
       });
     }
+    setState(() {
+      _isBreakoutActive = true;
+      _isBreakoutOpen = false;
+    });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("تم إرسال دعوات المجموعات للطلاب")),
+        const SnackBar(content: Text("تم إرسال دعوات المجموعات للطلاب"))
     );
   }
 
-  void _showReactionEffect(String emoji) {
+  void _endBreakout() {
+    _sendData({'type': 'breakout_end'});
+    _connectToRoom(widget.roomName);
+    setState(() => _isBreakoutActive = false);
+  }
+
+  Widget _buildBreakoutPanel() {
+    return Positioned(
+      top: 110,
+      right: 20,
+      child: Container(
+          width: 250,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1F26).withOpacity(0.95),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+              const Text("تقسيم المجموعات", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          if (!_isBreakoutActive) ...[
+      Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [2, 3, 4].map((n) => ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
+        onPressed: () => _startBreakout(n),
+        child: Text("$n"),
+      )).toList(),
+    ),
+    const Text("اختر عدد المجموعات", style: TextStyle(color: Colors.grey, fontSize: 10)),
+    ] else
+            ElevatedButton(
+              onPressed: _endBreakout,
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, minimumSize: const Size(double.infinity, 45)),
+              child: const Text("إنهاء جميع المجموعات", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+              ],
+          ),
+      ),
+    );
+  }
+
+    void _showReactionEffect(String emoji) {
     if (!mounted) return;
     final key = UniqueKey();
     setState(() {
@@ -601,10 +758,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           key: key,
           emoji: emoji,
           onFinished: () {
-            if (mounted)
+            if (mounted) {
               setState(
                     () => _reactionParticles.removeWhere((w) => w.key == key),
               );
+            }
           },
         ),
       );
@@ -619,10 +777,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           .eq('room_name', widget.roomName)
           .order('created_at', ascending: true)
           .limit(50);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _messages = List<Map<String, dynamic>>.from(response);
         });
+      }
     } catch (e) {
       debugPrint("Chat error: $e");
     }
@@ -1321,17 +1480,32 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                         ),
                       ),
                     ),
+                    // الجزء الثاني: تحديث زر إرسال السؤال في _buildQAPanel (حوالي السطر 820)
                     IconButton(
                       icon: const Icon(IconlyBold.send, color: Colors.blue),
                       onPressed: () async {
-                        if (_questionController.text.isEmpty) return;
-                        await db.submitQuestion({
-                          'session_id': widget.sessionId,
-                          'student_id': widget.userId,
-                          'student_name': widget.userName,
-                          'content': _questionController.text,
-                        });
-                        _questionController.clear();
+                        if (_questionController.text.trim().isEmpty) return;
+                        if (widget.sessionId == null) return;
+
+                        final content = _questionController.text.trim();
+                        _questionController.clear(); // مسح الحقل فوراً
+
+                        try {
+                          await db.submitQuestion({
+                            'session_id': widget.sessionId,
+                            'student_id': widget.userId,
+                            'student_name': widget.userName,
+                            'content': content,
+                          });
+                          // تنبيه المدرس عبر LiveKit
+                          _sendData({'type': 'new_question', 'from': widget.userName});
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text("فشل الإرسال: $e"), backgroundColor: Colors.redAccent),
+                            );
+                          }
+                        }
                       },
                     ),
                   ],
@@ -1409,11 +1583,25 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         content: TextField(controller: ansController, decoration: const InputDecoration(hintText: "اكتب إجابتك هنا...")),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          // الجزء الثالث: تحديث عملية الرد في _showAnswerDialog (حوالي السطر 910)
           ElevatedButton(
             onPressed: () async {
-              if (ansController.text.isEmpty) return;
-              await Provider.of<DatabaseService>(context, listen: false).answerQuestion(q.id, ansController.text);
-              if (mounted) Navigator.pop(context);
+              if (ansController.text.trim().isEmpty) return;
+              try {
+                final db = Provider.of<DatabaseService>(context, listen: false);
+                await db.answerQuestion(q.id, ansController.text.trim());
+
+                // تنبيه الطلاب بوجود رد جديد
+                _sendData({'type': 'question_answered'});
+
+                if (mounted) Navigator.pop(context);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("خطأ أثناء الرد: $e"), backgroundColor: Colors.redAccent),
+                  );
+                }
+              }
             },
             child: const Text("إرسال الرد"),
           ),
@@ -1422,55 +1610,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     );
   }
 
-  Widget _buildBreakoutPanel() {
-    return Positioned(
-      top: 110,
-      right: 20,
-      child: Container(
-        width: 250,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1F26).withOpacity(0.95),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              "تقسيم المجموعات",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [2, 3, 4]
-                  .map(
-                    (n) => ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueGrey,
-                  ),
-                  onPressed: () {
-                    _startBreakout(n);
-                    setState(() => _isBreakoutOpen = false);
-                  },
-                  child: Text("$n"),
-                ),
-              )
-                  .toList(),
-            ),
-            const Text(
-              "اختر عدد المجموعات",
-              style: TextStyle(color: Colors.grey, fontSize: 10),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildPollsPanel() {
     return Positioned(
@@ -1742,8 +1881,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                               radius: 20,
                               backgroundColor: isLocal ? Colors.blue.withOpacity(0.2) : Colors.white10,
                               child: Text(
-                                (p.name != null && p.name!.isNotEmpty) 
-                                    ? p.name![0].toUpperCase() 
+                                (p.name.isNotEmpty)
+                                    ? p.name[0].toUpperCase()
                                     : p.identity[0].toUpperCase(),
                                 style: TextStyle(
                                   color: isLocal ? Colors.blue : Colors.white70,

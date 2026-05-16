@@ -12,7 +12,6 @@ import '../../../core/models/question_model.dart';
 import '../../../core/models/quiz_model.dart';
 import 'package:provider/provider.dart';
 
-// موديل الرسم الاحترافي
 class Stroke {
   final List<Offset> points;
   final Color color;
@@ -64,15 +63,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   bool _isRecording = false;
   String? _classCode;
 
-  // Quiz State
   QuizModel? _activeQuiz;
   int _quizTimeLeft = 0;
   Timer? _quizTimer;
   int? _selectedQuizOption;
   bool _quizSubmitted = false;
-  List<QuizResultModel> _quizResults = [];
 
-  // Whiteboard State
   final List<Stroke> _whiteboardStrokes = [];
   final List<Stroke> _redoStack = [];
   List<Offset> _currentStrokePoints = [];
@@ -80,7 +76,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   final double _strokeWidth = 3.0;
   bool _isEraserMode = false;
 
-  // Poll State
   Map<String, dynamic>? _activePoll;
   Map<String, int> _pollResults = {};
   String? _myVote;
@@ -117,12 +112,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           .select('class_code, is_recording_enabled')
           .eq('id', widget.sessionId!)
           .single();
-      
       if (mounted) {
         setState(() => _classCode = res['class_code']);
-        if (widget.isTeacher && res['is_recording_enabled'] == true) {
+        if (widget.isTeacher && res['is_recording_enabled'] == true)
           _startRecordingSession();
-        }
       }
     } catch (e) {
       debugPrint("Error fetching session details: $e");
@@ -130,7 +123,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   }
 
   Future<void> _startRecordingSession() async {
-    final success = await LiveKitService().startRecording(widget.roomName, widget.sessionId!);
+    final success = await LiveKitService().startRecording(
+      widget.roomName,
+      widget.sessionId!,
+    );
     if (success && mounted) {
       setState(() => _isRecording = true);
       _sendData({'type': 'recording_status', 'value': true});
@@ -145,162 +141,153 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     }
   }
 
-  Future<void> _connectToRoom(String roomName) async {setState(() => _isLoading = true);
-  try {
-    final token = await LiveKitService().getRoomToken(
-      roomName: roomName,
-      userId: widget.userId,
-      userName: widget.userName,
-    );
-    if (token == null) throw "فشل الحصول على تصريح الدخول (Token)";
+  Future<void> _connectToRoom(String roomName) async {
+    setState(() => _isLoading = true);
+    try {
+      final token = await LiveKitService().getRoomToken(
+        roomName: roomName,
+        userId: widget.userId,
+        userName: widget.userName,
+      );
+      if (token == null) throw "فشل الحصول على تصريح الدخول (Token)";
 
-    // تنظيف الاتصال القديم إذا وجد
-    if (_room != null) {
-      await _listener?.dispose();
-      await _room!.disconnect();
-    }
+      if (_room != null) {
+        await _listener?.dispose();
+        await _room!.disconnect();
+      }
 
-    final room = Room();
-    _room = room;
-    _listener = room.createListener();
+      final room = Room();
+      _room = room;
+      _listener = room.createListener();
 
-    // الاستماع للبيانات المرسلة (Data Messages)
-    _listener!.on<DataReceivedEvent>((event) {
-      final decoded = utf8.decode(event.data);
-      final data = jsonDecode(decoded);
-      final String type = data['type'];
+      _listener!.on<DataReceivedEvent>((event) {
+        final decoded = utf8.decode(event.data);
+        final data = jsonDecode(decoded);
+        final String type = data['type'];
+
+        setState(() {
+          switch (type) {
+            case 'poll_create':
+              _activePoll = data['poll'];
+              _pollResults = {
+                for (var item in data['poll']['options']) item: 0,
+              };
+              _myVote = null;
+              _isPollsOpen = true;
+              _closeOtherPanels();
+              break;
+            case 'poll_vote':
+              final option = data['option'];
+              _pollResults[option] = (_pollResults[option] ?? 0) + 1;
+              break;
+            case 'poll_end':
+              _activePoll = null;
+              if (!widget.isTeacher) _isPollsOpen = false;
+              break;
+            case 'new_question':
+              _showTopSnackBar(
+                "سؤال جديد من ${data['from']} ❓",
+                Colors.blueGrey.shade900,
+              );
+              break;
+            case 'question_answered':
+              _showTopSnackBar("تم الرد على سؤالك ✅", Colors.green);
+              break;
+            case 'quiz_create':
+              _handleIncomingQuiz(data['quiz']);
+              break;
+            case 'hand_raise':
+              final p = event.participant;
+              if (p != null) _remoteHandStates[p.identity] = data['value'];
+              break;
+            case 'reaction':
+              _showReactionEffect(data['value']);
+              break;
+            case 'whiteboard_draw':
+              _handleRemoteDraw(data);
+              break;
+            case 'whiteboard_clear':
+              _whiteboardStrokes.clear();
+              _redoStack.clear();
+              break;
+            case 'whiteboard_undo':
+              _executeUndo(remote: true);
+              break;
+            case 'whiteboard_redo':
+              _executeRedo(remote: true);
+              break;
+            case 'control_mic':
+              if (!widget.isTeacher &&
+                  (data['target'] == widget.userId || data['target'] == null)) {
+                bool lock = data['lock'] ?? false;
+                bool val = data['value'] ?? false;
+                _room?.localParticipant?.setMicrophoneEnabled(val);
+                _isMicEnabled = val;
+                _isMicLocked = lock;
+                _showAuthoritySnackBar(lock, val);
+              }
+              break;
+            case 'control_chat':
+              _isChatLocked = data['value'];
+              break;
+            case 'recording_status':
+              _isRecording = data['value'];
+              break;
+            case 'breakout_invite':
+              if (data['target'] == widget.userId)
+                _showBreakoutInvitation(data['room'], data['groupName']);
+              break;
+            case 'breakout_end':
+              _connectToRoom(widget.roomName);
+              _showTopSnackBar(
+                "انتهى وقت المجموعات، جاري العودة للقاعة الرئيسية...",
+                Colors.orange,
+              );
+              break;
+          }
+        });
+      });
+
+      await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
+
+      if (!widget.isTeacher && widget.sessionId != null) {
+        DatabaseService().logStudentEntry(widget.sessionId!, widget.userId);
+      }
+
+      if (widget.isTeacher || roomName != widget.roomName) {
+        await room.localParticipant?.setCameraEnabled(true);
+        await room.localParticipant?.setMicrophoneEnabled(true);
+        if (mounted) {
+          setState(() {
+            _isMicEnabled = true;
+            _isCamEnabled = true;
+          });
+        }
+      }
 
       setState(() {
-        switch (type) {
-          case 'poll_create':
-            _activePoll = data['poll'];
-            _pollResults = {for (var item in data['poll']['options']) item: 0};
-            _myVote = null;
-            _isPollsOpen = true;
-            _closeOtherPanels(); // وظيفة مساعدة لإغلاق القوائم الأخرى
-            break;
-
-          case 'poll_vote':
-            final option = data['option'];
-            _pollResults[option] = (_pollResults[option] ?? 0) + 1;
-            break;
-
-          case 'poll_end':
-            _activePoll = null;
-            if (!widget.isTeacher) _isPollsOpen = false;
-            break;
-
-          case 'new_question':
-            _showTopSnackBar("سؤال جديد من ${data['from']} ❓", Colors.blueGrey.shade900);
-            break;
-
-          case 'question_answered':
-            _showTopSnackBar("تم الرد على سؤالك ✅", Colors.green);
-            break;
-
-          case 'quiz_create':
-            _handleIncomingQuiz(data['quiz']);
-            break;
-
-          case 'hand_raise':
-            final p = event.participant;
-            if (p != null) _remoteHandStates[p.identity] = data['value'];
-            break;
-
-          case 'reaction':
-            _showReactionEffect(data['value']);
-            break;
-
-          case 'whiteboard_draw':
-            _handleRemoteDraw(data);
-            break;
-
-          case 'whiteboard_clear':
-            _whiteboardStrokes.clear();
-            _redoStack.clear();
-            break;
-
-          case 'whiteboard_undo':
-            _executeUndo(remote: true);
-            break;
-
-          case 'whiteboard_redo':
-            _executeRedo(remote: true);
-            break;
-
-          case 'control_mic':
-            if (!widget.isTeacher && (data['target'] == widget.userId || data['target'] == null)) {
-              bool lock = data['lock'] ?? false;
-              bool val = data['value'] ?? false;
-              _room?.localParticipant?.setMicrophoneEnabled(val);
-              _isMicEnabled = val;
-              _isMicLocked = lock;
-              _showAuthoritySnackBar(lock, val);
-            }
-            break;
-
-          case 'control_chat':
-            _isChatLocked = data['value'];
-            break;
-
-          case 'recording_status':
-            _isRecording = data['value'];
-            break;
-
-          case 'breakout_invite':
-            if (data['target'] == widget.userId) {
-              _showBreakoutInvitation(data['room'], data['groupName']);
-            }
-            break;
-
-          case 'breakout_end':
-            _connectToRoom(widget.roomName);
-            _showTopSnackBar("انتهى وقت المجموعات، جاري العودة للقاعة الرئيسية...", Colors.orange);
-            break;
-        }
+        _isLoading = false;
+        _currentActiveRoom = roomName;
       });
-    });
-
-    await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
-
-    // تسجيل الحضور للطالب
-    if (!widget.isTeacher && widget.sessionId != null) {
-      DatabaseService().logStudentEntry(widget.sessionId!, widget.userId);
+    } catch (e) {
+      setState(() {
+        _errorMessage = "خطأ في الاتصال: $e";
+        _isLoading = false;
+      });
     }
-
-    // تفعيل الكاميرا والمايك عند الدخول لأول مرة أو كمعلم
-    if (widget.isTeacher || roomName != widget.roomName) {
-      await room.localParticipant?.setCameraEnabled(true);
-      await room.localParticipant?.setMicrophoneEnabled(true);
-      if (mounted) {
-        setState(() {
-          _isMicEnabled = true;
-          _isCamEnabled = true;
-        });
-      }
-    }
-
-    setState(() {
-      _isLoading = false;
-      _currentActiveRoom = roomName;
-    });
-  } catch (e) {
-    setState(() {
-      _errorMessage = "خطأ في الاتصال: $e";
-      _isLoading = false;
-    });
-  }
   }
 
-// وظائف مساعدة لجعل الكود أنظف
   void _closeOtherPanels() {
     _isChatOpen = false;
     _isQAOpen = false;
     _isParticipantsOpen = false;
     _isWhiteboardOpen = false;
+    _isPollsOpen = false;
+    _isBreakoutOpen = false;
   }
 
   void _showTopSnackBar(String message, Color color) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -311,7 +298,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     );
   }
 
-  // --- Quiz Logic ---
   void _handleIncomingQuiz(Map<String, dynamic> quizData) {
     setState(() {
       _activeQuiz = QuizModel.fromMap(quizData);
@@ -319,17 +305,18 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       _selectedQuizOption = null;
       _quizSubmitted = false;
     });
-    
     _quizTimer?.cancel();
     _quizTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       setState(() {
         if (_quizTimeLeft > 0) {
           _quizTimeLeft--;
         } else {
           _quizTimer?.cancel();
-          if (!_quizSubmitted && !widget.isTeacher) {
-            _submitQuizAnswer();
-          }
+          if (!_quizSubmitted && !widget.isTeacher) _submitQuizAnswer();
         }
       });
     });
@@ -338,10 +325,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   Future<void> _submitQuizAnswer() async {
     if (_quizSubmitted || _activeQuiz == null) return;
     setState(() => _quizSubmitted = true);
-    
     final db = Provider.of<DatabaseService>(context, listen: false);
     final isCorrect = _selectedQuizOption == _activeQuiz!.correctOptionIndex;
-    
     await db.submitQuizAnswer({
       'quiz_id': _activeQuiz!.id,
       'student_id': widget.userId,
@@ -349,15 +334,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       'selected_option_index': _selectedQuizOption,
       'is_correct': isCorrect,
     });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isCorrect ? "إجابة صحيحة! 🎉" : "إجابة خاطئة، حظاً أوفر"),
-          backgroundColor: isCorrect ? Colors.green : Colors.redAccent,
-        )
+    if (mounted)
+      _showTopSnackBar(
+        isCorrect ? "إجابة صحيحة! 🎉" : "إجابة خاطئة، حظاً أوفر",
+        isCorrect ? Colors.green : Colors.redAccent,
       );
-    }
   }
 
   void _showCreateQuizDialog() {
@@ -365,64 +346,83 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     final optionControllers = List.generate(4, (_) => TextEditingController());
     int correctIndex = 0;
     int duration = 60;
-    bool isSubmitting = false; // لحالة التحميل
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
-      barrierDismissible: false, // منع إغلاق الديالوج أثناء التحميل
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1C1F26),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text("إنشاء اختبار سريع",
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            "إنشاء اختبار سريع",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: questionController,
-                  style: const TextStyle(color: Colors.white), // تصحيح اللون للأبيض
+                  style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
                     labelText: "السؤال",
                     labelStyle: TextStyle(color: Colors.grey),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                   ),
                 ),
                 const SizedBox(height: 20),
-                ...List.generate(4, (i) => Row(
-                  children: [
-                    Radio<int>(
-                      value: i,
-                      activeColor: Colors.blue,
-                      groupValue: correctIndex,
-                      onChanged: isSubmitting ? null : (val) => setDialogState(() => correctIndex = val!),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: optionControllers[i],
-                        style: const TextStyle(color: Colors.white), // تصحيح اللون للأبيض
-                        decoration: InputDecoration(
-                          hintText: "الاختيار ${i + 1}",
-                          hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
-                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                ...List.generate(
+                  4,
+                  (i) => Row(
+                    children: [
+                      Radio<int>(
+                        value: i,
+                        activeColor: Colors.blue,
+                        groupValue: correctIndex,
+                        onChanged: isSubmitting
+                            ? null
+                            : (val) =>
+                                  setDialogState(() => correctIndex = val!),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: optionControllers[i],
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: "الاختيار ${i + 1}",
+                            hintStyle: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                )),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                    const Text("المدة (ثواني): ", style: TextStyle(color: Colors.white70)),
-                    const SizedBox(width: 10),
+                    const Text(
+                      "المدة (ثواني): ",
+                      style: TextStyle(color: Colors.white70),
+                    ),
                     DropdownButton<int>(
                       dropdownColor: const Color(0xFF1C1F26),
                       value: duration,
                       style: const TextStyle(color: Colors.white),
-                      items: [30, 60, 90, 120, 180].map((s) =>
-                          DropdownMenuItem(value: s, child: Text("$s"))).toList(),
-                      onChanged: isSubmitting ? null : (val) => setDialogState(() => duration = val!),
+                      items: [30, 60, 90, 120, 180]
+                          .map(
+                            (s) =>
+                                DropdownMenuItem(value: s, child: Text("$s")),
+                          )
+                          .toList(),
+                      onChanged: isSubmitting
+                          ? null
+                          : (val) => setDialogState(() => duration = val!),
                     ),
                   ],
                 ),
@@ -431,62 +431,59 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           ),
           actions: [
             TextButton(
-                onPressed: isSubmitting ? null : () => Navigator.pop(context),
-                child: const Text("إلغاء", style: TextStyle(color: Colors.grey))
+              onPressed: isSubmitting ? null : () => Navigator.pop(context),
+              child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
-              onPressed: isSubmitting ? null : () async {
-                // 1. التحقق من المدخلات
-                if (questionController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("برجاء كتابة السؤال")));
-                  return;
-                }
-                final options = optionControllers.map((c) => c.text.trim()).toList();
-                if (options.any((opt) => opt.isEmpty)) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("برجاء ملء جميع الاختيارات")));
-                  return;
-                }
-
-                setDialogState(() => isSubmitting = true);
-
-                try {
-                  final db = Provider.of<DatabaseService>(context, listen: false);
-
-                  // التأكد من وجود sessionId
-                  if (widget.sessionId == null) throw "لا يوجد معرف للجلسة (Session ID)";
-
-                  final quizData = await db.createQuiz({
-                    'session_id': widget.sessionId,
-                    'question': questionController.text.trim(),
-                    'options': options,
-                    'correct_option_index': correctIndex,
-                    'time_limit_seconds': duration,
-                  });
-
-                  // إرسال البيانات عبر LiveKit للطلاب
-                  _sendData({'type': 'quiz_create', 'quiz': quizData});
-
-                  // تفعيل الاختبار لدى المدرس لمتابعة النتائج
-                  _handleIncomingQuiz(quizData);
-
-                  if (context.mounted) Navigator.pop(context);
-                } catch (e) {
-                  setDialogState(() => isSubmitting = false);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("خطأ: $e"), backgroundColor: Colors.redAccent)
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (questionController.text.trim().isEmpty) {
+                        _showTopSnackBar("برجاء كتابة السؤال", Colors.orange);
+                        return;
+                      }
+                      final options = optionControllers
+                          .map((c) => c.text.trim())
+                          .toList();
+                      if (options.any((opt) => opt.isEmpty)) {
+                        _showTopSnackBar(
+                          "برجاء ملء جميع الاختيارات",
+                          Colors.orange,
+                        );
+                        return;
+                      }
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        final db = Provider.of<DatabaseService>(
+                          context,
+                          listen: false,
+                        );
+                        final quizData = await db.createQuiz({
+                          'session_id': widget.sessionId,
+                          'question': questionController.text.trim(),
+                          'options': options,
+                          'correct_option_index': correctIndex,
+                          'time_limit_seconds': duration,
+                        });
+                        _sendData({'type': 'quiz_create', 'quiz': quizData});
+                        _handleIncomingQuiz(quizData);
+                        if (context.mounted) Navigator.pop(context);
+                      } catch (e) {
+                        setDialogState(() => isSubmitting = false);
+                        if (context.mounted)
+                          _showTopSnackBar("خطأ: $e", Colors.redAccent);
+                      }
+                    },
               child: isSubmitting
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Text("بدء الاختبار", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text("بدء الاختبار"),
             ),
           ],
         ),
@@ -498,19 +495,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     String msg = lock
         ? "المدرس قام بقفل الميكروفونات"
         : (val ? "سمح لك المدرس بالتحدث الآن" : "المدرس قام بكتم صوتك");
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(lock ? Icons.lock : Icons.info, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Text(msg),
-          ],
-        ),
-        backgroundColor: lock ? Colors.redAccent : Colors.blue,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    _showTopSnackBar(msg, lock ? Colors.redAccent : Colors.blue);
   }
 
   void _sendData(Map<String, dynamic> data) async {
@@ -519,7 +504,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     await _room!.localParticipant?.publishData(bytes);
   }
 
-  // --- Whiteboard Logic ---
   void _handleRemoteDraw(Map<String, dynamic> data) {
     if (data['points'] != null) {
       List<Offset> pts = (data['points'] as List)
@@ -556,7 +540,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     }
   }
 
-  // --- Master Control Logic ---
   void _toggleMicLock(bool lock) {
     _sendData({'type': 'control_mic', 'value': false, 'lock': lock});
     setState(() => _isMicLocked = lock);
@@ -574,53 +557,39 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
 
   Future<void> _markAllAsPresent() async {
     if (widget.sessionId == null || _room == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("لا توجد جلسة نشطة للتحضير")),
-      );
+      _showTopSnackBar("لا توجد جلسة نشطة للتحضير", Colors.orange);
       return;
     }
-
-    final List<Participant> studentParticipants = _room!.remoteParticipants.values.toList();
-
+    final List<Participant> studentParticipants = _room!
+        .remoteParticipants
+        .values
+        .toList();
     if (studentParticipants.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("لا يوجد طلاب حالياً في القاعة")),
-      );
+      _showTopSnackBar("لا يوجد طلاب حالياً في القاعة", Colors.orange);
       return;
     }
-
     setState(() => _isLoading = true);
-
     try {
-      final List<Map<String, dynamic>> attendanceData = studentParticipants.map((p) {
-        return {
-          'session_id': widget.sessionId,
-          'student_id': p.identity,
-          'status': 'present',
-          'joined_at': DateTime.now().toIso8601String(), // استخدام joined_at للتوحيد
-        };
-      }).toList();
-
-      await supabase.from('attendance').upsert(
-        attendanceData,
-        onConflict: 'session_id, student_id',
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("تم تحضير ${attendanceData.length} طالب بنجاح ✅"),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
+      final List<Map<String, dynamic>> attendanceData = studentParticipants
+          .map(
+            (p) => {
+              'session_id': widget.sessionId,
+              'student_id': p.identity,
+              'status': 'present',
+              'joined_at': DateTime.now().toIso8601String(),
+            },
+          )
+          .toList();
+      await supabase
+          .from('attendance')
+          .upsert(attendanceData, onConflict: 'session_id, student_id');
+      if (mounted)
+        _showTopSnackBar(
+          "تم تحضير ${attendanceData.length} طالب بنجاح ✅",
+          Colors.green,
         );
-      }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("خطأ في التحضير: $e"), backgroundColor: Colors.redAccent),
-        );
-      }
+      if (mounted) _showTopSnackBar("خطأ في التحضير: $e", Colors.redAccent);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -681,7 +650,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     );
   }
 
-// 2. تحديث لوجيك البدء والإنهاء
   void _startBreakout(int groupCount) {
     final participants = _room!.remoteParticipants.values.toList();
     if (participants.isEmpty) return;
@@ -699,74 +667,13 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       _isBreakoutActive = true;
       _isBreakoutOpen = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("تم إرسال دعوات المجموعات للطلاب"))
-    );
+    _showTopSnackBar("تم إرسال دعوات المجموعات للطلاب", Colors.blue);
   }
 
   void _endBreakout() {
     _sendData({'type': 'breakout_end'});
     _connectToRoom(widget.roomName);
     setState(() => _isBreakoutActive = false);
-  }
-
-  Widget _buildBreakoutPanel() {
-    return Positioned(
-      top: 110,
-      right: 20,
-      child: Container(
-          width: 250,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1F26).withOpacity(0.95),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-              const Text("تقسيم المجموعات", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          if (!_isBreakoutActive) ...[
-      Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [2, 3, 4].map((n) => ElevatedButton(
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
-        onPressed: () => _startBreakout(n),
-        child: Text("$n"),
-      )).toList(),
-    ),
-    const Text("اختر عدد المجموعات", style: TextStyle(color: Colors.grey, fontSize: 10)),
-    ] else
-            ElevatedButton(
-              onPressed: _endBreakout,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, minimumSize: const Size(double.infinity, 45)),
-              child: const Text("إنهاء جميع المجموعات", style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-              ],
-          ),
-      ),
-    );
-  }
-
-    void _showReactionEffect(String emoji) {
-    if (!mounted) return;
-    final key = UniqueKey();
-    setState(() {
-      _reactionParticles.add(
-        _FloatingEmoji(
-          key: key,
-          emoji: emoji,
-          onFinished: () {
-            if (mounted) {
-              setState(
-                    () => _reactionParticles.removeWhere((w) => w.key == key),
-              );
-            }
-          },
-        ),
-      );
-    });
   }
 
   Future<void> _fetchMessages() async {
@@ -777,11 +684,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           .eq('room_name', widget.roomName)
           .order('created_at', ascending: true)
           .limit(50);
-      if (mounted) {
-        setState(() {
-          _messages = List<Map<String, dynamic>>.from(response);
-        });
-      }
+      if (mounted)
+        setState(() => _messages = List<Map<String, dynamic>>.from(response));
     } catch (e) {
       debugPrint("Chat error: $e");
     }
@@ -806,29 +710,26 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
 
   void _shareInvite() {
     if (_classCode == null) return;
-    
-    // استخدام Uri.base لجعل الرابط ديناميكياً بناءً على الـ domain الحالي
-    final String appUrl = Uri.base.origin;
-    final String liveLink = "$appUrl/#/live?sessionId=${widget.sessionId}";
-
+    final String liveLink =
+        "${Uri.base.origin}/#/live?sessionId=${widget.sessionId}";
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text("دعوة الطلاب", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("دعوة الطلاب", textAlign: TextAlign.center),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("شارك كود الحصة أو الرابط المباشر مع الطلاب:", textAlign: TextAlign.center),
+            const Text(
+              "شارك كود الحصة مع الطلاب:",
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 20),
-            const Text("كود الحصة", style: TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.blue.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.blue.withOpacity(0.2)),
               ),
               child: Text(
                 _classCode!,
@@ -840,55 +741,19 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            const Text("الرابط المباشر", style: TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                liveLink,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              ),
-            ),
           ],
         ),
         actions: [
           Row(
             children: [
               Expanded(
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("إغلاق", style: TextStyle(color: Colors.grey)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: _classCode!));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("تم نسخ الكود بنجاح"), behavior: SnackBarBehavior.floating),
-                    );
+                    _showTopSnackBar("تم نسخ الكود", Colors.blue);
                   },
-                  icon: const Icon(Icons.copy, size: 18),
+                  icon: const Icon(Icons.copy),
                   label: const Text("نسخ الكود"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.blue,
-                    elevation: 0,
-                    side: const BorderSide(color: Colors.blue),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -896,18 +761,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: liveLink));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("تم نسخ رابط الحصة"), behavior: SnackBarBehavior.floating),
-                    );
+                    _showTopSnackBar("تم نسخ الرابط", Colors.blue);
                   },
-                  icon: const Icon(Icons.link, size: 18),
+                  icon: const Icon(Icons.link),
                   label: const Text("نسخ الرابط"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
                 ),
               ),
             ],
@@ -919,10 +776,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
 
   @override
   void dispose() {
-    // تسجيل خروج الطالب لحساب مدة الحضور
-    if (!widget.isTeacher && widget.sessionId != null) {
+    if (!widget.isTeacher && widget.sessionId != null)
       DatabaseService().logStudentExit(widget.sessionId!, widget.userId);
-    }
     _stopRecordingSession();
     _quizTimer?.cancel();
     _listener?.dispose();
@@ -941,37 +796,33 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       body: _isLoading
           ? _buildLoadingState()
           : Stack(
-        children: [
-          if (_room != null)
-            ParticipantLayout(
-              room: _room!,
-              remoteHands: _remoteHandStates,
-              localHand: _isHandRaised,
-              isTeacher: widget.isTeacher,
-              isWhiteboardOpen: _isWhiteboardOpen,
-              onControlMic: (id, val) => _sendData({
-                'type': 'control_mic',
-                'target': id,
-                'value': val,
-                'lock': false,
-              }),
+              children: [
+                if (_room != null)
+                  ParticipantLayout(
+                    room: _room!,
+                    remoteHands: _remoteHandStates,
+                    localHand: _isHandRaised,
+                    isTeacher: widget.isTeacher,
+                    isWhiteboardOpen: _isWhiteboardOpen,
+                    onControlMic: (id, val) => _sendData({
+                      'type': 'control_mic',
+                      'target': id,
+                      'value': val,
+                      'lock': false,
+                    }),
+                  ),
+                if (_isWhiteboardOpen) _buildWhiteboardLayer(),
+                ..._reactionParticles,
+                if (_isChatOpen) _buildChatPanel(),
+                if (_isParticipantsOpen) _buildParticipantsPanel(),
+                if (_isPollsOpen) _buildPollsPanel(),
+                if (_isBreakoutOpen) _buildBreakoutPanel(),
+                if (_isQAOpen) _buildQAPanel(),
+                if (_activeQuiz != null) _buildQuizOverlay(),
+                _buildTopBar(inSubRoom),
+                _buildBottomControls(),
+              ],
             ),
-          
-          if (_isWhiteboardOpen) _buildWhiteboardLayer(),
-          
-          ..._reactionParticles,
-          if (_isChatOpen) _buildChatPanel(),
-          if (_isParticipantsOpen) _buildParticipantsPanel(),
-          if (_isPollsOpen) _buildPollsPanel(),
-          if (_isBreakoutOpen) _buildBreakoutPanel(),
-          if (_isQAOpen) _buildQAPanel(),
-          
-          if (_activeQuiz != null) _buildQuizOverlay(),
-
-          _buildTopBar(inSubRoom),
-          _buildBottomControls(),
-        ],
-      ),
     );
   }
 
@@ -997,53 +848,104 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text("اختبار سريع 📝", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text(
+                      "اختبار سريع 📝",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(color: _quizTimeLeft < 10 ? Colors.red : Colors.blue, borderRadius: BorderRadius.circular(12)),
-                      child: Text("$_quizTimeLeft s", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _quizTimeLeft < 10 ? Colors.red : Colors.blue,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        "$_quizTimeLeft s",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
-                Text(_activeQuiz!.question, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                Text(
+                  _activeQuiz!.question,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
                 const SizedBox(height: 24),
                 if (widget.isTeacher)
-                   _buildTeacherQuizStats()
+                  _buildTeacherQuizStats()
                 else
-                   ...List.generate(_activeQuiz!.options.length, (i) => Padding(
-                     padding: const EdgeInsets.only(bottom: 12),
-                     child: InkWell(
-                       onTap: isFinished ? null : () => setState(() => _selectedQuizOption = i),
-                       child: Container(
-                         padding: const EdgeInsets.all(16),
-                         decoration: BoxDecoration(
-                           color: _selectedQuizOption == i ? Colors.blue.withOpacity(0.2) : Colors.white.withOpacity(0.05),
-                           borderRadius: BorderRadius.circular(12),
-                           border: Border.all(color: _selectedQuizOption == i ? Colors.blue : Colors.white10),
-                         ),
-                         child: Row(
-                           children: [
-                             Text("${String.fromCharCode(65 + i)}.", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-                             const SizedBox(width: 12),
-                             Expanded(child: Text(_activeQuiz!.options[i], style: const TextStyle(color: Colors.white))),
-                           ],
-                         ),
-                       ),
-                     ),
-                   )),
-                const SizedBox(height: 24),
+                  ...List.generate(
+                    _activeQuiz!.options.length,
+                    (i) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: InkWell(
+                        onTap: isFinished
+                            ? null
+                            : () => setState(() => _selectedQuizOption = i),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: _selectedQuizOption == i
+                                ? Colors.blue.withOpacity(0.2)
+                                : Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _selectedQuizOption == i
+                                  ? Colors.blue
+                                  : Colors.white10,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(
+                                "${String.fromCharCode(65 + i)}.",
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _activeQuiz!.options[i],
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (!widget.isTeacher && !isFinished)
                   ElevatedButton(
-                    onPressed: _selectedQuizOption == null ? null : _submitQuizAnswer,
-                    style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
+                    onPressed: _selectedQuizOption == null
+                        ? null
+                        : _submitQuizAnswer,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
                     child: const Text("تسليم الإجابة"),
                   ),
                 if (isFinished || widget.isTeacher)
-                   TextButton(
-                     onPressed: () => setState(() => _activeQuiz = null),
-                     child: const Text("إغلاق", style: TextStyle(color: Colors.grey)),
-                   ),
+                  TextButton(
+                    onPressed: () => setState(() => _activeQuiz = null),
+                    child: const Text(
+                      "إغلاق",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1053,25 +955,33 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   }
 
   Widget _buildTeacherQuizStats() {
-    final db = Provider.of<DatabaseService>(context, listen: false);
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: db.watchQuizResults(_activeQuiz!.id),
+      stream: Provider.of<DatabaseService>(
+        context,
+        listen: false,
+      ).watchQuizResults(_activeQuiz!.id),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const CircularProgressIndicator();
-        final results = snapshot.data!.map((r) => QuizResultModel.fromMap(r)).toList();
+        final results = snapshot.data!
+            .map((r) => QuizResultModel.fromMap(r))
+            .toList();
         final correctCount = results.where((r) => r.isCorrect).length;
-        
         return Column(
           children: [
-            Text("إجابات الطلاب: ${results.length}", style: const TextStyle(color: Colors.white70)),
+            Text(
+              "إجابات الطلاب: ${results.length}",
+              style: const TextStyle(color: Colors.white70),
+            ),
             const SizedBox(height: 12),
             LinearProgressIndicator(
               value: results.isEmpty ? 0 : correctCount / results.length,
               backgroundColor: Colors.white10,
               color: Colors.green,
             ),
-            const SizedBox(height: 8),
-            Text("نسبة الإجابة الصحيحة: ${results.isEmpty ? 0 : (correctCount / results.length * 100).toInt()}%", style: const TextStyle(color: Colors.green, fontSize: 12)),
+            Text(
+              "نسبة النجاح: ${results.isEmpty ? 0 : (correctCount / results.length * 100).toInt()}%",
+              style: const TextStyle(color: Colors.green, fontSize: 12),
+            ),
           ],
         );
       },
@@ -1087,23 +997,18 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 20)],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           child: Stack(
             children: [
               GestureDetector(
-                onPanStart: (details) {
-                  setState(() {
-                    _currentStrokePoints = [details.localPosition];
-                  });
-                },
-                onPanUpdate: (details) {
-                  setState(() {
-                    _currentStrokePoints.add(details.localPosition);
-                  });
-                },
+                onPanStart: (details) => setState(
+                  () => _currentStrokePoints = [details.localPosition],
+                ),
+                onPanUpdate: (details) => setState(
+                  () => _currentStrokePoints.add(details.localPosition),
+                ),
                 onPanEnd: (details) {
                   final stroke = Stroke(
                     points: List.from(_currentStrokePoints),
@@ -1135,14 +1040,13 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                   size: Size.infinite,
                 ),
               ),
-              Positioned(top: 110, left: 20, child: _buildWhiteboardToolbar()),
+              Positioned(top: 20, left: 20, child: _buildWhiteboardToolbar()),
               Positioned(
-                top: 110,
+                top: 20,
                 right: 20,
                 child: FloatingActionButton.small(
                   heroTag: "close_wb",
                   onPressed: () => setState(() => _isWhiteboardOpen = false),
-                  backgroundColor: Colors.black54,
                   child: const Icon(Icons.close),
                 ),
               ),
@@ -1167,7 +1071,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           _colorPicker(Colors.red),
           _colorPicker(Colors.blue),
           _colorPicker(Colors.green),
-          const SizedBox(width: 8),
           IconButton(
             icon: Icon(
               Icons.cleaning_services,
@@ -1175,18 +1078,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               size: 20,
             ),
             onPressed: () => setState(() => _isEraserMode = !_isEraserMode),
-            tooltip: "الممحاة",
           ),
-          const VerticalDivider(color: Colors.white24),
           IconButton(
             icon: const Icon(Icons.undo, color: Colors.white, size: 20),
             onPressed: _whiteboardStrokes.isEmpty ? null : _executeUndo,
-            tooltip: "تراجع",
-          ),
-          IconButton(
-            icon: const Icon(Icons.redo, color: Colors.white, size: 20),
-            onPressed: _redoStack.isEmpty ? null : _executeRedo,
-            tooltip: "إعادة",
           ),
           IconButton(
             icon: const Icon(
@@ -1201,7 +1096,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               });
               _sendData({'type': 'whiteboard_clear'});
             },
-            tooltip: "مسح الكل",
           ),
         ],
       ),
@@ -1276,70 +1170,48 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Row(
-                    children: [
-                      Text(
-                        inSubRoom
-                            ? "غرفة فرعية: $_currentActiveRoom"
-                            : widget.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      if (_isRecording) ...[
-                        const SizedBox(width: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red.withOpacity(0.5)),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.circle, color: Colors.red, size: 8),
-                              SizedBox(width: 4),
-                              Text("REC", style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
+                  child: Text(
+                    inSubRoom
+                        ? "غرفة فرعية: $_currentActiveRoom"
+                        : widget.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
-                if (inSubRoom)
-                  IconButton(
-                    icon: const Icon(Icons.exit_to_app, color: Colors.orange),
-                    onPressed: () => _connectToRoom(widget.roomName),
-                    tooltip: "العودة للقاعة الرئيسية",
-                  ),
-                if (widget.isTeacher && _classCode != null)
+                if (widget.isTeacher) ...[
                   IconButton(
                     icon: const Icon(Icons.share, color: Colors.white70),
-                    tooltip: "دعوة طلاب",
                     onPressed: _shareInvite,
                   ),
-                if (widget.isTeacher)
-                   IconButton(
-                    icon: const Icon(Icons.quiz_outlined, color: Colors.white70),
-                    tooltip: "اختبار سريع",
+                  IconButton(
+                    icon: const Icon(
+                      Icons.quiz_outlined,
+                      color: Colors.white70,
+                    ),
                     onPressed: _showCreateQuizDialog,
                   ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.groups_outlined,
+                      color: _isBreakoutOpen ? Colors.blue : Colors.white70,
+                    ),
+                    onPressed: () => setState(() {
+                      _closeOtherPanels();
+                      _isBreakoutOpen = true;
+                    }),
+                  ),
+                ],
                 IconButton(
                   icon: Icon(
                     Icons.question_answer_outlined,
                     color: _isQAOpen ? Colors.blue : Colors.white70,
                   ),
-                  tooltip: "الأسئلة والأجوبة",
                   onPressed: () => setState(() {
-                    _isQAOpen = !_isQAOpen;
-                    _isChatOpen = false;
-                    _isParticipantsOpen = false;
-                    _isPollsOpen = false;
-                    _isBreakoutOpen = false;
-                    _isWhiteboardOpen = false;
+                    _closeOtherPanels();
+                    _isQAOpen = true;
                   }),
                 ),
                 IconButton(
@@ -1347,13 +1219,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     Icons.edit_note,
                     color: _isWhiteboardOpen ? Colors.blue : Colors.white70,
                   ),
-                  tooltip: "السبورة الذكية",
                   onPressed: () => setState(() {
-                    _isWhiteboardOpen = !_isWhiteboardOpen;
-                    _isChatOpen = false;
-                    _isQAOpen = false;
-                    _isParticipantsOpen = false;
-                    _isPollsOpen = false;
+                    _closeOtherPanels();
+                    _isWhiteboardOpen = true;
                   }),
                 ),
                 IconButton(
@@ -1361,43 +1229,19 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     IconlyLight.graph,
                     color: _isPollsOpen ? Colors.blue : Colors.white70,
                   ),
-                  tooltip: "التصويت المباشر",
                   onPressed: () => setState(() {
-                    _isPollsOpen = !_isPollsOpen;
-                    _isChatOpen = false;
-                    _isQAOpen = false;
-                    _isParticipantsOpen = false;
-                    _isBreakoutOpen = false;
-                    _isWhiteboardOpen = false;
+                    _closeOtherPanels();
+                    _isPollsOpen = true;
                   }),
                 ),
-                if (widget.isTeacher)
-                  IconButton(
-                    icon: Icon(
-                      Icons.groups_outlined,
-                      color: _isBreakoutOpen ? Colors.blue : Colors.white70,
-                    ),
-                    tooltip: "تقسيم المجموعات",
-                    onPressed: () => setState(() {
-                      _isBreakoutOpen = !_isBreakoutOpen;
-                      _isChatOpen = false;
-                      _isQAOpen = false;
-                      _isParticipantsOpen = false;
-                      _isPollsOpen = false;
-                    }),
-                  ),
                 IconButton(
                   icon: Icon(
                     IconlyLight.user_1,
                     color: _isParticipantsOpen ? Colors.blue : Colors.white70,
                   ),
-                  tooltip: "المشاركين",
                   onPressed: () => setState(() {
-                    _isParticipantsOpen = !_isParticipantsOpen;
-                    _isChatOpen = false;
-                    _isQAOpen = false;
-                    _isPollsOpen = false;
-                    _isBreakoutOpen = false;
+                    _closeOtherPanels();
+                    _isParticipantsOpen = true;
                   }),
                 ),
                 IconButton(
@@ -1405,18 +1249,13 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     IconlyLight.chat,
                     color: _isChatOpen ? Colors.blue : Colors.white70,
                   ),
-                  tooltip: "الدردشة",
                   onPressed: () => setState(() {
-                    _isChatOpen = !_isChatOpen;
-                    _isQAOpen = false;
-                    _isParticipantsOpen = false;
-                    _isPollsOpen = false;
-                    _isBreakoutOpen = false;
+                    _closeOtherPanels();
+                    _isChatOpen = true;
                   }),
                 ),
                 IconButton(
                   icon: const Icon(Icons.logout_rounded, color: Colors.white70),
-                  tooltip: "مغادرة القاعة",
                   onPressed: () => Navigator.pop(context),
                 ),
               ],
@@ -1428,7 +1267,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   }
 
   Widget _buildQAPanel() {
-    final db = Provider.of<DatabaseService>(context, listen: false);
     return Positioned(
       top: 110,
       right: 20,
@@ -1438,28 +1276,36 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         decoration: BoxDecoration(
           color: const Color(0xFF1C1F26).withOpacity(0.95),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white10),
         ),
         child: Column(
           children: [
             const Padding(
               padding: EdgeInsets.all(16),
-              child: Text("الأسئلة والأجوبة (Q&A)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: Text(
+                "الأسئلة والأجوبة",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
-            const Divider(color: Colors.white10, height: 1),
             Expanded(
               child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: db.watchQuestions(widget.sessionId!),
+                stream: Provider.of<DatabaseService>(
+                  context,
+                  listen: false,
+                ).watchQuestions(widget.sessionId!),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                  final questions = snapshot.data!.map((q) => QuestionModel.fromMap(q)).toList();
-                  
-                  if (questions.isEmpty) return const Center(child: Text("لا توجد أسئلة حالياً", style: TextStyle(color: Colors.grey)));
-                  
+                  if (!snapshot.hasData)
+                    return const Center(child: CircularProgressIndicator());
+                  final questions = snapshot.data!
+                      .map((q) => QuestionModel.fromMap(q))
+                      .toList();
                   return ListView.builder(
                     padding: const EdgeInsets.all(12),
                     itemCount: questions.length,
-                    itemBuilder: (context, i) => _buildQuestionItem(questions[i]),
+                    itemBuilder: (context, i) =>
+                        _buildQuestionItem(questions[i]),
                   );
                 },
               ),
@@ -1472,40 +1318,30 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                     Expanded(
                       child: TextField(
                         controller: _questionController,
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        style: const TextStyle(color: Colors.white),
                         decoration: const InputDecoration(
                           hintText: "اسأل سؤالاً...",
-                          hintStyle: TextStyle(color: Colors.grey),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12),
                         ),
                       ),
                     ),
-                    // الجزء الثاني: تحديث زر إرسال السؤال في _buildQAPanel (حوالي السطر 820)
                     IconButton(
                       icon: const Icon(IconlyBold.send, color: Colors.blue),
                       onPressed: () async {
                         if (_questionController.text.trim().isEmpty) return;
-                        if (widget.sessionId == null) return;
-
-                        final content = _questionController.text.trim();
-                        _questionController.clear(); // مسح الحقل فوراً
-
-                        try {
-                          await db.submitQuestion({
-                            'session_id': widget.sessionId,
-                            'student_id': widget.userId,
-                            'student_name': widget.userName,
-                            'content': content,
-                          });
-                          // تنبيه المدرس عبر LiveKit
-                          _sendData({'type': 'new_question', 'from': widget.userName});
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("فشل الإرسال: $e"), backgroundColor: Colors.redAccent),
-                            );
-                          }
-                        }
+                        await Provider.of<DatabaseService>(
+                          context,
+                          listen: false,
+                        ).submitQuestion({
+                          'session_id': widget.sessionId,
+                          'student_id': widget.userId,
+                          'student_name': widget.userName,
+                          'content': _questionController.text.trim(),
+                        });
+                        _sendData({
+                          'type': 'new_question',
+                          'from': widget.userName,
+                        });
+                        _questionController.clear();
                       },
                     ),
                   ],
@@ -1518,57 +1354,40 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   }
 
   Widget _buildQuestionItem(QuestionModel q) {
-    final db = Provider.of<DatabaseService>(context, listen: false);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: q.isPinned ? Colors.blue.withOpacity(0.1) : Colors.white.withOpacity(0.03),
+        color: q.isPinned
+            ? Colors.blue.withOpacity(0.1)
+            : Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: q.isPinned ? Colors.blue.withOpacity(0.3) : Colors.white10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(q.studentName, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11)),
-              const Spacer(),
-              if (q.isPinned) const Icon(Icons.push_pin, color: Colors.blue, size: 14),
-              if (widget.isTeacher) ...[
-                IconButton(
-                  icon: Icon(Icons.push_pin_outlined, size: 16, color: q.isPinned ? Colors.blue : Colors.grey),
-                  onPressed: () => db.togglePinQuestion(q.id, !q.isPinned),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
-                  onPressed: () => db.deleteQuestion(q.id),
-                ),
-              ],
-            ],
-          ),
-          Text(q.content, style: const TextStyle(color: Colors.white, fontSize: 13)),
-          if (q.isAnswered) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 14),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(q.answer!, style: const TextStyle(color: Colors.greenAccent, fontSize: 12))),
-                ],
-              ),
+          Text(
+            q.studentName,
+            style: const TextStyle(
+              color: Colors.blue,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
             ),
-          ] else if (widget.isTeacher) ...[
-            const SizedBox(height: 8),
+          ),
+          Text(
+            q.content,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+          ),
+          if (q.isAnswered)
+            Text(
+              "الإجابة: ${q.answer}",
+              style: const TextStyle(color: Colors.green, fontSize: 12),
+            ),
+          if (widget.isTeacher && !q.isAnswered)
             TextButton(
               onPressed: () => _showAnswerDialog(q),
-              child: const Text("الرد على السؤال", style: TextStyle(fontSize: 12)),
+              child: const Text("رد", style: TextStyle(fontSize: 12)),
             ),
-          ],
         ],
       ),
     );
@@ -1580,36 +1399,27 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("الرد على السؤال"),
-        content: TextField(controller: ansController, decoration: const InputDecoration(hintText: "اكتب إجابتك هنا...")),
+        content: TextField(controller: ansController),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
-          // الجزء الثالث: تحديث عملية الرد في _showAnswerDialog (حوالي السطر 910)
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("إلغاء"),
+          ),
           ElevatedButton(
             onPressed: () async {
-              if (ansController.text.trim().isEmpty) return;
-              try {
-                final db = Provider.of<DatabaseService>(context, listen: false);
-                await db.answerQuestion(q.id, ansController.text.trim());
-
-                // تنبيه الطلاب بوجود رد جديد
-                _sendData({'type': 'question_answered'});
-
-                if (mounted) Navigator.pop(context);
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("خطأ أثناء الرد: $e"), backgroundColor: Colors.redAccent),
-                  );
-                }
-              }
+              await Provider.of<DatabaseService>(
+                context,
+                listen: false,
+              ).answerQuestion(q.id, ansController.text);
+              _sendData({'type': 'question_answered'});
+              Navigator.pop(context);
             },
-            child: const Text("إرسال الرد"),
+            child: const Text("إرسال"),
           ),
         ],
       ),
     );
   }
-
 
   Widget _buildPollsPanel() {
     return Positioned(
@@ -1621,34 +1431,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         decoration: BoxDecoration(
           color: const Color(0xFF1C1F26).withOpacity(0.95),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white10),
         ),
-        child: Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                "التصويت المباشر",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            if (_activePoll == null && widget.isTeacher) _buildPollCreator(),
-            if (_activePoll != null)
-              Expanded(child: SingleChildScrollView(child: _buildActivePoll())),
-            if (_activePoll == null && !widget.isTeacher)
-              const Expanded(
-                child: Center(
-                  child: Text(
-                    "لا يوجد تصويت حالياً",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ),
-          ],
-        ),
+        child: _activePoll == null && widget.isTeacher
+            ? _buildPollCreator()
+            : _buildActivePoll(),
       ),
     );
   }
@@ -1662,16 +1448,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
           TextField(
             controller: qController,
             style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              hintText: "السؤال...",
-              hintStyle: TextStyle(color: Colors.grey),
-            ),
+            decoration: const InputDecoration(hintText: "السؤال..."),
           ),
-          const SizedBox(height: 12),
           ElevatedButton(
-            onPressed: () =>
-                _createPoll(qController.text, ["نعم", "لا", "غير متأكد"]),
-            child: const Text("بدء التصويت"),
+            onPressed: () => _createPoll(qController.text, ["نعم", "لا"]),
+            child: const Text("بدء"),
           ),
         ],
       ),
@@ -1679,11 +1460,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   }
 
   Widget _buildActivePoll() {
-    int total = _pollResults.values.fold(0, (sum, val) => sum + val);
+    if (_activePoll == null) return const Center(child: Text("لا يوجد تصويت"));
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             _activePoll!['question'],
@@ -1692,69 +1472,27 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 16),
-          ...(_activePoll!['options'] as List).map((opt) {
-            double percent = total == 0 ? 0 : (_pollResults[opt] ?? 0) / total;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: InkWell(
-                onTap: () => _submitVote(opt),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          opt,
-                          style: TextStyle(
-                            color: _myVote == opt
-                                ? Colors.blue
-                                : Colors.white70,
-                            fontSize: 13,
-                          ),
-                        ),
-                        Text(
-                          "${(percent * 100).toInt()}%",
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    LinearProgressIndicator(
-                      value: percent,
-                      backgroundColor: Colors.white10,
-                      color: _myVote == opt
-                          ? Colors.blue
-                          : Colors.blue.withOpacity(0.3),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-          if (widget.isTeacher) ...[
-            const SizedBox(height: 16),
+          ...(_activePoll!['options'] as List).map(
+            (opt) => ListTile(
+              title: Text(opt, style: const TextStyle(color: Colors.white70)),
+              onTap: () => _submitVote(opt),
+              trailing: Text("${_pollResults[opt] ?? 0}"),
+            ),
+          ),
+          if (widget.isTeacher)
             TextButton(
               onPressed: _endPoll,
-              child: const Text(
-                "إنهاء التصويت",
-                style: TextStyle(color: Colors.red),
-              ),
+              child: const Text("إنهاء", style: TextStyle(color: Colors.red)),
             ),
-          ],
         ],
       ),
     );
   }
 
   Widget _buildParticipantsPanel() {
-    if (_room == null) return const SizedBox.shrink();
     final List<Participant> participants = [
-      if (_room!.localParticipant != null) _room!.localParticipant!,
-      ..._room!.remoteParticipants.values,
+      if (_room?.localParticipant != null) _room!.localParticipant!,
+      ..._room?.remoteParticipants.values ?? [],
     ];
     return Positioned(
       top: 110,
@@ -1765,242 +1503,94 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         decoration: BoxDecoration(
           color: const Color(0xFF1C1F26).withOpacity(0.95),
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 30,
-              spreadRadius: 5,
-            )
-          ],
         ),
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.03),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(IconlyBold.user_3, color: Colors.blue, size: 24),
-                  const SizedBox(width: 14),
-                  const Text(
-                    "المشاركين",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      "${participants.length}",
-                      style: const TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  )
-                ],
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                "المشاركين",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-
             if (widget.isTeacher)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Column(
+                padding: const EdgeInsets.all(8),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildActionBtn(
-                            label: "كتم الجميع",
-                            icon: Icons.mic_off_rounded,
-                            color: Colors.redAccent,
-                            onTap: () => _toggleMicLock(true),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _buildActionBtn(
-                            label: "تحضير الكل",
-                            icon: Icons.how_to_reg_rounded,
-                            color: Colors.blueAccent,
-                            onTap: _markAllAsPresent,
-                          ),
-                        ),
-                      ],
+                    Expanded(
+                      child: _buildTeacherActionBtn(
+                        "كتم الجميع",
+                        Icons.mic_off,
+                        Colors.redAccent,
+                        () => _toggleMicLock(true),
+                      ),
                     ),
-                    const SizedBox(height: 10),
-                    _buildActionBtn(
-                      label: "فتح المايكروفونات للجميع",
-                      icon: Icons.lock_open_rounded,
-                      color: Colors.green,
-                      isFullWidth: true,
-                      onTap: () => _toggleMicLock(false),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Divider(color: Colors.white10, height: 1),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildTeacherActionBtn(
+                        "تحضير",
+                        Icons.check_circle,
+                        Colors.blue,
+                        _markAllAsPresent,
+                      ),
                     ),
                   ],
                 ),
               ),
-            
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ListView.builder(
                 itemCount: participants.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, i) {
-                  final p = participants[i];
-                  final bool isLocal = p.identity == _room?.localParticipant?.identity;
-                  final bool isMicOn = p.isMicrophoneEnabled();
-                  
-                  return Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.02),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white.withOpacity(0.04)),
+                itemBuilder: (context, i) => ListTile(
+                  leading: CircleAvatar(
+                    child: Text(
+                      participants[i].name.isNotEmpty
+                          ? participants[i].name[0]
+                          : "?",
                     ),
-                    child: Row(
-                      children: [
-                        Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: isLocal ? Colors.blue.withOpacity(0.2) : Colors.white10,
-                              child: Text(
-                                (p.name.isNotEmpty)
-                                    ? p.name[0].toUpperCase()
-                                    : p.identity[0].toUpperCase(),
-                                style: TextStyle(
-                                  color: isLocal ? Colors.blue : Colors.white70,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            if (p.isSpeaking)
-                              Positioned(
-                                right: 0,
-                                bottom: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: const Color(0xFF1C1F26), width: 2),
-                                  ),
-                                  child: const Icon(Icons.volume_up, size: 8, color: Colors.white),
-                                ),
-                              )
-                          ],
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                isLocal 
-                                    ? "${p.name ?? p.identity} (أنت)" 
-                                    : (p.name ?? p.identity),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                isMicOn ? "متصل بالصوت" : "صامت",
-                                style: TextStyle(
-                                  color: isMicOn ? Colors.green.withOpacity(0.8) : Colors.grey.withOpacity(0.6),
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
+                  ),
+                  title: Text(
+                    participants[i].name,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  trailing: widget.isTeacher
+                      ? IconButton(
+                          icon: Icon(
+                            participants[i].isMicrophoneEnabled()
+                                ? Icons.mic
+                                : Icons.mic_off,
+                            color: participants[i].isMicrophoneEnabled()
+                                ? Colors.green
+                                : Colors.red,
                           ),
-                        ),
-                        if (widget.isTeacher && !isLocal)
-                          IconButton(
-                            onPressed: () => _toggleStudentMic(p),
-                            icon: Icon(
-                              isMicOn ? Icons.mic_rounded : Icons.mic_off_rounded,
-                              color: isMicOn ? Colors.green : Colors.redAccent,
-                              size: 22,
-                            ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          )
-                        else
-                          Icon(
-                            isMicOn ? Icons.mic_rounded : Icons.mic_off_rounded,
-                            color: isMicOn ? Colors.green.withOpacity(0.4) : Colors.white12,
-                            size: 18,
-                          ),
-                      ],
-                    ),
-                  );
-                },
+                          onPressed: () => _toggleStudentMic(participants[i]),
+                        )
+                      : null,
+                ),
               ),
             ),
-            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildActionBtn({
-    required String label,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-    bool isFullWidth = false,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          width: isFullWidth ? double.infinity : null,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: color.withOpacity(0.2)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 18),
-              const SizedBox(width: 10),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-        ),
+  Widget _buildTeacherActionBtn(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 16),
+      label: Text(label, style: const TextStyle(fontSize: 10)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color.withOpacity(0.2),
+        foregroundColor: color,
       ),
     );
   }
@@ -2015,43 +1605,22 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         decoration: BoxDecoration(
           color: const Color(0xFF1C1F26).withOpacity(0.95),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white10),
         ),
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    "الدردشة العامة",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                  if (widget.isTeacher)
-                    Tooltip(
-                      message: _isChatLocked ? "فتح الدردشة" : "قفل الدردشة",
-                      child: Switch(
-                        value: _isChatLocked,
-                        onChanged: (val) {
-                          _sendData({'type': 'control_chat', 'value': val});
-                          setState(() => _isChatLocked = val);
-                        },
-                        activeColor: Colors.red,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const Divider(color: Colors.white10, height: 1),
             Expanded(
               child: ListView.builder(
                 itemCount: _messages.length,
-                itemBuilder: (context, i) => _buildMessageBubble(_messages[i]),
+                itemBuilder: (context, i) => ListTile(
+                  title: Text(
+                    _messages[i]['user_name'],
+                    style: const TextStyle(color: Colors.blue, fontSize: 10),
+                  ),
+                  subtitle: Text(
+                    _messages[i]['content'],
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
               ),
             ),
             Padding(
@@ -2061,21 +1630,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                   Expanded(
                     child: TextField(
                       controller: _messageController,
-                      enabled: !_isChatLocked || widget.isTeacher,
                       style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: _isChatLocked ? "الدردشة مغلقة" : "دردشة...",
-                        hintStyle: const TextStyle(color: Colors.grey),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                        ),
-                      ),
                     ),
                   ),
                   IconButton(
+                    icon: const Icon(IconlyBold.send),
                     onPressed: _sendMessage,
-                    icon: const Icon(IconlyBold.send, color: Colors.blue),
-                    tooltip: "إإرسال",
                   ),
                 ],
               ),
@@ -2086,31 +1646,59 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
     );
   }
 
-  Widget _buildMessageBubble(Map<String, dynamic> msg) {
-    bool isMe = msg['user_name'] == widget.userName;
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        crossAxisAlignment: isMe
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
-        children: [
-          Text(
-            msg['user_name'] ?? "",
-            style: const TextStyle(color: Colors.grey, fontSize: 10),
-          ),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isMe ? Colors.blue : Colors.white10,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              msg['content'] ?? "",
-              style: const TextStyle(color: Colors.white, fontSize: 12),
-            ),
-          ),
-        ],
+  Widget _buildBreakoutPanel() {
+    return Positioned(
+      top: 110,
+      right: 20,
+      child: Container(
+        width: 250,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1F26),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          children: [
+            const Text("المجموعات", style: TextStyle(color: Colors.white)),
+            if (!_isBreakoutActive)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [2, 3, 4]
+                    .map(
+                      (n) => ElevatedButton(
+                        onPressed: () => _startBreakout(n),
+                        child: Text("$n"),
+                      ),
+                    )
+                    .toList(),
+              )
+            else
+              ElevatedButton(
+                onPressed: _endBreakout,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text("إنهاء"),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showReactionEffect(String emoji) {
+    if (!mounted) return;
+    final key = UniqueKey();
+    setState(
+      () => _reactionParticles.add(
+        _FloatingEmoji(
+          key: key,
+          emoji: emoji,
+          onFinished: () {
+            if (mounted)
+              setState(
+                () => _reactionParticles.removeWhere((w) => w.key == key),
+              );
+          },
+        ),
       ),
     );
   }
@@ -2125,29 +1713,17 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
         decoration: BoxDecoration(
           color: const Color(0xFF1C1F26).withOpacity(0.8),
           borderRadius: BorderRadius.circular(40),
-          border: Border.all(color: Colors.white10),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _buildCircleBtn(
-              _isMicLocked && !widget.isTeacher
-                  ? Icons.mic_off
-                  : (_isMicEnabled ? IconlyBold.voice : IconlyBold.voice_2),
-              _isMicLocked && !widget.isTeacher
-                  ? Colors.grey
-                  : (_isMicEnabled ? Colors.white12 : Colors.red),
-              tooltip: _isMicLocked && !widget.isTeacher
-                  ? "المايك مقفل من المدرس"
-                  : (_isMicEnabled ? "كتم المايك" : "فتح المايك"),
-                  () async {
+              _isMicEnabled ? IconlyBold.voice : IconlyBold.voice_2,
+              _isMicEnabled ? Colors.white12 : Colors.red,
+              () async {
                 if (_isMicLocked && !widget.isTeacher) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("الميكروفون مغلق بواسطة المدرس"),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+                  _showTopSnackBar("المايك مقفل", Colors.red);
                   return;
                 }
                 await _room?.localParticipant?.setMicrophoneEnabled(
@@ -2160,8 +1736,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             _buildCircleBtn(
               _isCamEnabled ? IconlyBold.video : IconlyBold.hide,
               _isCamEnabled ? Colors.white12 : Colors.red,
-              tooltip: _isCamEnabled ? "إغلاق الكاميرا" : "فتح الكاميرا",
-                  () async {
+              () async {
                 await _room?.localParticipant?.setCameraEnabled(!_isCamEnabled);
                 setState(() => _isCamEnabled = !_isCamEnabled);
               },
@@ -2170,19 +1745,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             _buildCircleBtn(
               Icons.back_hand,
               _isHandRaised ? Colors.orange : Colors.white12,
-              tooltip: _isHandRaised ? "خفض اليد" : "رفع اليد",
-                  () {
-                final newState = !_isHandRaised;
-                setState(() => _isHandRaised = newState);
-                _sendData({'type': 'hand_raise', 'value': newState});
+              () {
+                setState(() => _isHandRaised = !_isHandRaised);
+                _sendData({'type': 'hand_raise', 'value': _isHandRaised});
               },
             ),
             const SizedBox(width: 16),
             _buildCircleBtn(
               Icons.screen_share,
               _isScreenSharing ? Colors.green : Colors.white12,
-              tooltip: _isScreenSharing ? "إيقاف المشاركة" : "مشاركة الشاشة",
-                  () async {
+              () async {
                 final newState = !_isScreenSharing;
                 await _room?.localParticipant?.setScreenShareEnabled(newState);
                 setState(() => _isScreenSharing = newState);
@@ -2192,8 +1764,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             _buildCircleBtn(
               IconlyBold.call_missed,
               Colors.red,
-              tooltip: "إنهاء المكالمة",
-                  () => Navigator.pop(context),
+              () => Navigator.pop(context),
               isLarge: true,
             ),
           ],
@@ -2203,28 +1774,24 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   }
 
   Widget _buildCircleBtn(
-      IconData icon,
-      Color color,
-      VoidCallback onTap, {
-        bool isLarge = false,
-        String? tooltip,
-      }) {
-    return Tooltip(
-      message: tooltip ?? "",
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(30),
-        child: Container(
-          padding: EdgeInsets.all(isLarge ? 14 : 12),
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          child: Icon(icon, color: Colors.white, size: isLarge ? 24 : 20),
-        ),
+    IconData icon,
+    Color color,
+    VoidCallback onTap, {
+    bool isLarge = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(30),
+      child: Container(
+        padding: EdgeInsets.all(isLarge ? 14 : 12),
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        child: Icon(icon, color: Colors.white, size: isLarge ? 24 : 20),
       ),
     );
   }
 }
 
-class ParticipantLayout extends StatefulWidget {
+class ParticipantLayout extends StatelessWidget {
   final Room room;
   final Map<String, bool> remoteHands;
   final bool localHand;
@@ -2243,44 +1810,20 @@ class ParticipantLayout extends StatefulWidget {
   });
 
   @override
-  State<ParticipantLayout> createState() => _ParticipantLayoutState();
-}
-
-class _ParticipantLayoutState extends State<ParticipantLayout> {
-  final PageController _pageController = PageController();
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.room,
+      listenable: room,
       builder: (context, _) {
         final List<Participant> participants = [
-          if (widget.room.localParticipant != null) widget.room.localParticipant!,
-          ...widget.room.remoteParticipants.values,
+          if (room.localParticipant != null) room.localParticipant!,
+          ...room.remoteParticipants.values,
         ];
-
-        Participant? teacher;
-        List<Participant> students = [];
-
-        // تحديد المعلم والطلاب برمجياً
-        if (widget.isTeacher) {
-          teacher = widget.room.localParticipant;
-          students = widget.room.remoteParticipants.values.toList();
-        } else {
-          // محاولة إيجاد المعلم من المشاركين الآخرين
-          final remoteTeacher = widget.room.remoteParticipants.values.firstOrNull;
-          teacher = remoteTeacher;
-          students = [
-            if (widget.room.localParticipant != null) widget.room.localParticipant!,
-            ...widget.room.remoteParticipants.values.where((p) => p.identity != remoteTeacher?.identity),
-          ];
-        }
+        Participant? teacher = isTeacher
+            ? room.localParticipant
+            : room.remoteParticipants.values.firstOrNull;
+        List<Participant> students = participants
+            .where((p) => p.identity != teacher?.identity)
+            .toList();
 
         TrackPublication? screenSharePub;
         for (var p in participants) {
@@ -2293,189 +1836,137 @@ class _ParticipantLayoutState extends State<ParticipantLayout> {
           }
         }
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            return Column(
-              children: [
-                const SizedBox(height: 100), // مسافة لشريط الـ TopBar
-                
-                // منطقة الفيديو الأساسية (المعلم أو مشاركة الشاشة)
-                Expanded(
-                  flex: 5,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    child: screenSharePub != null 
-                      ? _buildScreenShareView(screenSharePub)
-                      : (teacher != null 
-                          ? _buildParticipantTile(teacher, isHero: true)
-                          : const Center(child: Text("في انتظار المعلم...", style: TextStyle(color: Colors.white24)))),
+        return Column(
+          children: [
+            const SizedBox(height: 100),
+            Expanded(
+              flex: 5,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 15),
+                child: screenSharePub != null
+                    ? _buildScreenShare(screenSharePub)
+                    : (teacher != null
+                          ? _buildTile(teacher, isHero: true)
+                          : const Center(
+                              child: Text(
+                                "في انتظار المعلم...",
+                                style: TextStyle(color: Colors.white24),
+                              ),
+                            )),
+              ),
+            ),
+            if (students.isNotEmpty)
+              SizedBox(
+                height: 150,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  itemCount: students.length,
+                  itemBuilder: (context, i) => Container(
+                    width: 200,
+                    margin: const EdgeInsets.only(left: 10),
+                    child: _buildTile(students[i]),
                   ),
                 ),
-
-                const SizedBox(height: 10),
-
-                // شريط الطلاب السفلي
-                if (students.isNotEmpty)
-                  SizedBox(
-                    height: constraints.maxHeight * 0.18,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 15),
-                      itemCount: students.length,
-                      itemBuilder: (context, index) => Container(
-                        width: (constraints.maxHeight * 0.18) * 1.5,
-                        margin: const EdgeInsets.only(left: 10, bottom: 10),
-                        child: _buildParticipantTile(students[index]),
-                      ),
-                    ),
-                  ),
-                
-                const SizedBox(height: 110), // مسافة لشريط التحكم السفلي
-              ],
-            );
-          }
+              ),
+            const SizedBox(height: 110),
+          ],
         );
       },
     );
   }
 
-  Widget _buildScreenShareView(TrackPublication pub) {
+  Widget _buildScreenShare(TrackPublication pub) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.green.withOpacity(0.5), width: 2),
+        border: Border.all(color: Colors.green, width: 2),
         color: Colors.black,
       ),
       clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          VideoTrackRenderer(
-            pub.track as VideoTrack,
-            fit: VideoViewFit.contain,
-            key: ValueKey("screenshare_${pub.sid}"),
-          ),
-          Positioned(
-            top: 10,
-            left: 10,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(6)),
-              child: const Text("مشاركة شاشة", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-            ),
-          ),
-        ],
+      child: VideoTrackRenderer(
+        pub.track as VideoTrack,
+        fit: VideoViewFit.contain,
       ),
     );
   }
 
-  Widget _buildParticipantTile(Participant p, {bool isHero = false}) {
-    final bool isLocal = widget.room.localParticipant != null &&
-        p.identity == widget.room.localParticipant!.identity;
-    final bool isHandUp = isLocal
-        ? widget.localHand
-        : (widget.remoteHands[p.identity] ?? false);
-    
+  Widget _buildTile(Participant p, {bool isHero = false}) {
     final cameraPub = p.videoTrackPublications
         .where((pub) => pub.source == TrackSource.camera)
         .firstOrNull;
-    VideoTrack? cameraTrack = cameraPub?.track as VideoTrack?;
-
+    final bool isHandUp = p.identity == room.localParticipant?.identity
+        ? localHand
+        : (remoteHands[p.identity] ?? false);
     return Container(
-      key: ValueKey("participant_tile_${p.identity}"),
       decoration: BoxDecoration(
         color: const Color(0xFF1C1F26),
         borderRadius: BorderRadius.circular(isHero ? 24 : 12),
         border: Border.all(
           color: p.isSpeaking
               ? Colors.blue
-              : (isHero ? Colors.blue.withOpacity(0.3) : (isHandUp ? Colors.orange : Colors.white10)),
-          width: isHero ? 2 : 1,
+              : (isHandUp ? Colors.orange : Colors.white10),
         ),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (cameraTrack != null && p.isCameraEnabled())
+          if (cameraPub?.track != null && p.isCameraEnabled())
             VideoTrackRenderer(
-              cameraTrack,
-              fit: VideoViewFit.cover, // هذا هو السر لملء الشاشة بالكامل دون فراغات سوداء
-              key: ValueKey("video_track_${p.identity}"),
+              cameraPub!.track as VideoTrack,
+              fit: VideoViewFit.cover,
             )
           else
             Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircleAvatar(
-                    radius: isHero ? 40 : 20,
-                    backgroundColor: Colors.white10,
-                    child: Text(
-                      (p.name?.isNotEmpty == true) ? p.name![0].toUpperCase() : "?",
-                      style: TextStyle(color: Colors.white, fontSize: isHero ? 30 : 16),
-                    ),
-                  ),
-                  if (isHero) const SizedBox(height: 10),
-                  if (isHero) const Text("الكاميرا مغلقة", style: TextStyle(color: Colors.white24, fontSize: 12)),
-                ],
+              child: CircleAvatar(
+                radius: isHero ? 40 : 20,
+                child: Text(p.name.isNotEmpty ? p.name[0] : "?"),
               ),
             ),
-          
-          // علامة المعلم (نفس ستايل لقطة الشاشة)
           if (isHero)
             Positioned(
               top: 15,
               right: 15,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.9),
+                  color: Colors.blue,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text("المعلم", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                    SizedBox(width: 5),
-                    Icon(Icons.star, color: Colors.white, size: 12),
-                  ],
+                child: const Text(
+                  "المعلم",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
-
-          // الاسم في الأسفل
+          if (isHandUp)
+            Positioned(
+              top: 10,
+              left: 10,
+              child: const Icon(
+                Icons.back_hand,
+                color: Colors.orange,
+                size: 20,
+              ),
+            ),
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Colors.black.withOpacity(0.7), Colors.transparent],
-                ),
-              ),
+              padding: const EdgeInsets.all(8),
+              color: Colors.black45,
               child: Text(
-                isLocal ? "${p.name ?? p.identity} (أنت)" : (p.name ?? p.identity),
-                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
-                overflow: TextOverflow.ellipsis,
+                p.name,
+                style: const TextStyle(color: Colors.white, fontSize: 10),
               ),
             ),
           ),
-
-          // علامة رفع اليد
-          if (isHandUp)
-            Positioned(
-              top: 10,
-              left: 10,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
-                child: const Icon(Icons.back_hand, color: Colors.white, size: 14),
-              ),
-            ),
         ],
       ),
     );
@@ -2488,7 +1979,6 @@ class WhiteboardPainter extends CustomPainter {
   final Color currentColor;
   final double currentWidth;
   final bool isEraser;
-
   WhiteboardPainter({
     required this.strokes,
     required this.currentPoints,
@@ -2496,7 +1986,6 @@ class WhiteboardPainter extends CustomPainter {
     required this.currentWidth,
     required this.isEraser,
   });
-
   @override
   void paint(Canvas canvas, Size size) {
     for (var stroke in strokes) {
@@ -2504,18 +1993,15 @@ class WhiteboardPainter extends CustomPainter {
         ..color = stroke.color
         ..strokeCap = StrokeCap.round
         ..strokeWidth = stroke.width;
-      for (int i = 0; i < stroke.points.length - 1; i++) {
+      for (int i = 0; i < stroke.points.length - 1; i++)
         canvas.drawLine(stroke.points[i], stroke.points[i + 1], paint);
-      }
     }
-
     Paint currentPaint = Paint()
       ..color = isEraser ? Colors.white : currentColor
       ..strokeCap = StrokeCap.round
       ..strokeWidth = isEraser ? 25.0 : currentWidth;
-    for (int i = 0; i < currentPoints.length - 1; i++) {
+    for (int i = 0; i < currentPoints.length - 1; i++)
       canvas.drawLine(currentPoints[i], currentPoints[i + 1], currentPaint);
-    }
   }
 
   @override
@@ -2548,6 +2034,12 @@ class _FloatingEmojiState extends State<_FloatingEmoji>
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _controller,
@@ -2562,11 +2054,5 @@ class _FloatingEmojiState extends State<_FloatingEmoji>
         );
       },
     );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
   }
 }

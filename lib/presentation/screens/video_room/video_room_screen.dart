@@ -63,6 +63,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   bool _isRecording = false;
   String? _classCode;
 
+  // Real-time Expiry State
+  StreamSubscription? _statusSubscription;
+  Timer? _expiryTimer;
+
   QuizModel? _activeQuiz;
   int _quizTimeLeft = 0;
   Timer? _quizTimer;
@@ -96,30 +100,138 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   void initState() {
     super.initState();
     _currentActiveRoom = widget.roomName;
-    _connectToRoom(_currentActiveRoom!);
+    _initializeRoom();
+
     _chatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (_isChatOpen) _fetchMessages();
     });
-    if (widget.sessionId != null) {
-      _fetchSessionDetails();
-    }
   }
 
-  Future<void> _fetchSessionDetails() async {
+  // ميثود جديدة لتهيئة الغرفة مع فحص الصلاحية
+  Future<void> _initializeRoom() async {
+    if (widget.sessionId != null) {
+      final isValid = await _checkAndMonitorSession();
+      if (!isValid) return;
+    }
+    _connectToRoom(_currentActiveRoom!);
+  }
+
+  // فحص حالة الجلسة وتفعيل المراقبة اللحظية
+  Future<bool> _checkAndMonitorSession() async {
     try {
       final res = await supabase
           .from('sessions')
-          .select('class_code, is_recording_enabled')
+          .select('class_code, is_recording_enabled, end_time, status')
           .eq('id', widget.sessionId!)
           .single();
+
+      final DateTime endTime = DateTime.parse(res['end_time']);
+      final String status = res['status'];
+
+      // 1. تحقق قبل الدخول
+      if (status == 'ended' || DateTime.now().isAfter(endTime)) {
+        _handleSessionEnded(message: "عذراً، هذه الجلسة انتهت بالفعل.");
+        return false;
+      }
+
       if (mounted) {
         setState(() => _classCode = res['class_code']);
+
+        // 2. تفعيل المراقبة اللحظية للحالة (Real-time status)
+        _statusSubscription = DatabaseService()
+            .watchSessionStatus(widget.sessionId!)
+            .listen((data) {
+              if (data['status'] == 'ended' && mounted) {
+                _handleSessionEnded(message: "قام المدرس بإنهاء الجلسة الآن.");
+              }
+            });
+
+        // 3. تفعيل مؤقت انتهاء الوقت (Time Expiry)
+        final remaining = endTime.difference(DateTime.now());
+        _expiryTimer = Timer(remaining, () {
+          if (mounted)
+            _handleSessionEnded(message: "انتهى الوقت المخصص لهذه الحصة.");
+        });
+
         if (widget.isTeacher && res['is_recording_enabled'] == true)
           _startRecordingSession();
       }
+      return true;
     } catch (e) {
-      debugPrint("Error fetching session details: $e");
+      debugPrint("Session init error: $e");
+      return true; // في حال الخطأ نتركه يحاول الدخول
     }
+  }
+
+  void _handleSessionEnded({String? message}) {
+    if (!mounted) return;
+    _room?.disconnect();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text("الجلسة انتهت"),
+          ],
+        ),
+        content: Text(message ?? "انتهى وقت الحصة أو تم إغلاق القاعة."),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // غلق الديالوج
+              Navigator.of(context).pop(); // مغادرة القاعة
+            },
+            child: const Text("العودة للرئيسية"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ميثود للخروج الآمن للمدرس
+  void _onExitPressed() async {
+    if (widget.isTeacher) {
+      final endAll = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text("مغادرة القاعة"),
+          content: const Text(
+            "هل تود إنهاء الحصة لجميع الطلاب أم المغادرة فقط؟",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("مغادرة فقط"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                "إنهاء للكل",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (endAll == true) {
+        // تحديث حالة الجلسة لـ ended لإخراج الجميع
+        await DatabaseService().toggleRoomStatus(widget.sessionId!, false);
+      }
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _fetchSessionDetails() async {
+    // تم دمج المنطق في _checkAndMonitorSession
   }
 
   Future<void> _startRecordingSession() async {
@@ -778,6 +890,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
   void dispose() {
     if (!widget.isTeacher && widget.sessionId != null)
       DatabaseService().logStudentExit(widget.sessionId!, widget.userId);
+    _statusSubscription?.cancel();
+    _expiryTimer?.cancel();
     _stopRecordingSession();
     _quizTimer?.cancel();
     _listener?.dispose();
@@ -1256,7 +1370,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
                 ),
                 IconButton(
                   icon: const Icon(Icons.logout_rounded, color: Colors.white70),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _onExitPressed,
                 ),
               ],
             ),
@@ -1764,7 +1878,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen>
             _buildCircleBtn(
               IconlyBold.call_missed,
               Colors.red,
-              () => Navigator.pop(context),
+              _onExitPressed,
               isLarge: true,
             ),
           ],

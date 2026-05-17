@@ -20,17 +20,17 @@ serve(async (req) => {
       throw new Error("LiveKit API Key or Secret not set")
     }
 
-    // نستخدم الـ userId كـ identity فريد والـ userName للعرض فقط
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: userId,
-      name: userName, // سيظهر هذا الاسم في القائمة بدلاً من الـ UUID
+      identity: userId.toString(), // التأكد من أنه string
+      name: userName,
     })
 
     at.addGrant({ 
       roomJoin: true, 
       room: roomName, 
       canPublish: true, 
-      canSubscribe: true 
+      canSubscribe: true,
+      canPublishData: true // إضافة هذه الصلاحية لضمان عمل أوامر التحكم
     })
 
     return new Response(

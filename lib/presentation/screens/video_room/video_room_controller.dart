@@ -46,7 +46,6 @@ class VideoRoomController extends ChangeNotifier {
   bool _isRecording = false;
   bool _isScreenSharing = false;
 
-  // Moderation States
   bool _isChatLocked = false;
   bool _isWhiteboardLocked = false;
   bool _isScreenShareLocked = false; 
@@ -77,7 +76,6 @@ class VideoRoomController extends ChangeNotifier {
   bool _isConnected = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
-  // Getters
   Room? get room => _room;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -210,16 +208,32 @@ class VideoRoomController extends ChangeNotifier {
 
     _isLoading = true; notifyListeners();
     try {
-      final token = await LiveKitService().getRoomToken(roomName: targetRoomName, userId: userId, userName: userName);
-      if (_room != null) { await _listener?.dispose(); await _room!.disconnect(); }
+      final effectiveUserId = isTeacher ? "teacher_$userId" : userId;
+      
+      final token = await LiveKitService().getRoomToken(
+        roomName: targetRoomName, 
+        userId: effectiveUserId, 
+        userName: userName
+      );
+      
+      if (_room != null) { 
+        await _listener?.dispose(); 
+        await _room!.disconnect(); 
+      }
+      
       _room = Room();
       _listener = _room!.createListener();
       _setupEventListeners();
       await _room!.connect('wss://learning-system-07wdu0v6.livekit.cloud', token!);
       
       _currentRoomName = targetRoomName;
-      _isLoading = false; notifyListeners();
-    } catch (e) { _errorMessage = e.toString(); _isLoading = false; notifyListeners(); }
+      _isLoading = false; 
+      notifyListeners();
+    } catch (e) { 
+      _errorMessage = e.toString(); 
+      _isLoading = false; 
+      notifyListeners(); 
+    }
   }
 
   void returnToMainRoom() => connectToRoom(roomName);
@@ -231,20 +245,15 @@ class VideoRoomController extends ChangeNotifier {
         _handleIncomingData(data, event.participant);
       })
       ..on<ParticipantConnectedEvent>((event) {
-        // تأخير الإشعار قليلاً لضمان قراءة الاسم من الـ Metadata
         Future.delayed(const Duration(milliseconds: 1000), () {
-          String name = event.participant.name ?? "طالب جديد";
-          // إذا كان الاسم فارغاً، نحاول استخدامه من الـ Identity إذا لم تكن UUID
-          if (name.isEmpty || name == event.participant.identity) {
-            name = event.participant.name ?? "طالب جديد";
-          }
-
+          String name = event.participant.name ?? event.participant.identity;
+          if (name.isEmpty || name.length > 30) name = "مشارك جديد";
           onNotification?.call("👋 انضم $name للبث", Colors.green.shade700);
           notifyListeners();
         });
       })
       ..on<ParticipantDisconnectedEvent>((event) {
-        String name = event.participant.name ?? "مشارك";
+        String name = event.participant.name ?? event.participant.identity ?? "مشارك";
         onNotification?.call("🚪 غادر $name القاعة", Colors.blueGrey.shade700);
         notifyListeners();
       })
@@ -253,8 +262,16 @@ class VideoRoomController extends ChangeNotifier {
       ..on<TrackUnsubscribedEvent>((_) => notifyListeners())
       ..on<TrackMutedEvent>((_) => notifyListeners())
       ..on<TrackUnmutedEvent>((_) => notifyListeners())
+      ..on<LocalTrackPublishedEvent>((_) => notifyListeners())
+      ..on<LocalTrackUnpublishedEvent>((_) => notifyListeners())
       ..on<ParticipantMetadataUpdatedEvent>((_) => notifyListeners())
       ..on<ParticipantConnectionQualityUpdatedEvent>((_) => notifyListeners());
+  }
+
+  bool _isMe(String? targetId) {
+    if (targetId == null) return true;
+    final myId = _room?.localParticipant?.identity ?? userId;
+    return targetId.toLowerCase() == myId.toLowerCase();
   }
 
   void _handleIncomingData(Map<String, dynamic> data, RemoteParticipant? p) {
@@ -263,6 +280,18 @@ class VideoRoomController extends ChangeNotifier {
         _messages.insert(0, data);
         if (!_isChatOpen) {
           onNotification?.call("رسالة من ${data['user_name']}", Colors.blueAccent);
+        }
+        break;
+      case 'control_mic':
+        _handleMicControl(data);
+        break;
+      case 'kick_participant':
+        if (_isMe(data['target'])) {
+          onNotification?.call("⚠️ عذراً، لقد قرر المعلم استبعادك من الجلسة الحالية.", Colors.red);
+          Future.delayed(const Duration(seconds: 2), () {
+            _room?.disconnect();
+            onSessionEnded?.call("تم استبعادك من القاعة الدراسية.");
+          });
         }
         break;
       case 'new_question': 
@@ -281,7 +310,7 @@ class VideoRoomController extends ChangeNotifier {
         }
         break;
       case 'lower_hand':
-        if (data['target'] == userId) {
+        if (_isMe(data['target'])) {
           _isHandRaised = false;
           onNotification?.call("قام المدرس بإنزال يدك", Colors.blueGrey);
         } else {
@@ -294,24 +323,12 @@ class VideoRoomController extends ChangeNotifier {
         onNotification?.call("تم إنزال أيدي الجميع", Colors.blueGrey);
         break;
       case 'breakout_invite':
-        if (data['target'] == userId) {
+        if (_isMe(data['target'])) {
           onBreakoutInvite?.call(data['room'], data['groupName']);
         }
         break;
       case 'end_breakout':
         if (!isTeacher) returnToMainRoom();
-        break;
-      case 'control_mic':
-        _handleMicControl(data);
-        break;
-      case 'kick_participant':
-        if (data['target'] == userId) {
-          onNotification?.call("⚠️ عذراً، لقد قرر المعلم استبعادك من الجلسة الحالية.", Colors.red);
-          Future.delayed(const Duration(seconds: 4), () {
-            _room?.disconnect();
-            onSessionEnded?.call("تم استبعادك من القاعة الدراسية.");
-          });
-        }
         break;
       case 'session_ended':
         onNotification?.call("🔴 تم إنهاء البث المباشر من قبل المعلم، شكراً لكم.", Colors.redAccent);
@@ -351,7 +368,7 @@ class VideoRoomController extends ChangeNotifier {
         break;
       case 'spotlight':
         _spotlightUserId = data['value'];
-        if (_spotlightUserId == userId && !isTeacher) {
+        if (_isMe(_spotlightUserId) && !isTeacher) {
           onNotification?.call("🌟 تم تسليط الضوء عليك من قبل المعلم", Colors.purple);
         }
         break;
@@ -386,18 +403,21 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void _handleMicControl(Map<String, dynamic> data) {
-    if (!isTeacher && (data['target'] == userId || data['target'] == null)) {
-      _isMicEnabled = data['value'];
+    if (!isTeacher && _isMe(data['target'])) {
+      final shouldEnable = data['value'] as bool;
+      _isMicEnabled = shouldEnable;
       _isMicLocked = data['lock'] ?? false;
-      _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled);
+      
+      _room?.localParticipant?.setMicrophoneEnabled(shouldEnable);
       
       String msg = "";
-      if (data['target'] == userId) {
-        msg = _isMicEnabled ? "قام المعلم بتفعيل الميكروفون لك" : "قام المعلم بكتم صوتك";
+      if (data['target'] != null) {
+        msg = shouldEnable ? "قام المعلم بتفعيل الميكروفون لك" : "قام المعلم بكتم صوتك";
       } else {
         msg = _isMicLocked ? "المدرس كتم صوت الجميع" : "المدرس سمح للجميع بالتحدث";
       }
       onNotification?.call(msg, _isMicLocked ? Colors.red : Colors.green);
+      notifyListeners();
     }
   }
 
@@ -580,11 +600,8 @@ class VideoRoomController extends ChangeNotifier {
     onNotification?.call("تم إنهاء مجموعات العمل وعودة الجميع", Colors.blueGrey);
   }
 
-  // --- دوال التحكم المحدثة لضمان الوصول 100% ---
-  
   void muteParticipant(String targetUserId, bool mute) {
     if (!isTeacher || !_isConnected) return;
-    // نرسل الأمر بنظام Broadcast لضمان الوصول، والطالب سيتعرف عليه عبر target
     sendData({
       'type': 'control_mic',
       'target': targetUserId,
@@ -634,10 +651,11 @@ class VideoRoomController extends ChangeNotifier {
   }
   
   void sendData(Map<String, dynamic> d) {
-    if (_isConnected) {
-      // إرسال البيانات لكل القاعة (Broadcast) لضمان وصولها بنجاح
-      _room?.localParticipant?.publishData(
-        utf8.encode(jsonEncode(d))
+    if (_isConnected && _room != null) {
+      final data = utf8.encode(jsonEncode(d));
+      _room!.localParticipant?.publishData(
+        data,
+        reliable: true,
       );
     }
   }

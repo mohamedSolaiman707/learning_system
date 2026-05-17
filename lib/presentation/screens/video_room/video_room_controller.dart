@@ -278,6 +278,23 @@ class VideoRoomController extends ChangeNotifier {
         _room?.disconnect();
         onSessionEnded?.call("تم إنهاء الجلسة بواسطة المدرس");
         break;
+      case 'whiteboard_draw':
+        _handleDraw(data);
+        break;
+      case 'whiteboard_undo':
+        if (_whiteboardStrokes.isNotEmpty) {
+          _redoStack.add(_whiteboardStrokes.removeLast());
+        }
+        break;
+      case 'whiteboard_redo':
+        if (_redoStack.isNotEmpty) {
+          _whiteboardStrokes.add(_redoStack.removeLast());
+        }
+        break;
+      case 'whiteboard_clear':
+        _whiteboardStrokes.clear();
+        _redoStack.clear();
+        break;
     }
     notifyListeners();
   }
@@ -317,6 +334,16 @@ class VideoRoomController extends ChangeNotifier {
     }
   }
 
+  void _handleDraw(Map<String, dynamic> data) {
+    final List points = data['points'];
+    _whiteboardStrokes.add(Stroke(
+      points: points.map((e) => Offset(e['x'].toDouble(), e['y'].toDouble())).toList(),
+      color: Color(data['color']),
+      width: data['width'].toDouble(),
+    ));
+    _redoStack.clear();
+  }
+
   void addStroke(List<Offset> points) {
     if (!_isConnected) return;
     final s = Stroke(points: List.from(points), color: _selectedColor, width: _strokeWidth);
@@ -328,6 +355,29 @@ class VideoRoomController extends ChangeNotifier {
       'color': s.color.toARGB32(), 
       'width': s.width
     });
+    notifyListeners();
+  }
+
+  void undoWhiteboard() {
+    if (_whiteboardStrokes.isNotEmpty) {
+      _redoStack.add(_whiteboardStrokes.removeLast());
+      sendData({'type': 'whiteboard_undo'});
+      notifyListeners();
+    }
+  }
+
+  void redoWhiteboard() {
+    if (_redoStack.isNotEmpty) {
+      _whiteboardStrokes.add(_redoStack.removeLast());
+      sendData({'type': 'whiteboard_redo'});
+      notifyListeners();
+    }
+  }
+
+  void clearWhiteboard() {
+    _whiteboardStrokes.clear();
+    _redoStack.clear();
+    sendData({'type': 'whiteboard_clear'});
     notifyListeners();
   }
 
@@ -444,37 +494,6 @@ class VideoRoomController extends ChangeNotifier {
       onNotification?.call("فشل بدء مشاركة الشاشة", Colors.red);
       notifyListeners();
     }
-  }
-
-  void _handleDraw(Map<String, dynamic> data) {
-    final List points = data['points'];
-    _whiteboardStrokes.add(Stroke(
-      points: points.map((e) => Offset(e['x'].toDouble(), e['y'].toDouble())).toList(),
-      color: Color(data['color']),
-      width: data['width'].toDouble(),
-    ));
-    _redoStack.clear();
-  }
-
-  void undoWhiteboard() {
-    if (_whiteboardStrokes.isNotEmpty) {
-      _redoStack.add(_whiteboardStrokes.removeLast());
-      sendData({'type': 'whiteboard_undo'});
-      notifyListeners();
-    }
-  }
-  void redoWhiteboard() {
-    if (_redoStack.isNotEmpty) {
-      _whiteboardStrokes.add(_redoStack.removeLast());
-      sendData({'type': 'whiteboard_redo'});
-      notifyListeners();
-    }
-  }
-  void clearWhiteboard() {
-    _whiteboardStrokes.clear();
-    _redoStack.clear();
-    sendData({'type': 'whiteboard_clear'});
-    notifyListeners();
   }
 
   void sendReaction(String emoji) { 

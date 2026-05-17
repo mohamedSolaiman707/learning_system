@@ -32,6 +32,7 @@ class VideoRoomScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => VideoRoomController(
+        title: title,
         roomName: roomName,
         userName: userName,
         userId: userId,
@@ -40,6 +41,7 @@ class VideoRoomScreen extends StatelessWidget {
       )..init(),
       child: const Scaffold(
         backgroundColor: Colors.black,
+        resizeToAvoidBottomInset: true, // يضمن رفع الواجهة عند ظهور لوحة المفاتيح
         body: SafeArea(
           child: _VideoRoomContent(),
         ),
@@ -188,7 +190,16 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
         if (controller.isQuizOpen)
           _buildCenterPanel(const QuizPanel(), isMobile, size),
 
-        // 4. اللوحات الجانبية/السفلية (الدردشة، الأسئلة، المشاركين)
+        // 5. التفاعلات الطائرة
+        ..._reactions,
+
+        // 6. شريط التحكم السفلي (يظل في مكانه)
+        const Align(
+          alignment: Alignment.bottomCenter,
+          child: ControlsBar(),
+        ),
+
+        // 4. اللوحات الجانبية/السفلية (تظهر فوق شريط التحكم في الهاتف)
         if (controller.isChatOpen)
           _buildFeaturePanel(const ChatPanel(), isMobile, size),
           
@@ -197,15 +208,6 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
           
         if (controller.isParticipantsOpen)
           _buildFeaturePanel(const ParticipantsPanel(), isMobile, size),
-
-        // 5. التفاعلات الطائرة
-        ..._reactions,
-
-        // 6. شريط التحكم السفلي
-        const Align(
-          alignment: Alignment.bottomCenter,
-          child: ControlsBar(),
-        ),
       ],
     );
   }
@@ -232,7 +234,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  controller.roomName,
+                  controller.title,
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -247,6 +249,19 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
               ],
             ),
           ),
+          if (controller.isBreakoutRoom && !controller.isTeacher)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: ElevatedButton.icon(
+                onPressed: controller.returnToMainRoom,
+                icon: const Icon(Icons.home, size: 16, color: Colors.white),
+                label: const Text("العودة للقاعة الرئيسية", style: TextStyle(fontSize: 12, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -258,12 +273,18 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
       child: Container(
         width: isMobile ? size.width : 360,
         height: isMobile ? size.height * 0.7 : size.height,
-        margin: isMobile ? EdgeInsets.zero : const EdgeInsets.only(right: 16, top: 16, bottom: 100),
+        // تم رفع اللوحة بمسافة 95 لكي تظهر فوق شريط الأزرار تماماً
+        margin: isMobile 
+            ? const EdgeInsets.only(bottom: 95) 
+            : const EdgeInsets.only(right: 16, top: 16, bottom: 100),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: isMobile 
             ? const BorderRadius.vertical(top: Radius.circular(24)) 
             : BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, spreadRadius: 5)
+          ],
         ),
         child: child,
       ),

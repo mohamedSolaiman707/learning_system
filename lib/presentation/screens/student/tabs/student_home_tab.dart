@@ -65,12 +65,18 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
 
         if (mounted) {
           setState(() {
-            _enrolledSessions = enrolledResponse.map((e) => SessionModel.fromMap(e['sessions'])).toList();
+            final now = DateTime.now();
+            
+            // فلترة الحصص: جلب فقط الحصص التي لم تنتهِ بعد (وقتها القادم أو الحالي)
+            _enrolledSessions = enrolledResponse
+                .map((e) => SessionModel.fromMap(e['sessions']))
+                .where((s) => s.endTime.isAfter(now)) 
+                .toList();
+            
             _enrolledSessions.sort((a, b) => a.startTime.compareTo(b.startTime));
 
             _allActiveSessions = activeResponse.map((e) => SessionModel.fromMap(e)).toList();
 
-            final now = DateTime.now();
             try {
               // الأولوية للحصص المباشرة من حصص الطالب
               _nextSession = _enrolledSessions.firstWhere(
@@ -84,7 +90,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
             if (initial) _isLoading = false;
           });
 
-          // حساب الواجبات المعلقة
+          // حساب الواجبات المعلقة (يمكن تحسينها لاحقاً لتعمل في الخلفية)
           int pendingCount = 0;
           for (var session in _enrolledSessions) {
              final assignments = await assignService.getAssignments(session.id);
@@ -132,74 +138,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
         ),
       ));
     }
-  }
-
-  void _showJoinCodeDialog() {
-    final codeController = TextEditingController();
-    bool isSubmitting = false;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text("انضمام لحصة جديدة", textAlign: TextAlign.center),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text("أدخل كود الحصة المكون من 6 أرقام/حروف للانضمام", 
-                style: TextStyle(fontSize: 13, color: Colors.grey), textAlign: TextAlign.center),
-              const SizedBox(height: 20),
-              TextField(
-                controller: codeController,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 4),
-                decoration: InputDecoration(
-                  hintText: "ABC123",
-                  hintStyle: TextStyle(color: Colors.grey.shade300, letterSpacing: 4),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                ),
-                textCapitalization: TextCapitalization.characters,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
-            ElevatedButton(
-              onPressed: isSubmitting ? null : () async {
-                if (codeController.text.isEmpty) return;
-                
-                setDialogState(() => isSubmitting = true);
-                try {
-                  final auth = Provider.of<AuthProvider>(context, listen: false);
-                  final db = Provider.of<DatabaseService>(context, listen: false);
-                  
-                  await db.enrollStudentByCode(auth.user!.id, codeController.text);
-                  
-                  if (mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("تم الانضمام للحصة بنجاح"), backgroundColor: Colors.green)
-                    );
-                    _loadStudentData(initial: true);
-                  }
-                } catch (e) {
-                  setDialogState(() => isSubmitting = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: Colors.red)
-                  );
-                }
-              },
-              child: isSubmitting 
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text("انضمام"),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _showSessionOptions(SessionModel session) {
@@ -285,7 +223,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
                           _buildStatsAndProgress(),
                           const SizedBox(height: 40),
                           if (_enrolledSessions.isNotEmpty) ...[
-                            _buildSectionHeader("جدول حصصك"),
+                            _buildSectionHeader("جدول حصصك القادمة"),
                             const SizedBox(height: 15),
                             _buildUpcomingGrid(),
                           ],
@@ -308,7 +246,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
         title: Text("الرئيسية", style: TextStyle(color: Colors.black.withOpacity(0.8), fontWeight: FontWeight.bold, fontSize: 20)),
       ),
       actions: [
-        IconButton(onPressed: _showJoinCodeDialog, icon: const Icon(IconlyLight.plus), tooltip: "انضمام بكود"),
         IconButton(onPressed: () {}, icon: const Badge(child: Icon(IconlyLight.notification))),
         const SizedBox(width: 8),
         Padding(
@@ -333,7 +270,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
       children: [
         Text("أهلاً بك، $name 👋", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
         Text(
-          todayCount > 0 ? "لديك $todayCount حصص اليوم." : "لا توجد حصص مجدولة لليوم.",
+          todayCount > 0 ? "لديك $todayCount حصص متبقية اليوم." : "لا توجد حصص مجدولة حالياً.",
           style: const TextStyle(fontSize: 16, color: Colors.grey),
         ),
       ],
@@ -413,7 +350,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> {
           Icon(IconlyLight.calendar, size: 50, color: Colors.grey.shade300),
           const SizedBox(height: 15),
           const Text("لا توجد حصص قادمة حالياً", style: TextStyle(color: Colors.grey, fontSize: 16)),
-          TextButton(onPressed: _showJoinCodeDialog, child: const Text("انضم لحصة الآن")),
+          const Text("سوف تظهر الحصص هنا بمجرد أن تبدأ", style: TextStyle(color: Colors.grey, fontSize: 12)),
         ],
       ),
     );

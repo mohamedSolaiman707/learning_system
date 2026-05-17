@@ -118,10 +118,13 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getActiveSessions() async {
     try {
+      // جلب الحصص المفعلة حالياً والتي لم ينتهِ وقتها المجدول بعد
+      final now = DateTime.now().toUtc().toIso8601String();
       final response = await _supabase
           .from('sessions')
           .select('*, profiles!teacher_id(full_name), rooms!inner(is_active, room_name)')
-          .eq('rooms.is_active', true);
+          .eq('rooms.is_active', true)
+          .gt('end_time', now);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       debugPrint("Error fetching active sessions: $e");

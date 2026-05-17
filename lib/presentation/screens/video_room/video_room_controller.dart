@@ -15,6 +15,7 @@ class Stroke {
 }
 
 class VideoRoomController extends ChangeNotifier {
+  final String title;
   final String roomName;
   final String userName;
   final String userId;
@@ -22,6 +23,7 @@ class VideoRoomController extends ChangeNotifier {
   final String? sessionId;
 
   VideoRoomController({
+    required this.title,
     required this.roomName,
     required this.userName,
     required this.userId,
@@ -33,6 +35,8 @@ class VideoRoomController extends ChangeNotifier {
   EventsListener<RoomEvent>? _listener;
   bool _isLoading = true;
   String? _errorMessage;
+  String? _currentRoomName;
+  bool _isBreakoutActive = false; // تتبع حالة المجموعات
   
   bool _isMicEnabled = false;
   bool _isCamEnabled = false;
@@ -90,6 +94,8 @@ class VideoRoomController extends ChangeNotifier {
   Map<String, bool> get remoteHandStates => _remoteHandStates;
   bool get isChatLocked => _isChatLocked;
   Color get selectedColor => _selectedColor;
+  bool get isBreakoutActive => _isBreakoutActive;
+  bool get isBreakoutRoom => _currentRoomName != null && _currentRoomName != roomName;
 
   // Callbacks
   Function(String message)? onSessionEnded;
@@ -111,7 +117,8 @@ class VideoRoomController extends ChangeNotifier {
   void setStrokeWidth(double width) { _strokeWidth = width; notifyListeners(); }
 
   Future<void> init() async {
-    if (sessionId != null) {
+    _currentRoomName = roomName;
+    if (sessionId != null && sessionId!.isNotEmpty) {
       final isValid = await _checkAndMonitorSession();
       if (!isValid) return;
       _initChatRealtime();
@@ -120,6 +127,7 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void _initChatRealtime() {
+    if (sessionId == null || sessionId!.isEmpty) return;
     _chatSubscription = supabase
         .from('chat_messages')
         .stream(primaryKey: ['id'])
@@ -160,19 +168,28 @@ class VideoRoomController extends ChangeNotifier {
       _setupEventListeners();
       await _room!.connect('wss://learning-system-07wdu0v6.livekit.cloud', token!);
       
-      if (!isTeacher && sessionId != null) {
-        DatabaseService().logStudentEntry(sessionId!, userId);
-      }
-      
+      _currentRoomName = targetRoomName;
       _isLoading = false; notifyListeners();
     } catch (e) { _errorMessage = e.toString(); _isLoading = false; notifyListeners(); }
   }
 
+  void returnToMainRoom() => connectToRoom(roomName);
+
   void _setupEventListeners() {
-    _listener!.on<DataReceivedEvent>((event) {
-      final data = jsonDecode(utf8.decode(event.data));
-      _handleIncomingData(data, event.participant);
-    });
+    _listener!
+      ..on<DataReceivedEvent>((event) {
+        final data = jsonDecode(utf8.decode(event.data));
+        _handleIncomingData(data, event.participant);
+      })
+      ..on<ParticipantConnectedEvent>((_) => notifyListeners())
+      ..on<ParticipantDisconnectedEvent>((_) => notifyListeners())
+      ..on<ActiveSpeakersChangedEvent>((_) => notifyListeners())
+      ..on<TrackSubscribedEvent>((_) => notifyListeners())
+      ..on<TrackUnsubscribedEvent>((_) => notifyListeners())
+      ..on<TrackMutedEvent>((_) => notifyListeners())
+      ..on<TrackUnmutedEvent>((_) => notifyListeners())
+      ..on<ParticipantMetadataUpdatedEvent>((_) => notifyListeners())
+      ..on<ParticipantConnectionQualityUpdatedEvent>((_) => notifyListeners());
   }
 
   void _handleIncomingData(Map<String, dynamic> data, RemoteParticipant? p) {
@@ -184,22 +201,35 @@ class VideoRoomController extends ChangeNotifier {
       case 'poll_create': _activePoll = data['poll']; _pollResults = {for (var o in data['poll']['options']) o: 0}; _isPollsOpen = true; break;
       case 'poll_vote': _pollResults[data['option']] = (_pollResults[data['option']] ?? 0) + 1; break;
       case 'quiz_create': _handleQuiz(data['quiz']); break;
-      case 'hand_raise': if (p != null) _remoteHandStates[p.identity] = data['value']; break;
-      case 'reaction': onReactionReceived?.call(data['value']); break;
-      case 'whiteboard_draw': _handleDraw(data); break;
-      case 'whiteboard_clear': _whiteboardStrokes.clear(); _redoStack.clear(); break;
-      case 'whiteboard_undo': 
-        if (_whiteboardStrokes.isNotEmpty) _redoStack.add(_whiteboardStrokes.removeLast()); 
+      case 'hand_raise': 
+        if (p != null) {
+          _remoteHandStates[p.identity] = data['value'];
+          if (isTeacher && data['value'] == true) {
+            onNotification?.call("قام ${p.name ?? 'طالب'} برفع يده ✋", Colors.orange);
+          }
+        }
         break;
-      case 'whiteboard_redo':
-        if (_redoStack.isNotEmpty) _whiteboardStrokes.add(_redoStack.removeLast());
+      case 'lower_hand':
+        if (data['target'] == userId) {
+          _isHandRaised = false;
+          onNotification?.call("قام المدرس بإنزال يدك", Colors.blueGrey);
+        } else {
+          _remoteHandStates[data['target']] = false;
+        }
         break;
-      case 'control_mic': _handleMicControl(data); break;
-      case 'kick_participant': 
-        if (data['target'] == userId) onSessionEnded?.call("تم استبعادك من الجلسة بواسطة المدرس.");
+      case 'lower_all_hands':
+        _remoteHandStates.clear();
+        _isHandRaised = false;
+        onNotification?.call("تم إنزال أيدي الجميع", Colors.blueGrey);
         break;
-      case 'control_chat': _isChatLocked = data['value']; break;
-      case 'breakout_invite': if (data['target'] == userId) onBreakoutInvite?.call(data['room'], data['groupName']); break;
+      case 'breakout_invite':
+        if (data['target'] == userId) {
+          onBreakoutInvite?.call(data['room'], data['groupName']);
+        }
+        break;
+      case 'end_breakout':
+        if (!isTeacher) returnToMainRoom();
+        break;
     }
     notifyListeners();
   }
@@ -284,6 +314,10 @@ class VideoRoomController extends ChangeNotifier {
 
   void sendMessage(String text) async {
     if (_isChatLocked && !isTeacher) return;
+    if (sessionId == null || sessionId!.isEmpty) {
+      onNotification?.call("لا يمكن إرسال رسائل في غرفة بدون جلسة نشطة", Colors.red);
+      return;
+    }
     try {
       await supabase.from('chat_messages').insert({
         'session_id': sessionId,
@@ -298,6 +332,59 @@ class VideoRoomController extends ChangeNotifier {
   void toggleCam() { _isCamEnabled = !_isCamEnabled; _room?.localParticipant?.setCameraEnabled(_isCamEnabled); notifyListeners(); }
   void toggleHand() { _isHandRaised = !_isHandRaised; sendData({'type': 'hand_raise', 'value': _isHandRaised}); notifyListeners(); }
   
+  void lowerParticipantHand(String identity) {
+    if (!isTeacher) return;
+    _remoteHandStates[identity] = false;
+    sendData({'type': 'lower_hand', 'target': identity});
+    notifyListeners();
+  }
+
+  void lowerAllHands() {
+    if (!isTeacher) return;
+    _remoteHandStates.clear();
+    _isHandRaised = false;
+    sendData({'type': 'lower_all_hands'});
+    notifyListeners();
+  }
+
+  void toggleChatLock() {
+    if (!isTeacher) return;
+    _isChatLocked = !_isChatLocked;
+    sendData({'type': 'control_chat', 'value': _isChatLocked});
+    notifyListeners();
+  }
+
+  void startBreakoutRooms(int count) {
+    if (!isTeacher || _room == null) return;
+    final students = _room!.remoteParticipants.values.toList();
+    if (students.isEmpty) {
+      onNotification?.call("لا يوجد طلاب لتقسيمهم", Colors.red);
+      return;
+    }
+
+    _isBreakoutActive = true;
+    for (int i = 0; i < students.length; i++) {
+      int groupNum = (i % count) + 1;
+      String groupRoom = "${roomName}_group_$groupNum";
+      sendData({
+        'type': 'breakout_invite',
+        'target': students[i].identity,
+        'room': groupRoom,
+        'groupName': "مجموعة العمل $groupNum"
+      });
+    }
+    notifyListeners();
+    onNotification?.call("تم إرسال دعوات غرف العمل", Colors.green);
+  }
+
+  void endBreakoutRooms() {
+    if (!isTeacher) return;
+    _isBreakoutActive = false;
+    sendData({'type': 'end_breakout'});
+    notifyListeners();
+    onNotification?.call("تم إنهاء مجموعات العمل وعودة الجميع", Colors.blueGrey);
+  }
+
   void muteParticipant(String targetUserId, bool mute) {
     if (!isTeacher) return;
     sendData({
@@ -344,7 +431,7 @@ class VideoRoomController extends ChangeNotifier {
 
   @override
   void dispose() {
-    if (sessionId != null) {
+    if (sessionId != null && sessionId!.isNotEmpty) {
       DatabaseService().logStudentExit(sessionId!, userId);
     }
     _statusSubscription?.cancel(); 

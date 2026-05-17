@@ -69,7 +69,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
   }
 
   void _handleQuickAction(String type) {
-    // إذا كان الطلب هو التقارير، ننتقل مباشرة لصفحة التقارير العامة
     if (type == 'reports') {
       Navigator.push(context, MaterialPageRoute(builder: (context) => const TeacherReportsScreen()));
       return;
@@ -233,7 +232,8 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
             ElevatedButton(
               onPressed: () async {
                 if (nameController.text.isEmpty) return;
-                final start = DateTime(startDate.year, startDate.month, startDate.day, startTime.hour, startTime.minute);
+                // إنشاء وقت محلي ثم تحويله لـ UTC قبل الحفظ
+                final start = DateTime(startDate.year, startDate.month, startDate.day, startTime.hour, startTime.minute).toUtc();
                 final end = start.add(Duration(minutes: selectedDurationMinutes));
                 
                 final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -288,8 +288,8 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
       final sessionData = await db.saveSession({
         'subject_name': "بث مباشر سريع - $teacherName",
         'teacher_id': auth.user!.id,
-        'start_time': DateTime.now().toIso8601String(),
-        'end_time': DateTime.now().add(const Duration(hours: 1)).toIso8601String(),
+        'start_time': DateTime.now().toUtc().toIso8601String(),
+        'end_time': DateTime.now().toUtc().add(const Duration(hours: 1)).toIso8601String(),
         'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString().padLeft(6, '0'),
         'status': 'active',
         'is_recording_enabled': true,
@@ -463,7 +463,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
     final isUpcoming = _nextSession!.startTime.isAfter(now);
     
     final startTimeStr = intl.DateFormat('hh:mm a').format(_nextSession!.startTime);
-    // جعل الرابط ديناميكياً بناءً على الـ Domain الحالي
     final String liveLink = "${Uri.base.origin}/#/live?sessionId=${_nextSession!.id}";
 
     final db = Provider.of<DatabaseService>(context, listen: false);
@@ -522,14 +521,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        _buildCopyBadge(
-                          label: "كود: ${_nextSession!.classCode}", 
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: _nextSession!.classCode));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم نسخ كود الحصة")));
-                          }
-                        ),
-                        const SizedBox(width: 8),
                         _buildCopyBadge(
                           label: "نسخ الرابط 🔗", 
                           onTap: () {

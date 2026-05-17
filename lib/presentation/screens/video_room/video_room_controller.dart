@@ -49,7 +49,7 @@ class VideoRoomController extends ChangeNotifier {
   // Moderation States
   bool _isChatLocked = false;
   bool _isWhiteboardLocked = false;
-  bool _isScreenShareLocked = true; 
+  bool _isScreenShareLocked = false; 
   String? _spotlightUserId; 
 
   bool _isChatOpen = false;
@@ -119,7 +119,6 @@ class VideoRoomController extends ChangeNotifier {
 
   final supabase = Supabase.instance.client;
   StreamSubscription? _statusSubscription;
-  StreamSubscription? _chatSubscription;
   Timer? _expiryTimer;
 
   void toggleChat() { _isChatOpen = !_isChatOpen; _isWhiteboardOpen = false; _isQAOpen = false; _isParticipantsOpen = false; notifyListeners(); }
@@ -162,21 +161,24 @@ class VideoRoomController extends ChangeNotifier {
       if (!isValid) return;
     }
     
-    _initChatRealtime();
+    // جلب التاريخ القديم للمحادثة عند البدء
+    await _loadChatHistory();
     await connectToRoom(roomName);
   }
 
-  void _initChatRealtime() {
-    _chatSubscription?.cancel();
-    _chatSubscription = supabase
-        .from('messages')
-        .stream(primaryKey: ['id'])
-        .eq('room_name', roomName)
-        .order('created_at')
-        .listen((data) {
-          _messages = List<Map<String, dynamic>>.from(data);
-          notifyListeners();
-        });
+  // جلب الرسائل القديمة مرة واحدة (بدون Realtime)
+  Future<void> _loadChatHistory() async {
+    try {
+      final data = await supabase
+          .from('messages')
+          .select()
+          .eq('room_name', roomName)
+          .order('created_at', ascending: false);
+      _messages = List<Map<String, dynamic>>.from(data);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error loading chat history: $e");
+    }
   }
 
   Future<bool> _checkAndMonitorSession() async {
@@ -237,7 +239,7 @@ class VideoRoomController extends ChangeNotifier {
       })
       ..on<ParticipantDisconnectedEvent>((event) {
         String name = event.participant.name ?? "طالب";
-        onNotification?.call("🚪 غادر $name البث", Colors.blueGrey.shade700);
+        onNotification?.call("🚪 غادر $name للبث", Colors.blueGrey.shade700);
         notifyListeners();
       })
       ..on<ActiveSpeakersChangedEvent>((_) => notifyListeners())
@@ -251,6 +253,13 @@ class VideoRoomController extends ChangeNotifier {
 
   void _handleIncomingData(Map<String, dynamic> data, RemoteParticipant? p) {
     switch (data['type']) {
+      case 'chat_message':
+        // استقبال رسالة شات جديدة عبر LiveKit
+        _messages.insert(0, data);
+        if (!_isChatOpen) {
+          onNotification?.call("رسالة من ${data['user_name']}", Colors.blueAccent);
+        }
+        break;
       case 'new_question': 
         _questions.add(data); 
         if (!_isQAOpen) onNotification?.call("سؤال جديد من ${data['from']}", Colors.blue);
@@ -291,10 +300,8 @@ class VideoRoomController extends ChangeNotifier {
         _handleMicControl(data);
         break;
       case 'kick_participant':
-        // اللوجيك المطور للطرد الاحترافي
         if (data['target'] == userId) {
           onNotification?.call("⚠️ عذراً، لقد قرر المعلم استبعادك من الجلسة الحالية.", Colors.red);
-          // تأخير 4 ثوانٍ لتمكين الطالب من قراءة الرسالة
           Future.delayed(const Duration(seconds: 4), () {
             _room?.disconnect();
             onSessionEnded?.call("تم استبعادك من القاعة الدراسية.");
@@ -383,7 +390,7 @@ class VideoRoomController extends ChangeNotifier {
       if (data['target'] == userId) {
         msg = _isMicEnabled ? "قام المعلم بتفعيل الميكروفون لك" : "قام المعلم بكتم صوتك";
       } else {
-        msg = _isMicLocked ? "الميكروفون مقفل من قبل المدرس" : "الميكروفون مفعل";
+        msg = _isMicLocked ? "المدرس كتم صوت الجميع" : "المدرس سمح للجميع بالتحدث";
       }
       onNotification?.call(msg, _isMicLocked ? Colors.red : Colors.green);
     }
@@ -449,14 +456,31 @@ class VideoRoomController extends ChangeNotifier {
       onNotification?.call("الدردشة مقفلة حالياً", Colors.orange);
       return;
     }
+
+    final newMessage = {
+      'user_name': userName,
+      'content': text,
+      'created_at': DateTime.now().toIso8601String(),
+    };
+
+    // 1. أضف الرسالة محلياً فوراً (لسرعة العرض عند المستخدم)
+    _messages.insert(0, newMessage);
+    notifyListeners();
+
+    // 2. أرسلها للآخرين فوراً عبر LiveKit (الحل البديل لـ Realtime)
+    sendData({
+      'type': 'chat_message',
+      ...newMessage
+    });
     
+    // 3. احفظها في قاعدة البيانات لكي تظهر عند الدخول مرة أخرى (History)
     try {
       await supabase.from('messages').insert({
         'room_name': roomName,
         'user_name': userName,
         'content': text,
       });
-    } catch (e) { debugPrint("Error sending message: $e"); }
+    } catch (e) { debugPrint("Error sending message to DB: $e"); }
   }
 
   void toggleMic() { 
@@ -554,14 +578,27 @@ class VideoRoomController extends ChangeNotifier {
     onNotification?.call("تم إنهاء مجموعات العمل وعودة الجميع", Colors.blueGrey);
   }
 
+  // --- دوال التحكم المحدثة لضمان الوصول 100% ---
+  
   void muteParticipant(String targetUserId, bool mute) {
     if (!isTeacher || !_isConnected) return;
+    // نرسل الأمر بنظام Broadcast لضمان الوصول، والطالب سيتعرف عليه عبر target
     sendData({
       'type': 'control_mic',
       'target': targetUserId,
       'value': !mute,
       'lock': mute
-    }, identities: [targetUserId]);
+    });
+  }
+
+  void muteAllParticipants(bool mute) {
+    if (!isTeacher || !_isConnected) return;
+    sendData({
+      'type': 'control_mic',
+      'target': null, 
+      'value': !mute,
+      'lock': mute
+    });
   }
 
   void kickParticipant(String targetUserId) {
@@ -569,7 +606,7 @@ class VideoRoomController extends ChangeNotifier {
     sendData({
       'type': 'kick_participant',
       'target': targetUserId
-    }, identities: [targetUserId]);
+    });
   }
 
   Future<void> toggleScreenShare() async {
@@ -594,11 +631,11 @@ class VideoRoomController extends ChangeNotifier {
     sendData({'type': 'reaction', 'value': emoji}); onReactionReceived?.call(emoji); 
   }
   
-  void sendData(Map<String, dynamic> d, {List<String>? identities}) {
+  void sendData(Map<String, dynamic> d) {
     if (_isConnected) {
+      // إرسال البيانات لكل القاعة (Broadcast) لضمان وصولها بنجاح
       _room?.localParticipant?.publishData(
-        utf8.encode(jsonEncode(d)),
-        destinationIdentities: identities, 
+        utf8.encode(jsonEncode(d))
       );
     }
   }
@@ -631,7 +668,6 @@ class VideoRoomController extends ChangeNotifier {
     }
     _connectivitySubscription?.cancel();
     _statusSubscription?.cancel(); 
-    _chatSubscription?.cancel();
     _expiryTimer?.cancel(); 
     _quizTimer?.cancel();
     _room?.disconnect(); 

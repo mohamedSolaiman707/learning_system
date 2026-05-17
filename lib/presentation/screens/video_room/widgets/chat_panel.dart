@@ -17,7 +17,7 @@ class _ChatPanelState extends State<ChatPanel> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -39,24 +39,27 @@ class _ChatPanelState extends State<ChatPanel> {
         children: [
           _buildHeader(context, controller),
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(12),
-              itemCount: controller.messages.length,
-              itemBuilder: (context, index) {
-                final msg = controller.messages[index];
-                // بما أن جدولك لا يحتوي على uid، سنقارن بالاسم لتمييز رسائلك
-                final isMe = msg['user_name'] == controller.userName;
-                return _MessageBubble(
-                  userName: msg['user_name'] ?? 'مشارك',
-                  text: msg['content'] ?? '',
-                  isMe: isMe,
-                  time: msg['created_at'] != null 
-                    ? DateTime.parse(msg['created_at']).toLocal().toString().substring(11, 16)
-                    : '',
-                );
-              },
-            ),
+            child: controller.messages.isEmpty 
+              ? const Center(child: Text("لا توجد رسائل بعد", style: TextStyle(color: Colors.grey)))
+              : ListView.builder(
+                  key: const PageStorageKey('chat_list'), // للحفاظ على مكان التمرير
+                  reverse: true, 
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(12),
+                  itemCount: controller.messages.length,
+                  itemBuilder: (context, index) {
+                    final msg = controller.messages[index];
+                    final isMe = msg['user_name'] == controller.userName;
+                    
+                    return _MessageBubble(
+                      key: ValueKey(msg['created_at'] ?? index), // مفتاح فريد لكل رسالة
+                      userName: msg['user_name'] ?? 'مشارك',
+                      text: msg['content'] ?? '',
+                      isMe: isMe,
+                      time: _formatTime(msg['created_at']),
+                    );
+                  },
+                ),
           ),
           if (controller.isChatLocked && !controller.isTeacher)
             const Padding(
@@ -68,6 +71,16 @@ class _ChatPanelState extends State<ChatPanel> {
         ],
       ),
     );
+  }
+
+  String _formatTime(dynamic createdAt) {
+    if (createdAt == null) return '';
+    try {
+      final date = DateTime.parse(createdAt.toString()).toLocal();
+      return "${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}";
+    } catch (e) {
+      return '';
+    }
   }
 
   Widget _buildHeader(BuildContext context, VideoRoomController controller) {
@@ -134,6 +147,7 @@ class _MessageBubble extends StatelessWidget {
   final String time;
 
   const _MessageBubble({
+    super.key,
     required this.userName,
     required this.text,
     required this.isMe,

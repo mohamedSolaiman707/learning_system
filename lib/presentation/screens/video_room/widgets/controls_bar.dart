@@ -41,7 +41,8 @@ class ControlsBar extends StatelessWidget {
               // زر ردود الفعل
               _ReactionButton(controller: controller),
 
-              if (controller.isTeacher)
+              // زر مشاركة الشاشة (تم التعديل ليظهر للطالب والمدرس)
+              if (controller.isTeacher || !controller.isScreenShareLocked)
                 _ControlButton(
                   icon: controller.isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
                   tooltip: controller.isScreenSharing ? "إيقاف مشاركة الشاشة" : "مشاركة الشاشة",
@@ -78,6 +79,8 @@ class ControlsBar extends StatelessWidget {
                 color: controller.isWhiteboardOpen ? Colors.green.withValues(alpha: 0.3) : Colors.white10,
                 iconColor: controller.isWhiteboardOpen ? Colors.green : Colors.white,
               ),
+              
+              // المدرس فقط يرى زر المشاركين للتحكم الشامل
               if (controller.isTeacher)
                 _ControlButton(
                   icon: Icons.people_outline,
@@ -156,7 +159,7 @@ class _ControlButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Tooltip(
         message: tooltip,
-        waitDuration: const Duration(milliseconds: 500), // يظهر بسرعة عند الوقوف
+        waitDuration: const Duration(milliseconds: 500),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
@@ -171,7 +174,7 @@ class _ControlButton extends StatelessWidget {
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             icon: Icon(icon, color: iconColor, size: 22),
             onPressed: onPressed,
-            hoverColor: Colors.white.withValues(alpha: 0.2), // تأثير Hover لوني
+            hoverColor: Colors.white.withValues(alpha: 0.2),
             highlightColor: Colors.white.withValues(alpha: 0.1),
           ),
         ),

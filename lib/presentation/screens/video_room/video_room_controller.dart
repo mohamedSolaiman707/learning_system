@@ -188,15 +188,14 @@ class VideoRoomController extends ChangeNotifier {
         return false;
       }
       _statusSubscription = DatabaseService().watchSessionStatus(sessionId!).listen((data) {
-        // تم التصحيح هنا: data هي Map لأن watchSessionStatus تعيد Map
-        if (data['status'] == 'ended') {
+        if (data.isNotEmpty && data.first['status'] == 'ended') {
           onNotification?.call("🔴 تم إنهاء البث المباشر من قبل المعلم.", Colors.redAccent);
           Future.delayed(const Duration(seconds: 3), () => onSessionEnded?.call("انتهت الحصة الدراسية."));
         }
       }, onError: (e) => debugPrint("Session listener error: $e"));
       
       _expiryTimer = Timer(endTime.difference(DateTime.now()), () {
-        onSessionEnded?.call("انتهى وقت الحصة.");
+        onSessionEnded?.call("انتهى وقت الحصة المجدول.");
       });
       if (isTeacher && res['is_recording_enabled'] == true) startRecording();
       return true;
@@ -231,8 +230,16 @@ class VideoRoomController extends ChangeNotifier {
         final data = jsonDecode(utf8.decode(event.data));
         _handleIncomingData(data, event.participant);
       })
-      ..on<ParticipantConnectedEvent>((_) => notifyListeners())
-      ..on<ParticipantDisconnectedEvent>((_) => notifyListeners())
+      ..on<ParticipantConnectedEvent>((event) {
+        String name = event.participant.name ?? "طالب جديد";
+        onNotification?.call("👋 انضم $name للبث", Colors.green.shade700);
+        notifyListeners();
+      })
+      ..on<ParticipantDisconnectedEvent>((event) {
+        String name = event.participant.name ?? "طالب";
+        onNotification?.call("🚪 غادر $name البث", Colors.blueGrey.shade700);
+        notifyListeners();
+      })
       ..on<ActiveSpeakersChangedEvent>((_) => notifyListeners())
       ..on<TrackSubscribedEvent>((_) => notifyListeners())
       ..on<TrackUnsubscribedEvent>((_) => notifyListeners())
@@ -284,9 +291,14 @@ class VideoRoomController extends ChangeNotifier {
         _handleMicControl(data);
         break;
       case 'kick_participant':
+        // اللوجيك المطور للطرد الاحترافي
         if (data['target'] == userId) {
-          _room?.disconnect();
-          onSessionEnded?.call("تم طردك من القاعة بواسطة المدرس");
+          onNotification?.call("⚠️ عذراً، لقد قرر المعلم استبعادك من الجلسة الحالية.", Colors.red);
+          // تأخير 4 ثوانٍ لتمكين الطالب من قراءة الرسالة
+          Future.delayed(const Duration(seconds: 4), () {
+            _room?.disconnect();
+            onSessionEnded?.call("تم استبعادك من القاعة الدراسية.");
+          });
         }
         break;
       case 'session_ended':
@@ -549,7 +561,7 @@ class VideoRoomController extends ChangeNotifier {
       'target': targetUserId,
       'value': !mute,
       'lock': mute
-    });
+    }, identities: [targetUserId]);
   }
 
   void kickParticipant(String targetUserId) {
@@ -557,7 +569,7 @@ class VideoRoomController extends ChangeNotifier {
     sendData({
       'type': 'kick_participant',
       'target': targetUserId
-    });
+    }, identities: [targetUserId]);
   }
 
   Future<void> toggleScreenShare() async {
@@ -582,9 +594,12 @@ class VideoRoomController extends ChangeNotifier {
     sendData({'type': 'reaction', 'value': emoji}); onReactionReceived?.call(emoji); 
   }
   
-  void sendData(Map<String, dynamic> d) {
+  void sendData(Map<String, dynamic> d, {List<String>? identities}) {
     if (_isConnected) {
-      _room?.localParticipant?.publishData(utf8.encode(jsonEncode(d)));
+      _room?.localParticipant?.publishData(
+        utf8.encode(jsonEncode(d)),
+        destinationIdentities: identities, 
+      );
     }
   }
 

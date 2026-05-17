@@ -36,12 +36,37 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     
     final db = Provider.of<DatabaseService>(context, listen: false);
     
-    // تسجيل الدخول لغرفة الانتظار في قاعدة البيانات
+    // تسجيل الدخول لغرفة الانتظار
     db.joinWaitingRoom(widget.session.id, widget.userId);
 
-    // مراقبة حالة الجلسة للتحويل التلقائي عند بدء المعلم
+// داخل initState في ملف waiting_room_screen.dart
+
     _statusSubscription = db.watchSessionStatus(widget.session.id).listen((data) {
-      if (data['status'] == 'active') {
+      // إذا تم حذف الحصة (data.isEmpty) أو انتهت (status == ended)
+      if (data.isEmpty || data.first['status'] == 'ended') {
+        if (mounted) {
+          // إظهار سناك بار احترافي يتماشى مع هوية الجامعة
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("🔴 تم إنهاء الحصة المباشرة من قبل المعلم، شكراً لكم."),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              margin: EdgeInsets.all(20),
+            ),
+          );
+
+          // تأخير بسيط 3 ثوانٍ لكي يقرأ الطالب الرسالة
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted) Navigator.pop(context);
+          });
+        }
+        return;
+      }
+
+      final String status = data.first['status'];
+
+      if (status == 'active') {
+        // التحويل التلقائي للقاعة بمجرد بدء المعلم
         _navigateToRoom();
       }
     });
@@ -50,13 +75,17 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   void _calculateTimeLeft() {
     final now = DateTime.now();
     if (widget.session.startTime.isAfter(now)) {
-      setState(() {
-        _timeLeft = widget.session.startTime.difference(now);
-      });
+      if (mounted) {
+        setState(() {
+          _timeLeft = widget.session.startTime.difference(now);
+        });
+      }
     } else {
-      setState(() {
-        _timeLeft = Duration.zero;
-      });
+      if (mounted) {
+        setState(() {
+          _timeLeft = Duration.zero;
+        });
+      }
     }
   }
 
@@ -81,6 +110,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   void dispose() {
     _timer.cancel();
     _statusSubscription?.cancel();
+    // الخروج من غرفة الانتظار بشكل آمن
     final db = Provider.of<DatabaseService>(context, listen: false);
     db.leaveWaitingRoom(widget.session.id, widget.userId);
     super.dispose();
@@ -133,24 +163,14 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                 color: Colors.white,
                 fontSize: 48,
                 fontWeight: FontWeight.bold,
-                fontFeatures: [FontFeature.tabularFigures()],
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              intl.DateFormat('hh:mm a').format(widget.session.startTime),
-              style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 64),
             const CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
             const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                "يرجى الانتظار، سيقوم المعلم بفتح القاعة قريباً...",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
-              ),
+            Text(
+              "يرجى الانتظار، سيقوم المعلم بفتح القاعة قريباً...",
+              style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
             ),
             const SizedBox(height: 40),
             TextButton.icon(

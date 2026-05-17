@@ -118,7 +118,6 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getActiveSessions() async {
     try {
-      // جلب الحصص المفعلة حالياً والتي لم ينتهِ وقتها المجدول بعد
       final now = DateTime.now().toUtc().toIso8601String();
       final response = await _supabase
           .from('sessions')
@@ -258,9 +257,10 @@ class DatabaseService {
       debugPrint("Error joining waiting room: $e");
     }
   }
-  // --- ميزات غرفة الانتظار ---
-  Stream<Map<String, dynamic>> watchSessionStatus(String sessionId) {
-    return _supabase.from('sessions').stream(primaryKey: ['id']).eq('id', sessionId).map((data) => data.first);
+
+  // الميثود اللي كانت بتسبب المشكلة - خليناها ترجع List
+  Stream<List<Map<String, dynamic>>> watchSessionStatus(String sessionId) {
+    return _supabase.from('sessions').stream(primaryKey: ['id']).eq('id', sessionId);
   }
 
   Future<void> enrollStudentBySessionId(String studentId, String sessionId) async {

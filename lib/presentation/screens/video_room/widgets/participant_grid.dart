@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:provider/provider.dart';
@@ -13,121 +14,271 @@ class ParticipantGrid extends StatelessWidget {
 
     if (room == null) return const Center(child: CircularProgressIndicator());
 
-    final List<Participant> participants = [
+    final List<Participant> allParticipants = [
       if (room.localParticipant != null) room.localParticipant!,
       ...room.remoteParticipants.values,
     ];
 
-    final bool isMobile = MediaQuery.of(context).size.width < 600;
+    if (allParticipants.isEmpty) return const SizedBox.shrink();
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: isMobile ? 1 : 2,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: isMobile ? 1.5 : 1.0,
+    // --- منطق اختيار المشارك الرئيسي (المسرح) ---
+    Participant? mainParticipant;
+    
+    // 1. الأولوية للشخص الذي يشارك شاشته
+    try {
+      mainParticipant = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
+    } catch (_) {
+      mainParticipant = null;
+    }
+
+    // 2. الأولوية للـ Spotlight
+    if (mainParticipant == null && controller.spotlightUserId != null) {
+      try {
+        mainParticipant = allParticipants.firstWhere((p) => p.identity == controller.spotlightUserId);
+      } catch (_) {
+        mainParticipant = null;
+      }
+    }
+
+    // 3. إذا كنت طالباً، اجعل المعلم هو الرئيسي
+    if (mainParticipant == null && !controller.isTeacher) {
+      try {
+        mainParticipant = allParticipants.firstWhere(
+          (p) => p.identity.contains('teacher'),
+          orElse: () => allParticipants.first,
+        );
+      } catch (_) {
+        mainParticipant = allParticipants.first;
+      }
+    }
+
+    // 4. إذا كنت المعلم، اجعل المتحدث النشط أو أول طالب هو الرئيسي
+    if (mainParticipant == null) {
+      final others = allParticipants.where((p) => !(p is LocalParticipant)).toList();
+      mainParticipant = others.isNotEmpty ? others.first : allParticipants.first;
+    }
+
+    final otherParticipants = allParticipants.where((p) => p.identity != mainParticipant?.identity).toList();
+
+    return Container(
+      color: const Color(0xFF0F1014),
+      child: Column(
+        children: [
+          // 1. المسرح الرئيسي (يأخذ المساحة الأكبر)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              child: _ParticipantTile(
+                participant: mainParticipant!,
+                isMainStage: true,
+              ),
+            ),
+          ),
+
+          // 2. الشريط السفلي للمشاركين الآخرين (مثل Teams)
+          if (otherParticipants.isNotEmpty)
+            Container(
+              height: 130,
+              padding: const EdgeInsets.only(bottom: 8),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: otherParticipants.length,
+                itemBuilder: (context, index) {
+                  return Container(
+                    width: 170,
+                    margin: const EdgeInsets.only(right: 10),
+                    child: _ParticipantTile(
+                      participant: otherParticipants[index],
+                      isMainStage: false,
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
       ),
-      itemCount: participants.length,
-      itemBuilder: (context, index) {
-        final participant = participants[index];
-        return _ParticipantTile(participant: participant);
-      },
     );
   }
 }
 
 class _ParticipantTile extends StatelessWidget {
   final Participant participant;
+  final bool isMainStage;
 
-  const _ParticipantTile({super.key, required this.participant});
+  const _ParticipantTile({
+    required this.participant,
+    required this.isMainStage,
+  });
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<VideoRoomController>();
     final isHandRaised = controller.remoteHandStates[participant.identity] ?? false;
+    final bool isMe = participant is LocalParticipant;
+    final bool isTeacherParticipant = participant.identity.contains('teacher') || (isMe && controller.isTeacher);
+    final bool isPinned = controller.spotlightUserId == participant.identity;
 
-    // استخدام نفس منطق الاسم الذكي لضمان ظهور الاسم الكامل
     String displayName = participant.name ?? participant.identity;
-    if (displayName.isEmpty || displayName == "طالب") {
-       displayName = participant.identity; 
-    }
+    if (displayName.isEmpty || displayName == "طالب") displayName = participant.identity;
 
     return ListenableBuilder(
       listenable: participant,
       builder: (context, child) {
-        final videoPublication = participant.videoTrackPublications.isNotEmpty 
-            ? participant.videoTrackPublications.first 
-            : null;
+        // تحديد التراك الذي سنعرضه (نفضل الشاشة على الكاميرا)
+        final screenSharePart = participant.videoTrackPublications.where((p) => p.isScreenShare).firstOrNull;
+        final cameraPart = participant.videoTrackPublications.where((p) => !p.isScreenShare).firstOrNull;
+        final activePublication = screenSharePart ?? cameraPart;
 
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+        final bool hasVideo = activePublication != null && 
+                             activePublication.subscribed && 
+                             activePublication.track != null &&
+                             (activePublication.isScreenShare || participant.isCameraEnabled());
+
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(isMainStage ? 24 : 16),
+            color: const Color(0xFF1A1B1F),
+            border: Border.all(
+              color: participant.isSpeaking ? Colors.greenAccent : Colors.white.withOpacity(0.05),
+              width: participant.isSpeaking ? 3 : 1,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
-              // عرض الفيديو أو الصورة الرمزية
-              videoPublication != null && 
-              videoPublication.subscribed && 
-              participant.isCameraEnabled() && 
-              videoPublication.track != null
-                  ? VideoTrackRenderer(videoPublication.track as VideoTrack)
-                  : Container(
-                      color: Colors.grey[900],
-                      child: Center(
-                        child: CircleAvatar(
-                          radius: 30,
-                          backgroundColor: Colors.blueGrey,
-                          child: Text(
-                            displayName.isNotEmpty
-                                ? displayName.substring(0, 1).toUpperCase()
-                                : "?",
-                            style: const TextStyle(color: Colors.white, fontSize: 24),
+              // --- الفيديو أو الرمز ---
+              Positioned.fill(
+                child: hasVideo
+                    ? VideoTrackRenderer(
+                        activePublication.track as VideoTrack, 
+                        fit: activePublication.isScreenShare ? VideoViewFit.contain : VideoViewFit.cover,
+                      )
+                    : Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topRight,
+                            end: Alignment.bottomLeft,
+                            colors: [Color(0xFF25262B), Color(0xFF141519)],
+                          ),
+                        ),
+                        child: Center(
+                          child: CircleAvatar(
+                            radius: isMainStage ? 50 : 28,
+                            backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                            child: Text(
+                              displayName.isNotEmpty ? displayName.substring(0, 1).toUpperCase() : "?",
+                              style: TextStyle(
+                                color: Colors.blueAccent, 
+                                fontSize: isMainStage ? 36 : 20,
+                                fontWeight: FontWeight.bold
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-              
-              // ملصق الاسم وحالة الميكروفون
+              ),
+
+              // --- ملصق الاسم مع تأثير الـ Blur ---
               Positioned(
-                bottom: 8,
-                left: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!participant.isMicrophoneEnabled())
-                        const Padding(
-                          padding: EdgeInsets.only(right: 4.0),
-                          child: Icon(Icons.mic_off, color: Colors.red, size: 12),
-                        ),
-                      Flexible(
-                        child: Text(
-                          displayName,
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                bottom: 10,
+                left: 10,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      color: Colors.black.withOpacity(0.4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!participant.isMicrophoneEnabled())
+                            const Padding(
+                              padding: EdgeInsets.only(right: 6),
+                              child: Icon(Icons.mic_off, color: Colors.redAccent, size: 14),
+                            ),
+                          Flexible(
+                            child: Text(
+                              isMe ? "$displayName (أنت)" : displayName,
+                              style: TextStyle(
+                                color: Colors.white, 
+                                fontSize: isMainStage ? 12 : 10,
+                                fontWeight: isMainStage ? FontWeight.bold : FontWeight.normal
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
 
-              // مؤشر رفع اليد
-              if (isHandRaised)
-                const Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Icon(Icons.front_hand, color: Colors.yellow, size: 24),
+              // --- أيقونات الحالة (Spotlight, Hand, Teacher) ---
+              Positioned(
+                top: 10,
+                left: 10,
+                right: 10,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (isTeacherParticipant)
+                      _buildBadge("المعلم", Colors.blueAccent, Icons.school),
+                    
+                    Row(
+                      children: [
+                        if (isPinned)
+                          _buildCircleIcon(Icons.push_pin, Colors.purple),
+                        if (isHandRaised)
+                          const SizedBox(width: 4),
+                        if (isHandRaised)
+                          _buildCircleIcon(Icons.front_hand, Colors.orange),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              // عرض "مشاركة شاشة" إذا كانت هي النشطة
+              if (activePublication?.isScreenShare ?? false)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: _buildBadge("شاشة مشاركة", Colors.redAccent, Icons.screen_share),
                 ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildBadge(String label, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8)],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 10),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCircleIcon(IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      child: Icon(icon, color: Colors.white, size: 14),
     );
   }
 }

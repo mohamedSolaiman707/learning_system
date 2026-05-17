@@ -30,7 +30,6 @@ class _ChatPanelState extends State<ChatPanel> {
     final controller = context.watch<VideoRoomController>();
     
     return Container(
-      // تم إزالة العرض الثابت هنا ليعتمد على الأب
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
@@ -46,10 +45,11 @@ class _ChatPanelState extends State<ChatPanel> {
               itemCount: controller.messages.length,
               itemBuilder: (context, index) {
                 final msg = controller.messages[index];
-                final isMe = msg['user_id'] == controller.userId;
+                // بما أن جدولك لا يحتوي على uid، سنقارن بالاسم لتمييز رسائلك
+                final isMe = msg['user_name'] == controller.userName;
                 return _MessageBubble(
-                  userName: msg['user_name'] ?? 'Unknown',
-                  text: msg['message_text'] ?? '',
+                  userName: msg['user_name'] ?? 'مشارك',
+                  text: msg['content'] ?? '',
                   isMe: isMe,
                   time: msg['created_at'] != null 
                     ? DateTime.parse(msg['created_at']).toLocal().toString().substring(11, 16)

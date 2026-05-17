@@ -69,11 +69,9 @@ class VideoRoomController extends ChangeNotifier {
   final Map<String, bool> _remoteHandStates = {};
   bool _isChatLocked = false;
 
-  // Connectivity state
   bool _isConnected = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
-  // Getters
   Room? get room => _room;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -103,7 +101,6 @@ class VideoRoomController extends ChangeNotifier {
   bool get isBreakoutRoom => _currentRoomName != null && _currentRoomName != roomName;
   bool get isConnected => _isConnected;
 
-  // Callbacks
   Function(String message)? onSessionEnded;
   Function(String title, Color color)? onNotification;
   Function(String room, String name)? onBreakoutInvite;
@@ -125,7 +122,6 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> init() async {
     _currentRoomName = roomName;
     
-    // Monitor Connectivity
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
       final hasInternet = results.any((result) => result != ConnectivityResult.none);
       if (_isConnected && !hasInternet) {
@@ -134,7 +130,6 @@ class VideoRoomController extends ChangeNotifier {
       } else if (!_isConnected && hasInternet) {
         _isConnected = true;
         onNotification?.call("تم استعادة الاتصال بالإنترنت ✅", Colors.green);
-        // Retry connection if needed
         if (_room == null || _room!.connectionState == ConnectionState.disconnected) {
           connectToRoom(_currentRoomName ?? roomName);
         }
@@ -142,7 +137,6 @@ class VideoRoomController extends ChangeNotifier {
       notifyListeners();
     });
 
-    // Check initial connectivity
     final results = await Connectivity().checkConnectivity();
     _isConnected = results.any((result) => result != ConnectivityResult.none);
 
@@ -156,17 +150,18 @@ class VideoRoomController extends ChangeNotifier {
     if (sessionId != null && sessionId!.isNotEmpty) {
       final isValid = await _checkAndMonitorSession();
       if (!isValid) return;
-      _initChatRealtime();
     }
+    
+    _initChatRealtime();
     await connectToRoom(roomName);
   }
 
   void _initChatRealtime() {
-    if (sessionId == null || sessionId!.isEmpty) return;
+    _chatSubscription?.cancel();
     _chatSubscription = supabase
-        .from('chat_messages')
+        .from('messages')
         .stream(primaryKey: ['id'])
-        .eq('session_id', sessionId!)
+        .eq('room_name', roomName)
         .order('created_at')
         .listen((data) {
           _messages = List<Map<String, dynamic>>.from(data);
@@ -270,6 +265,19 @@ class VideoRoomController extends ChangeNotifier {
       case 'end_breakout':
         if (!isTeacher) returnToMainRoom();
         break;
+      case 'control_mic':
+        _handleMicControl(data);
+        break;
+      case 'kick_participant':
+        if (data['target'] == userId) {
+          _room?.disconnect();
+          onSessionEnded?.call("تم طردك من القاعة بواسطة المدرس");
+        }
+        break;
+      case 'session_ended':
+        _room?.disconnect();
+        onSessionEnded?.call("تم إنهاء الجلسة بواسطة المدرس");
+        break;
     }
     notifyListeners();
   }
@@ -285,17 +293,16 @@ class VideoRoomController extends ChangeNotifier {
     });
   }
 
-  void submitQuiz(int score) async {
-    if (!_isConnected) {
-      onNotification?.call("لا يوجد إنترنت لإرسال الإجابة", Colors.red);
-      return;
-    }
+  void submitQuiz(int selectedIndex) async {
+    if (!_isConnected || _activeQuiz == null) return;
     _quizSubmitted = true;
     try {
       await supabase.from('quiz_results').insert({
-        'session_id': sessionId,
-        'user_id': userId,
-        'score': score,
+        'quiz_id': _activeQuiz!.id,
+        'student_id': userId,
+        'student_name': userName,
+        'selected_option_index': selectedIndex,
+        'is_correct': selectedIndex == _activeQuiz!.correctOptionIndex,
       });
     } catch (e) { debugPrint("Error submitting quiz: $e"); }
     notifyListeners();
@@ -308,16 +315,6 @@ class VideoRoomController extends ChangeNotifier {
       _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled);
       onNotification?.call(_isMicLocked ? "الميكروفون مقفل" : "الميكروفون مفعل", _isMicLocked ? Colors.red : Colors.green);
     }
-  }
-
-  void _handleDraw(Map<String, dynamic> data) {
-    final List points = data['points'];
-    _whiteboardStrokes.add(Stroke(
-      points: points.map((e) => Offset(e['x'].toDouble(), e['y'].toDouble())).toList(),
-      color: Color(data['color']),
-      width: data['width'].toDouble(),
-    ));
-    _redoStack.clear();
   }
 
   void addStroke(List<Offset> points) {
@@ -334,45 +331,18 @@ class VideoRoomController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void undoWhiteboard() {
-    if (_whiteboardStrokes.isNotEmpty) {
-      _redoStack.add(_whiteboardStrokes.removeLast());
-      sendData({'type': 'whiteboard_undo'});
-      notifyListeners();
-    }
-  }
-
-  void redoWhiteboard() {
-    if (_redoStack.isNotEmpty) {
-      _whiteboardStrokes.add(_redoStack.removeLast());
-      sendData({'type': 'whiteboard_redo'});
-      notifyListeners();
-    }
-  }
-
-  void clearWhiteboard() {
-    _whiteboardStrokes.clear();
-    _redoStack.clear();
-    sendData({'type': 'whiteboard_clear'});
-    notifyListeners();
-  }
-
   void sendMessage(String text) async {
     if (!_isConnected) {
       onNotification?.call("لا يوجد إنترنت لإرسال الرسالة", Colors.red);
       return;
     }
     if (_isChatLocked && !isTeacher) return;
-    if (sessionId == null || sessionId!.isEmpty) {
-      onNotification?.call("لا يمكن إرسال رسائل في غرفة بدون جلسة نشطة", Colors.red);
-      return;
-    }
+    
     try {
-      await supabase.from('chat_messages').insert({
-        'session_id': sessionId,
-        'user_id': userId,
+      await supabase.from('messages').insert({
+        'room_name': roomName,
         'user_name': userName,
-        'message_text': text,
+        'content': text,
       });
     } catch (e) { debugPrint("Error sending message: $e"); }
   }
@@ -474,6 +444,37 @@ class VideoRoomController extends ChangeNotifier {
       onNotification?.call("فشل بدء مشاركة الشاشة", Colors.red);
       notifyListeners();
     }
+  }
+
+  void _handleDraw(Map<String, dynamic> data) {
+    final List points = data['points'];
+    _whiteboardStrokes.add(Stroke(
+      points: points.map((e) => Offset(e['x'].toDouble(), e['y'].toDouble())).toList(),
+      color: Color(data['color']),
+      width: data['width'].toDouble(),
+    ));
+    _redoStack.clear();
+  }
+
+  void undoWhiteboard() {
+    if (_whiteboardStrokes.isNotEmpty) {
+      _redoStack.add(_whiteboardStrokes.removeLast());
+      sendData({'type': 'whiteboard_undo'});
+      notifyListeners();
+    }
+  }
+  void redoWhiteboard() {
+    if (_redoStack.isNotEmpty) {
+      _whiteboardStrokes.add(_redoStack.removeLast());
+      sendData({'type': 'whiteboard_redo'});
+      notifyListeners();
+    }
+  }
+  void clearWhiteboard() {
+    _whiteboardStrokes.clear();
+    _redoStack.clear();
+    sendData({'type': 'whiteboard_clear'});
+    notifyListeners();
   }
 
   void sendReaction(String emoji) { 

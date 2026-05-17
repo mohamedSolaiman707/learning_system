@@ -271,6 +271,12 @@ class _ParticipantTile extends StatelessWidget {
     final bool handRaised = controller.remoteHandStates[participant.identity] ?? false;
     final quality = participant.connectionQuality;
 
+    // محاولة استخراج الاسم من name أو metadata الخاص بـ LiveKit
+    String displayName = participant.name ?? participant.identity;
+    if (displayName.isEmpty || displayName == "طالب") {
+       displayName = participant.identity; // fallback to identity if name is generic
+    }
+
     return ListTile(
       leading: Stack(
         children: [
@@ -284,8 +290,8 @@ class _ParticipantTile extends StatelessWidget {
               radius: 20,
               backgroundColor: isMe ? Colors.blue.shade50 : Colors.grey.shade100,
               child: Text(
-                (participant.name ?? participant.identity).isNotEmpty 
-                    ? (participant.name ?? participant.identity).substring(0, 1).toUpperCase()
+                displayName.isNotEmpty 
+                    ? displayName.substring(0, 1).toUpperCase()
                     : "?",
                 style: TextStyle(color: isMe ? Colors.blue : Colors.black87, fontWeight: FontWeight.bold),
               ),
@@ -297,7 +303,7 @@ class _ParticipantTile extends StatelessWidget {
       ),
       title: Row(
         children: [
-          Expanded(child: Text(participant.name ?? participant.identity, style: TextStyle(fontWeight: isMe ? FontWeight.bold : FontWeight.w500, fontSize: 14), overflow: TextOverflow.ellipsis)),
+          Expanded(child: Text(displayName, style: TextStyle(fontWeight: isMe ? FontWeight.bold : FontWeight.w500, fontSize: 14), overflow: TextOverflow.ellipsis)),
           _buildQualityIcon(quality),
         ],
       ),

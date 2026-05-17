@@ -47,6 +47,12 @@ class _ParticipantTile extends StatelessWidget {
     final controller = context.watch<VideoRoomController>();
     final isHandRaised = controller.remoteHandStates[participant.identity] ?? false;
 
+    // استخدام نفس منطق الاسم الذكي لضمان ظهور الاسم الكامل
+    String displayName = participant.name ?? participant.identity;
+    if (displayName.isEmpty || displayName == "طالب") {
+       displayName = participant.identity; 
+    }
+
     return ListenableBuilder(
       listenable: participant,
       builder: (context, child) {
@@ -58,7 +64,7 @@ class _ParticipantTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Stack(
             children: [
-              // Show video if enabled and track is available
+              // عرض الفيديو أو الصورة الرمزية
               videoPublication != null && 
               videoPublication.subscribed && 
               participant.isCameraEnabled() && 
@@ -71,8 +77,8 @@ class _ParticipantTile extends StatelessWidget {
                           radius: 30,
                           backgroundColor: Colors.blueGrey,
                           child: Text(
-                            (participant.name ?? participant.identity).isNotEmpty
-                                ? (participant.name ?? participant.identity).substring(0, 1).toUpperCase()
+                            displayName.isNotEmpty
+                                ? displayName.substring(0, 1).toUpperCase()
                                 : "?",
                             style: const TextStyle(color: Colors.white, fontSize: 24),
                           ),
@@ -80,7 +86,7 @@ class _ParticipantTile extends StatelessWidget {
                       ),
                     ),
               
-              // Bottom label with name and mic status
+              // ملصق الاسم وحالة الميكروفون
               Positioned(
                 bottom: 8,
                 left: 8,
@@ -101,7 +107,7 @@ class _ParticipantTile extends StatelessWidget {
                         ),
                       Flexible(
                         child: Text(
-                          participant.name ?? participant.identity,
+                          displayName,
                           style: const TextStyle(color: Colors.white, fontSize: 12),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -111,7 +117,7 @@ class _ParticipantTile extends StatelessWidget {
                 ),
               ),
 
-              // Raised hand indicator
+              // مؤشر رفع اليد
               if (isHandRaised)
                 const Positioned(
                   top: 8,

@@ -161,12 +161,10 @@ class VideoRoomController extends ChangeNotifier {
       if (!isValid) return;
     }
     
-    // جلب التاريخ القديم للمحادثة عند البدء
     await _loadChatHistory();
     await connectToRoom(roomName);
   }
 
-  // جلب الرسائل القديمة مرة واحدة (بدون Realtime)
   Future<void> _loadChatHistory() async {
     try {
       final data = await supabase
@@ -233,13 +231,21 @@ class VideoRoomController extends ChangeNotifier {
         _handleIncomingData(data, event.participant);
       })
       ..on<ParticipantConnectedEvent>((event) {
-        String name = event.participant.name ?? "طالب جديد";
-        onNotification?.call("👋 انضم $name للبث", Colors.green.shade700);
-        notifyListeners();
+        // تأخير الإشعار قليلاً لضمان قراءة الاسم من الـ Metadata
+        Future.delayed(const Duration(milliseconds: 1000), () {
+          String name = event.participant.name ?? "طالب جديد";
+          // إذا كان الاسم فارغاً، نحاول استخدامه من الـ Identity إذا لم تكن UUID
+          if (name.isEmpty || name == event.participant.identity) {
+            name = event.participant.name ?? "طالب جديد";
+          }
+
+          onNotification?.call("👋 انضم $name للبث", Colors.green.shade700);
+          notifyListeners();
+        });
       })
       ..on<ParticipantDisconnectedEvent>((event) {
-        String name = event.participant.name ?? "طالب";
-        onNotification?.call("🚪 غادر $name للبث", Colors.blueGrey.shade700);
+        String name = event.participant.name ?? "مشارك";
+        onNotification?.call("🚪 غادر $name القاعة", Colors.blueGrey.shade700);
         notifyListeners();
       })
       ..on<ActiveSpeakersChangedEvent>((_) => notifyListeners())
@@ -254,7 +260,6 @@ class VideoRoomController extends ChangeNotifier {
   void _handleIncomingData(Map<String, dynamic> data, RemoteParticipant? p) {
     switch (data['type']) {
       case 'chat_message':
-        // استقبال رسالة شات جديدة عبر LiveKit
         _messages.insert(0, data);
         if (!_isChatOpen) {
           onNotification?.call("رسالة من ${data['user_name']}", Colors.blueAccent);
@@ -463,17 +468,14 @@ class VideoRoomController extends ChangeNotifier {
       'created_at': DateTime.now().toIso8601String(),
     };
 
-    // 1. أضف الرسالة محلياً فوراً (لسرعة العرض عند المستخدم)
     _messages.insert(0, newMessage);
     notifyListeners();
 
-    // 2. أرسلها للآخرين فوراً عبر LiveKit (الحل البديل لـ Realtime)
     sendData({
       'type': 'chat_message',
       ...newMessage
     });
     
-    // 3. احفظها في قاعدة البيانات لكي تظهر عند الدخول مرة أخرى (History)
     try {
       await supabase.from('messages').insert({
         'room_name': roomName,

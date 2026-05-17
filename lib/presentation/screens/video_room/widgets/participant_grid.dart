@@ -21,17 +21,28 @@ class ParticipantGrid extends StatelessWidget {
 
     if (allParticipants.isEmpty) return const SizedBox.shrink();
 
-    // --- منطق اختيار المشارك الرئيسي (المسرح) ---
+    // --- منطق الـ Swap الذكي للمسرح الرئيسي ---
     Participant? mainParticipant;
     
-    // 1. الأولوية للشخص الذي يشارك شاشته
+    // 1. الأولوية الأولى: أي شخص مشغل مشاركة شاشة (Screen Share)
     try {
       mainParticipant = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
     } catch (_) {
       mainParticipant = null;
     }
 
-    // 2. الأولوية للـ Spotlight
+    // 2. الأولوية الثانية: المعلم (سواء كنت أنا أو الطرف الآخر)
+    if (mainParticipant == null) {
+      try {
+        mainParticipant = allParticipants.firstWhere(
+          (p) => p.identity.contains('teacher') || p.identity == 'teacher',
+        );
+      } catch (_) {
+        mainParticipant = null;
+      }
+    }
+
+    // 3. الأولوية الثالثة: المثبت (Spotlight) إذا وجد
     if (mainParticipant == null && controller.spotlightUserId != null) {
       try {
         mainParticipant = allParticipants.firstWhere((p) => p.identity == controller.spotlightUserId);
@@ -40,42 +51,29 @@ class ParticipantGrid extends StatelessWidget {
       }
     }
 
-    // 3. إذا كنت طالباً، اجعل المعلم هو الرئيسي
-    if (mainParticipant == null && !controller.isTeacher) {
-      try {
-        mainParticipant = allParticipants.firstWhere(
-          (p) => p.identity.contains('teacher'),
-          orElse: () => allParticipants.first,
-        );
-      } catch (_) {
-        mainParticipant = allParticipants.first;
-      }
-    }
+    // 4. الحالة الاحتياطية: أول شخص في القائمة
+    mainParticipant ??= allParticipants.first;
 
-    // 4. إذا كنت المعلم، اجعل المتحدث النشط أو أول طالب هو الرئيسي
-    if (mainParticipant == null) {
-      final others = allParticipants.where((p) => !(p is LocalParticipant)).toList();
-      mainParticipant = others.isNotEmpty ? others.first : allParticipants.first;
-    }
-
+    // القائمة الصغرى (بقية المشاركين)
     final otherParticipants = allParticipants.where((p) => p.identity != mainParticipant?.identity).toList();
 
     return Container(
       color: const Color(0xFF0F1014),
       child: Column(
         children: [
-          // 1. المسرح الرئيسي (يأخذ المساحة الأكبر)
+          // 1. المسرح الرئيسي (المدرس أو شاشة الطالب)
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
               child: _ParticipantTile(
-                participant: mainParticipant!,
+                key: ValueKey("main_${mainParticipant.identity}"),
+                participant: mainParticipant,
                 isMainStage: true,
               ),
             ),
           ),
 
-          // 2. الشريط السفلي للمشاركين الآخرين (مثل Teams)
+          // 2. الشريط السفلي للمشاركين الآخرين
           if (otherParticipants.isNotEmpty)
             Container(
               height: 130,
@@ -85,11 +83,13 @@ class ParticipantGrid extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 itemCount: otherParticipants.length,
                 itemBuilder: (context, index) {
+                  final p = otherParticipants[index];
                   return Container(
                     width: 170,
                     margin: const EdgeInsets.only(right: 10),
                     child: _ParticipantTile(
-                      participant: otherParticipants[index],
+                      key: ValueKey("mini_${p.identity}"),
+                      participant: p,
                       isMainStage: false,
                     ),
                   );
@@ -107,6 +107,7 @@ class _ParticipantTile extends StatelessWidget {
   final bool isMainStage;
 
   const _ParticipantTile({
+    super.key,
     required this.participant,
     required this.isMainStage,
   });
@@ -119,8 +120,8 @@ class _ParticipantTile extends StatelessWidget {
     final bool isTeacherParticipant = participant.identity.contains('teacher') || (isMe && controller.isTeacher);
     final bool isPinned = controller.spotlightUserId == participant.identity;
 
-    String displayName = participant.name ?? participant.identity;
-    if (displayName.isEmpty || displayName == "طالب") displayName = participant.identity;
+    String displayName = participant.name ?? "";
+    if (displayName.isEmpty) displayName = "طالب";
 
     return ListenableBuilder(
       listenable: participant,
@@ -179,7 +180,7 @@ class _ParticipantTile extends StatelessWidget {
                       ),
               ),
 
-              // --- ملصق الاسم مع تأثير الـ Blur ---
+              // --- ملصق الاسم ---
               Positioned(
                 bottom: 10,
                 left: 10,
@@ -216,7 +217,7 @@ class _ParticipantTile extends StatelessWidget {
                 ),
               ),
 
-              // --- أيقونات الحالة (Spotlight, Hand, Teacher) ---
+              // --- أيقونات الحالة ---
               Positioned(
                 top: 10,
                 left: 10,
@@ -241,7 +242,6 @@ class _ParticipantTile extends StatelessWidget {
                 ),
               ),
               
-              // عرض "مشاركة شاشة" إذا كانت هي النشطة
               if (activePublication?.isScreenShare ?? false)
                 Positioned(
                   top: 10,

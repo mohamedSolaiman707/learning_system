@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:livekit_client/livekit_client.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/services/livekit_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/models/quiz_model.dart';
@@ -36,7 +37,7 @@ class VideoRoomController extends ChangeNotifier {
   bool _isLoading = true;
   String? _errorMessage;
   String? _currentRoomName;
-  bool _isBreakoutActive = false; // تتبع حالة المجموعات
+  bool _isBreakoutActive = false;
   
   bool _isMicEnabled = false;
   bool _isCamEnabled = false;
@@ -68,6 +69,10 @@ class VideoRoomController extends ChangeNotifier {
   final Map<String, bool> _remoteHandStates = {};
   bool _isChatLocked = false;
 
+  // Connectivity state
+  bool _isConnected = true;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+
   // Getters
   Room? get room => _room;
   bool get isLoading => _isLoading;
@@ -96,6 +101,7 @@ class VideoRoomController extends ChangeNotifier {
   Color get selectedColor => _selectedColor;
   bool get isBreakoutActive => _isBreakoutActive;
   bool get isBreakoutRoom => _currentRoomName != null && _currentRoomName != roomName;
+  bool get isConnected => _isConnected;
 
   // Callbacks
   Function(String message)? onSessionEnded;
@@ -118,6 +124,35 @@ class VideoRoomController extends ChangeNotifier {
 
   Future<void> init() async {
     _currentRoomName = roomName;
+    
+    // Monitor Connectivity
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+      final hasInternet = results.any((result) => result != ConnectivityResult.none);
+      if (_isConnected && !hasInternet) {
+        _isConnected = false;
+        onNotification?.call("فقدت الاتصال بالإنترنت ⚠️", Colors.red);
+      } else if (!_isConnected && hasInternet) {
+        _isConnected = true;
+        onNotification?.call("تم استعادة الاتصال بالإنترنت ✅", Colors.green);
+        // Retry connection if needed
+        if (_room == null || _room!.connectionState == ConnectionState.disconnected) {
+          connectToRoom(_currentRoomName ?? roomName);
+        }
+      }
+      notifyListeners();
+    });
+
+    // Check initial connectivity
+    final results = await Connectivity().checkConnectivity();
+    _isConnected = results.any((result) => result != ConnectivityResult.none);
+
+    if (!_isConnected) {
+      _isLoading = false;
+      _errorMessage = "لا يوجد اتصال بالإنترنت";
+      notifyListeners();
+      return;
+    }
+
     if (sessionId != null && sessionId!.isNotEmpty) {
       final isValid = await _checkAndMonitorSession();
       if (!isValid) return;
@@ -159,6 +194,11 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   Future<void> connectToRoom(String targetRoomName) async {
+    if (!_isConnected) {
+      onNotification?.call("يرجى التحقق من اتصالك بالإنترنت", Colors.orange);
+      return;
+    }
+
     _isLoading = true; notifyListeners();
     try {
       final token = await LiveKitService().getRoomToken(roomName: targetRoomName, userId: userId, userName: userName);
@@ -246,6 +286,10 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void submitQuiz(int score) async {
+    if (!_isConnected) {
+      onNotification?.call("لا يوجد إنترنت لإرسال الإجابة", Colors.red);
+      return;
+    }
     _quizSubmitted = true;
     try {
       await supabase.from('quiz_results').insert({
@@ -277,6 +321,7 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void addStroke(List<Offset> points) {
+    if (!_isConnected) return;
     final s = Stroke(points: List.from(points), color: _selectedColor, width: _strokeWidth);
     _whiteboardStrokes.add(s);
     _redoStack.clear();
@@ -313,6 +358,10 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void sendMessage(String text) async {
+    if (!_isConnected) {
+      onNotification?.call("لا يوجد إنترنت لإرسال الرسالة", Colors.red);
+      return;
+    }
     if (_isChatLocked && !isTeacher) return;
     if (sessionId == null || sessionId!.isEmpty) {
       onNotification?.call("لا يمكن إرسال رسائل في غرفة بدون جلسة نشطة", Colors.red);
@@ -328,19 +377,30 @@ class VideoRoomController extends ChangeNotifier {
     } catch (e) { debugPrint("Error sending message: $e"); }
   }
 
-  void toggleMic() { if (!_isMicLocked) { _isMicEnabled = !_isMicEnabled; _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled); notifyListeners(); } }
-  void toggleCam() { _isCamEnabled = !_isCamEnabled; _room?.localParticipant?.setCameraEnabled(_isCamEnabled); notifyListeners(); }
-  void toggleHand() { _isHandRaised = !_isHandRaised; sendData({'type': 'hand_raise', 'value': _isHandRaised}); notifyListeners(); }
+  void toggleMic() { 
+    if (!_isConnected) { onNotification?.call("تحقق من الإنترنت أولاً", Colors.orange); return; }
+    if (!_isMicLocked) { _isMicEnabled = !_isMicEnabled; _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled); notifyListeners(); } 
+  }
+  
+  void toggleCam() { 
+    if (!_isConnected) { onNotification?.call("تحقق من الإنترنت أولاً", Colors.orange); return; }
+    _isCamEnabled = !_isCamEnabled; _room?.localParticipant?.setCameraEnabled(_isCamEnabled); notifyListeners(); 
+  }
+  
+  void toggleHand() { 
+    if (!_isConnected) { onNotification?.call("تحقق من الإنترنت أولاً", Colors.orange); return; }
+    _isHandRaised = !_isHandRaised; sendData({'type': 'hand_raise', 'value': _isHandRaised}); notifyListeners(); 
+  }
   
   void lowerParticipantHand(String identity) {
-    if (!isTeacher) return;
+    if (!isTeacher || !_isConnected) return;
     _remoteHandStates[identity] = false;
     sendData({'type': 'lower_hand', 'target': identity});
     notifyListeners();
   }
 
   void lowerAllHands() {
-    if (!isTeacher) return;
+    if (!isTeacher || !_isConnected) return;
     _remoteHandStates.clear();
     _isHandRaised = false;
     sendData({'type': 'lower_all_hands'});
@@ -348,14 +408,14 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void toggleChatLock() {
-    if (!isTeacher) return;
+    if (!isTeacher || !_isConnected) return;
     _isChatLocked = !_isChatLocked;
     sendData({'type': 'control_chat', 'value': _isChatLocked});
     notifyListeners();
   }
 
   void startBreakoutRooms(int count) {
-    if (!isTeacher || _room == null) return;
+    if (!isTeacher || _room == null || !_isConnected) return;
     final students = _room!.remoteParticipants.values.toList();
     if (students.isEmpty) {
       onNotification?.call("لا يوجد طلاب لتقسيمهم", Colors.red);
@@ -378,7 +438,7 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void endBreakoutRooms() {
-    if (!isTeacher) return;
+    if (!isTeacher || !_isConnected) return;
     _isBreakoutActive = false;
     sendData({'type': 'end_breakout'});
     notifyListeners();
@@ -386,7 +446,7 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void muteParticipant(String targetUserId, bool mute) {
-    if (!isTeacher) return;
+    if (!isTeacher || !_isConnected) return;
     sendData({
       'type': 'control_mic',
       'target': targetUserId,
@@ -396,7 +456,7 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void kickParticipant(String targetUserId) {
-    if (!isTeacher) return;
+    if (!isTeacher || !_isConnected) return;
     sendData({
       'type': 'kick_participant',
       'target': targetUserId
@@ -404,7 +464,7 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   Future<void> toggleScreenShare() async {
-    if (_room == null) return;
+    if (_room == null || !_isConnected) return;
     try {
       _isScreenSharing = !_isScreenSharing;
       await _room!.localParticipant?.setScreenShareEnabled(_isScreenSharing);
@@ -416,12 +476,24 @@ class VideoRoomController extends ChangeNotifier {
     }
   }
 
-  void sendReaction(String emoji) { sendData({'type': 'reaction', 'value': emoji}); onReactionReceived?.call(emoji); }
-  void sendData(Map<String, dynamic> d) => _room?.localParticipant?.publishData(utf8.encode(jsonEncode(d)));
-  Future<void> startRecording() async { if (await LiveKitService().startRecording(roomName, sessionId!)) { _isRecording = true; notifyListeners(); } }
+  void sendReaction(String emoji) { 
+    if (!_isConnected) return;
+    sendData({'type': 'reaction', 'value': emoji}); onReactionReceived?.call(emoji); 
+  }
+  
+  void sendData(Map<String, dynamic> d) {
+    if (_isConnected) {
+      _room?.localParticipant?.publishData(utf8.encode(jsonEncode(d)));
+    }
+  }
+
+  Future<void> startRecording() async { 
+    if (!_isConnected) return;
+    if (await LiveKitService().startRecording(roomName, sessionId!)) { _isRecording = true; notifyListeners(); } 
+  }
 
   Future<void> endSessionForAll() async {
-    if (isTeacher && sessionId != null) {
+    if (isTeacher && sessionId != null && _isConnected) {
       try {
         await DatabaseService().toggleRoomStatus(sessionId!, false);
         sendData({'type': 'session_ended'});
@@ -434,6 +506,7 @@ class VideoRoomController extends ChangeNotifier {
     if (sessionId != null && sessionId!.isNotEmpty) {
       DatabaseService().logStudentExit(sessionId!, userId);
     }
+    _connectivitySubscription?.cancel();
     _statusSubscription?.cancel(); 
     _chatSubscription?.cancel();
     _expiryTimer?.cancel(); 

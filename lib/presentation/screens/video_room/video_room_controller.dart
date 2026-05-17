@@ -46,7 +46,7 @@ class VideoRoomController extends ChangeNotifier {
   bool _isRecording = false;
   bool _isScreenSharing = false;
 
-  // University-Grade Moderation States
+  // Moderation States
   bool _isChatLocked = false;
   bool _isWhiteboardLocked = false;
   bool _isScreenShareLocked = true; 
@@ -188,8 +188,13 @@ class VideoRoomController extends ChangeNotifier {
         return false;
       }
       _statusSubscription = DatabaseService().watchSessionStatus(sessionId!).listen((data) {
-        if (data['status'] == 'ended') onSessionEnded?.call("تم إنهاء الجلسة.");
-      });
+        // تم التصحيح هنا: data هي Map لأن watchSessionStatus تعيد Map
+        if (data['status'] == 'ended') {
+          onNotification?.call("🔴 تم إنهاء البث المباشر من قبل المعلم.", Colors.redAccent);
+          Future.delayed(const Duration(seconds: 3), () => onSessionEnded?.call("انتهت الحصة الدراسية."));
+        }
+      }, onError: (e) => debugPrint("Session listener error: $e"));
+      
       _expiryTimer = Timer(endTime.difference(DateTime.now()), () {
         onSessionEnded?.call("انتهى وقت الحصة.");
       });
@@ -285,8 +290,11 @@ class VideoRoomController extends ChangeNotifier {
         }
         break;
       case 'session_ended':
-        _room?.disconnect();
-        onSessionEnded?.call("تم إنهاء الجلسة بواسطة المدرس");
+        onNotification?.call("🔴 تم إنهاء البث المباشر من قبل المعلم، شكراً لكم.", Colors.redAccent);
+        Future.delayed(const Duration(seconds: 3), () {
+          _room?.disconnect();
+          onSessionEnded?.call("انتهت الحصة الدراسية.");
+        });
         break;
       case 'whiteboard_draw':
         _handleDraw(data);
@@ -319,6 +327,9 @@ class VideoRoomController extends ChangeNotifier {
         break;
       case 'spotlight':
         _spotlightUserId = data['value'];
+        if (_spotlightUserId == userId && !isTeacher) {
+          onNotification?.call("🌟 تم تسليط الضوء عليك من قبل المعلم", Colors.purple);
+        }
         break;
     }
     notifyListeners();
@@ -355,7 +366,14 @@ class VideoRoomController extends ChangeNotifier {
       _isMicEnabled = data['value'];
       _isMicLocked = data['lock'] ?? false;
       _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled);
-      onNotification?.call(_isMicLocked ? "الميكروفون مقفل من قبل المدرس" : "الميكروفون مفعل", _isMicLocked ? Colors.red : Colors.green);
+      
+      String msg = "";
+      if (data['target'] == userId) {
+        msg = _isMicEnabled ? "قام المعلم بتفعيل الميكروفون لك" : "قام المعلم بكتم صوتك";
+      } else {
+        msg = _isMicLocked ? "الميكروفون مقفل من قبل المدرس" : "الميكروفون مفعل";
+      }
+      onNotification?.call(msg, _isMicLocked ? Colors.red : Colors.green);
     }
   }
 
@@ -578,9 +596,16 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> endSessionForAll() async {
     if (isTeacher && sessionId != null && _isConnected) {
       try {
-        await DatabaseService().toggleRoomStatus(sessionId!, false);
         sendData({'type': 'session_ended'});
-      } catch (e) { debugPrint("Error ending session: $e"); }
+        onNotification?.call("جاري إنهاء البث وحذف البيانات من المنصة...", Colors.blueAccent);
+        await Future.delayed(const Duration(seconds: 3));
+        await DatabaseService().deleteSession(sessionId!);
+        _room?.disconnect();
+        onSessionEnded?.call("تم إنهاء الحصة الدراسية بنجاح وحذف السجل.");
+      } catch (e) { 
+        debugPrint("Error ending session: $e");
+        onNotification?.call("حدث خطأ أثناء إنهاء الجلسة", Colors.red);
+      }
     }
   }
 

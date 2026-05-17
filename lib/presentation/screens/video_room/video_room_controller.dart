@@ -46,6 +46,12 @@ class VideoRoomController extends ChangeNotifier {
   bool _isRecording = false;
   bool _isScreenSharing = false;
 
+  // University-Grade Moderation States
+  bool _isChatLocked = false;
+  bool _isWhiteboardLocked = false;
+  bool _isScreenShareLocked = true; 
+  String? _spotlightUserId; 
+
   bool _isChatOpen = false;
   bool _isWhiteboardOpen = false;
   bool _isPollsOpen = false;
@@ -67,11 +73,11 @@ class VideoRoomController extends ChangeNotifier {
   List<Map<String, dynamic>> _messages = [];
   List<Map<String, dynamic>> _questions = [];
   final Map<String, bool> _remoteHandStates = {};
-  bool _isChatLocked = false;
 
   bool _isConnected = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
+  // Getters
   Room? get room => _room;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -95,7 +101,12 @@ class VideoRoomController extends ChangeNotifier {
   List<Map<String, dynamic>> get messages => _messages;
   List<Map<String, dynamic>> get questions => _questions;
   Map<String, bool> get remoteHandStates => _remoteHandStates;
+  
   bool get isChatLocked => _isChatLocked;
+  bool get isWhiteboardLocked => _isWhiteboardLocked;
+  bool get isScreenShareLocked => _isScreenShareLocked;
+  String? get spotlightUserId => _spotlightUserId;
+
   Color get selectedColor => _selectedColor;
   bool get isBreakoutActive => _isBreakoutActive;
   bool get isBreakoutRoom => _currentRoomName != null && _currentRoomName != roomName;
@@ -121,7 +132,6 @@ class VideoRoomController extends ChangeNotifier {
 
   Future<void> init() async {
     _currentRoomName = roomName;
-    
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
       final hasInternet = results.any((result) => result != ConnectivityResult.none);
       if (_isConnected && !hasInternet) {
@@ -295,6 +305,21 @@ class VideoRoomController extends ChangeNotifier {
         _whiteboardStrokes.clear();
         _redoStack.clear();
         break;
+      case 'control_chat':
+        _isChatLocked = data['value'];
+        onNotification?.call(_isChatLocked ? "تم قفل الدردشة من قبل المدرس" : "تم فتح الدردشة", Colors.blueGrey);
+        break;
+      case 'control_whiteboard':
+        _isWhiteboardLocked = data['value'];
+        onNotification?.call(_isWhiteboardLocked ? "المدرس قصر استخدام السبورة" : "تم السماح بالرسم للجميع", Colors.blueGrey);
+        break;
+      case 'control_screenshare':
+        _isScreenShareLocked = data['value'];
+        onNotification?.call(_isScreenShareLocked ? "مشاركة الشاشة مقفلة حالياً" : "تم السماح بمشاركة الشاشة", Colors.blueGrey);
+        break;
+      case 'spotlight':
+        _spotlightUserId = data['value'];
+        break;
     }
     notifyListeners();
   }
@@ -330,7 +355,7 @@ class VideoRoomController extends ChangeNotifier {
       _isMicEnabled = data['value'];
       _isMicLocked = data['lock'] ?? false;
       _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled);
-      onNotification?.call(_isMicLocked ? "الميكروفون مقفل" : "الميكروفون مفعل", _isMicLocked ? Colors.red : Colors.green);
+      onNotification?.call(_isMicLocked ? "الميكروفون مقفل من قبل المدرس" : "الميكروفون مفعل", _isMicLocked ? Colors.red : Colors.green);
     }
   }
 
@@ -346,6 +371,10 @@ class VideoRoomController extends ChangeNotifier {
 
   void addStroke(List<Offset> points) {
     if (!_isConnected) return;
+    if (!isTeacher && _isWhiteboardLocked) {
+      onNotification?.call("المدرس منع الرسم حالياً", Colors.orange);
+      return;
+    }
     final s = Stroke(points: List.from(points), color: _selectedColor, width: _strokeWidth);
     _whiteboardStrokes.add(s);
     _redoStack.clear();
@@ -386,7 +415,10 @@ class VideoRoomController extends ChangeNotifier {
       onNotification?.call("لا يوجد إنترنت لإرسال الرسالة", Colors.red);
       return;
     }
-    if (_isChatLocked && !isTeacher) return;
+    if (_isChatLocked && !isTeacher) {
+      onNotification?.call("الدردشة مقفلة حالياً", Colors.orange);
+      return;
+    }
     
     try {
       await supabase.from('messages').insert({
@@ -399,7 +431,13 @@ class VideoRoomController extends ChangeNotifier {
 
   void toggleMic() { 
     if (!_isConnected) { onNotification?.call("تحقق من الإنترنت أولاً", Colors.orange); return; }
-    if (!_isMicLocked) { _isMicEnabled = !_isMicEnabled; _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled); notifyListeners(); } 
+    if (!_isMicLocked) { 
+      _isMicEnabled = !_isMicEnabled; 
+      _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled); 
+      notifyListeners(); 
+    } else {
+      onNotification?.call("المدرس منع استخدام الميكروفون", Colors.red);
+    }
   }
   
   void toggleCam() { 
@@ -431,6 +469,27 @@ class VideoRoomController extends ChangeNotifier {
     if (!isTeacher || !_isConnected) return;
     _isChatLocked = !_isChatLocked;
     sendData({'type': 'control_chat', 'value': _isChatLocked});
+    notifyListeners();
+  }
+
+  void toggleWhiteboardLock() {
+    if (!isTeacher || !_isConnected) return;
+    _isWhiteboardLocked = !_isWhiteboardLocked;
+    sendData({'type': 'control_whiteboard', 'value': _isWhiteboardLocked});
+    notifyListeners();
+  }
+
+  void toggleScreenShareLock() {
+    if (!isTeacher || !_isConnected) return;
+    _isScreenShareLocked = !_isScreenShareLocked;
+    sendData({'type': 'control_screenshare', 'value': _isScreenShareLocked});
+    notifyListeners();
+  }
+
+  void setSpotlight(String? identity) {
+    if (!isTeacher || !_isConnected) return;
+    _spotlightUserId = identity;
+    sendData({'type': 'spotlight', 'value': _spotlightUserId});
     notifyListeners();
   }
 
@@ -485,6 +544,10 @@ class VideoRoomController extends ChangeNotifier {
 
   Future<void> toggleScreenShare() async {
     if (_room == null || !_isConnected) return;
+    if (!isTeacher && _isScreenShareLocked) {
+      onNotification?.call("مشاركة الشاشة معطلة من قبل المدرس", Colors.orange);
+      return;
+    }
     try {
       _isScreenSharing = !_isScreenSharing;
       await _room!.localParticipant?.setScreenShareEnabled(_isScreenSharing);

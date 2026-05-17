@@ -32,20 +32,6 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> {
       return name.contains(_searchQuery.toLowerCase());
     }).toList();
 
-    filteredParticipants.sort((a, b) {
-      bool isATeacher = (a is LocalParticipant && controller.isTeacher);
-      bool isBTeacher = (b is LocalParticipant && controller.isTeacher);
-      if (isATeacher && !isBTeacher) return -1;
-      if (!isATeacher && isBTeacher) return 1;
-      if (a.isSpeaking && !b.isSpeaking) return -1;
-      if (!a.isSpeaking && b.isSpeaking) return 1;
-      bool aHand = controller.remoteHandStates[a.identity] ?? false;
-      bool bHand = controller.remoteHandStates[b.identity] ?? false;
-      if (aHand && !bHand) return -1;
-      if (!aHand && bHand) return 1;
-      return (a.name ?? a.identity).compareTo(b.name ?? b.identity);
-    });
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -58,6 +44,10 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> {
         children: [
           _buildHeader(controller, allParticipants.length),
           _buildSearchField(),
+          
+          // قسم صلاحيات القاعة (للمدرس فقط)
+          if (controller.isTeacher) _buildGlobalPermissions(controller),
+
           Expanded(
             child: filteredParticipants.isEmpty
                 ? const Center(child: Text("لا يوجد نتائج", style: TextStyle(color: Colors.grey)))
@@ -71,7 +61,8 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> {
                     },
                   ),
           ),
-          if (controller.isTeacher) _buildTeacherDashboard(controller, room, context),
+          
+          if (controller.isTeacher) _buildTeacherQuickActions(controller, room, context),
         ],
       ),
     );
@@ -110,7 +101,49 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> {
     );
   }
 
-  Widget _buildTeacherDashboard(VideoRoomController controller, Room room, BuildContext context) {
+  Widget _buildGlobalPermissions(VideoRoomController controller) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("صلاحيات الطلاب", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _PermissionToggle(
+                icon: Icons.chat,
+                label: "الدردشة",
+                isLocked: controller.isChatLocked,
+                onTap: controller.toggleChatLock,
+              ),
+              _PermissionToggle(
+                icon: Icons.edit_note,
+                label: "السبورة",
+                isLocked: controller.isWhiteboardLocked,
+                onTap: controller.toggleWhiteboardLock,
+              ),
+              _PermissionToggle(
+                icon: Icons.screen_share,
+                label: "المشاركة",
+                isLocked: controller.isScreenShareLocked,
+                onTap: controller.toggleScreenShareLock,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeacherQuickActions(VideoRoomController controller, Room room, BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -145,32 +178,17 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _DashboardAction(
-                  label: controller.isChatLocked ? "فتح الدردشة" : "قفل الدردشة",
-                  icon: controller.isChatLocked ? Icons.chat : Icons.speaker_notes_off,
-                  color: Colors.blue,
-                  onTap: controller.toggleChatLock,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _DashboardAction(
-                  label: controller.isBreakoutActive ? "إنهاء المجموعات" : "مجموعات عمل",
-                  icon: controller.isBreakoutActive ? Icons.stop_circle_outlined : Icons.grid_view_rounded,
-                  color: controller.isBreakoutActive ? Colors.red : Colors.purple,
-                  onTap: () {
-                    if (controller.isBreakoutActive) {
-                      controller.endBreakoutRooms();
-                    } else {
-                      _showBreakoutDialog(context, controller);
-                    }
-                  },
-                ),
-              ),
-            ],
+          _DashboardAction(
+            label: controller.isBreakoutActive ? "إنهاء المجموعات" : "بدء مجموعات عمل (Breakout Rooms)",
+            icon: controller.isBreakoutActive ? Icons.stop_circle_outlined : Icons.grid_view_rounded,
+            color: controller.isBreakoutActive ? Colors.red : Colors.purple,
+            onTap: () {
+              if (controller.isBreakoutActive) {
+                controller.endBreakoutRooms();
+              } else {
+                _showBreakoutDialog(context, controller);
+              }
+            },
           ),
         ],
       ),
@@ -187,7 +205,7 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("اختر عدد المجموعات المطلوب إنشاءها:"),
+              const Text("سيتم توزيع الطلاب عشوائياً على عدد مجموعات من اختيارك:"),
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -215,10 +233,41 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> {
                 controller.startBreakoutRooms(count);
                 Navigator.pop(context);
               },
-              child: const Text("تقسيم الآن"),
+              child: const Text("توزيع الآن"),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PermissionToggle extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isLocked;
+  final VoidCallback onTap;
+
+  const _PermissionToggle({required this.icon, required this.label, required this.isLocked, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isLocked ? Colors.red.shade50 : Colors.green.shade50,
+              shape: BoxShape.circle,
+              border: Border.all(color: isLocked ? Colors.red.shade200 : Colors.green.shade200),
+            ),
+            child: Icon(icon, color: isLocked ? Colors.red : Colors.green, size: 20),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 10)),
+        ],
       ),
     );
   }
@@ -241,6 +290,7 @@ class _DashboardAction extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
+          width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -269,13 +319,11 @@ class _ParticipantTile extends StatelessWidget {
     final bool isCamOn = participant.isCameraEnabled();
     final bool isSpeaking = participant.isSpeaking;
     final bool handRaised = controller.remoteHandStates[participant.identity] ?? false;
+    final bool isSpotlight = controller.spotlightUserId == participant.identity;
     final quality = participant.connectionQuality;
 
-    // محاولة استخراج الاسم من name أو metadata الخاص بـ LiveKit
     String displayName = participant.name ?? participant.identity;
-    if (displayName.isEmpty || displayName == "طالب") {
-       displayName = participant.identity; // fallback to identity if name is generic
-    }
+    if (displayName.isEmpty || displayName == "طالب") displayName = participant.identity;
 
     return ListTile(
       leading: Stack(
@@ -284,21 +332,21 @@ class _ParticipantTile extends StatelessWidget {
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: isSpeaking ? Colors.green : Colors.transparent, width: 2),
+              border: Border.all(color: isSpotlight ? Colors.purple : (isSpeaking ? Colors.green : Colors.transparent), width: 2),
             ),
             child: CircleAvatar(
               radius: 20,
               backgroundColor: isMe ? Colors.blue.shade50 : Colors.grey.shade100,
               child: Text(
-                displayName.isNotEmpty 
-                    ? displayName.substring(0, 1).toUpperCase()
-                    : "?",
+                displayName.isNotEmpty ? displayName.substring(0, 1).toUpperCase() : "?",
                 style: TextStyle(color: isMe ? Colors.blue : Colors.black87, fontWeight: FontWeight.bold),
               ),
             ),
           ),
           if (handRaised)
             const Positioned(right: -2, bottom: -2, child: Icon(Icons.front_hand, color: Colors.orange, size: 18)),
+          if (isSpotlight)
+            const Positioned(left: -2, bottom: -2, child: Icon(Icons.star, color: Colors.purple, size: 18)),
         ],
       ),
       title: Row(
@@ -334,6 +382,7 @@ class _ParticipantTile extends StatelessWidget {
   Widget _buildActionMenu(BuildContext context) {
     final bool isMicOn = participant.isMicrophoneEnabled();
     final bool isHandRaised = controller.remoteHandStates[participant.identity] ?? false;
+    final bool isSpotlight = controller.spotlightUserId == participant.identity;
 
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert, size: 20),
@@ -342,12 +391,14 @@ class _ParticipantTile extends StatelessWidget {
         if (v == 'mute') controller.muteParticipant(participant.identity, isMicOn);
         if (v == 'lower') controller.lowerParticipantHand(participant.identity);
         if (v == 'kick') controller.kickParticipant(participant.identity);
+        if (v == 'spotlight') controller.setSpotlight(isSpotlight ? null : participant.identity);
       },
       itemBuilder: (ctx) => [
-        PopupMenuItem(value: 'mute', child: Row(children: [Icon(isMicOn ? Icons.mic_off : Icons.mic, size: 18), const SizedBox(width: 8), Text(isMicOn ? "كتم الصوت" : "تفعيل الصوت")])),
+        PopupMenuItem(value: 'spotlight', child: Row(children: [Icon(isSpotlight ? Icons.star_border : Icons.star, size: 18, color: Colors.purple), const SizedBox(width: 8), Text(isSpotlight ? "إلغاء التركيز" : "تسليط الضوء")])),
+        PopupMenuItem(value: 'mute', child: Row(children: [Icon(isMicOn ? Icons.mic_off : Icons.mic, size: 18), const SizedBox(width: 8), Text(isMicOn ? "كتم الصوت (قفل)" : "تفعيل الصوت")])),
         if (isHandRaised)
           const PopupMenuItem(value: 'lower', child: Row(children: [Icon(Icons.front_hand, size: 18), const SizedBox(width: 8), Text("إنزال اليد")])),
-        const PopupMenuItem(value: 'kick', child: Row(children: [Icon(Icons.person_remove, size: 18, color: Colors.red), const SizedBox(width: 8), Text("طرد المشارك", style: TextStyle(color: Colors.red))])),
+        const PopupMenuItem(value: 'kick', child: Row(children: [Icon(Icons.person_remove, size: 18, color: Colors.red), const SizedBox(width: 8), Text("طرد من القاعة", style: TextStyle(color: Colors.red))])),
       ],
     );
   }

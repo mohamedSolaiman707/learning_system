@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:provider/provider.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -160,7 +159,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
-                  child: const Icon(IconlyLight.camera, color: Colors.white, size: 20),
+                  child: const Icon(Icons.camera_alt_outlined, color: Colors.white, size: 20),
                 ),
               ),
             ],
@@ -195,9 +194,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const Text("المعلومات الشخصية", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 15),
         _buildInfoCard([
-          _buildInfoItem(IconlyLight.profile, "الاسم الكامل", profile['full_name'] ?? '', () => _showEditDialog("الاسم", "full_name", profile['full_name'])),
-          _buildInfoItem(IconlyLight.call, "رقم الهاتف", profile['phone_number'] ?? 'غير مسجل', () => _showEditDialog("الهاتف", "phone_number", profile['phone_number'] ?? '')),
-          _buildInfoItem(IconlyLight.message, "البريد الإلكتروني", profile['email'] ?? 'جاري التحميل...', null),
+          _buildInfoItem(Icons.person_outline, "الاسم الكامل", profile['full_name'] ?? '', () => _showEditDialog("الاسم", "full_name", profile['full_name'])),
+          _buildInfoItem(Icons.phone_outlined, "رقم الهاتف", profile['phone_number'] ?? 'غير مسجل', () => _showEditDialog("الهاتف", "phone_number", profile['phone_number'] ?? '')),
+          _buildInfoItem(Icons.email_outlined, "البريد الإلكتروني", profile['email'] ?? 'جاري التحميل...', null),
         ]),
       ],
     );
@@ -210,10 +209,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const Text("الأمان والخصوصية", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 15),
         _buildInfoCard([
-          _buildInfoItem(IconlyLight.lock, "كلمة المرور", "********", () {
+          _buildInfoItem(Icons.lock_outline, "كلمة المرور", "********", () {
              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يمكنك تغيير كلمة المرور من خلال بريدك الإلكتروني")));
           }),
-          _buildInfoItem(IconlyLight.shieldDone, "حالة الحساب", "نشط", null),
+          _buildInfoItem(Icons.verified_user_outlined, "حالة الحساب", "نشط", null),
         ]),
       ],
     );
@@ -250,7 +249,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await auth.logout();
         if (mounted) Navigator.pushReplacementNamed(context, AppRoutes.login);
       },
-      icon: const Icon(IconlyLight.logout),
+      icon: const Icon(Icons.logout),
       label: const Text("تسجيل الخروج"),
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.red.withOpacity(0.05),

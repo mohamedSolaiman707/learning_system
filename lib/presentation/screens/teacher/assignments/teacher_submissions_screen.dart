@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/models/submission_model.dart'; // استخدام الموديل الجديد
+import '../../../../core/models/submission_model.dart';
 import '../../../../core/services/assignments_service.dart';
 
 class TeacherSubmissionsScreen extends StatefulWidget {
@@ -20,7 +19,7 @@ class TeacherSubmissionsScreen extends StatefulWidget {
 
 class _TeacherSubmissionsScreenState extends State<TeacherSubmissionsScreen> {
   final _assignmentsService = AssignmentsService();
-  List<SubmissionModel> _submissions = []; // تم تغيير النوع للموديل
+  List<SubmissionModel> _submissions = [];
   bool _isLoading = true;
 
   @override
@@ -70,7 +69,7 @@ class _TeacherSubmissionsScreenState extends State<TeacherSubmissionsScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: feedbackController,
-              decoration: const InputDecoration(labelText: "ملاحظات للمطالب"),
+              decoration: const InputDecoration(labelText: "ملاحظات للطالب"),
               maxLines: 2,
             ),
           ],
@@ -107,19 +106,19 @@ class _TeacherSubmissionsScreenState extends State<TeacherSubmissionsScreen> {
                       margin: const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       child: ListTile(
-                        leading: const CircleAvatar(child: Icon(IconlyLight.user2)),
+                        leading: const CircleAvatar(child: Icon(Icons.person_outline)),
                         title: Text(sub.studentName ?? 'طالب'),
                         subtitle: Text(sub.grade != null ? "الدرجة: ${sub.grade}" : "بانتظار التصحيح"),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(IconlyLight.show, color: Colors.blue),
+                              icon: const Icon(Icons.visibility_outlined, color: Colors.blue),
                               onPressed: () => launchUrl(Uri.parse(sub.fileUrl)),
                               tooltip: "عرض الحل",
                             ),
                             IconButton(
-                              icon: const Icon(IconlyLight.edit, color: Colors.orange),
+                              icon: const Icon(Icons.edit_outlined, color: Colors.orange),
                               onPressed: () => _showGradeDialog(sub),
                               tooltip: "رصد الدرجة",
                             ),

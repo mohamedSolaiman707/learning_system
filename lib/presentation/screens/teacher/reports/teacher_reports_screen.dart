@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/services/database_service.dart';
@@ -39,7 +38,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       for (var session in teacherSessions) {
         final sessionId = session['id'];
         
-        // جلب البيانات بشكل متوازي لسرعة الأداء
         final results = await Future.wait([
           db.getSessionEnrollments(sessionId),
           db.getAttendanceReportData(sessionId),
@@ -53,7 +51,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         final presentCount = attendance.where((a) => a['status'] == 'present').length;
         totalAttendance += presentCount;
 
-        // حساب متوسط درجات الاختبارات
         double avgQuizScore = 0;
         if (quizzes.isNotEmpty) {
           final correctAnswers = quizzes.where((q) => q['is_correct'] == true).length;
@@ -87,7 +84,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     final enrollments = report['enrollments'] as List;
     final attendanceData = report['attendanceData'] as List;
     
-    // بناء قائمة الطلاب الشاملة (حاضر وغائب) للتقرير
     final List<Map<String, dynamic>> fullStudentsReport = [];
     
     for (var enrollment in enrollments) {
@@ -108,7 +104,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       });
     }
 
-    // إضافة الطلاب الذين حضروا ولم يكونوا مسجلين (زوار)
     for (var att in attendanceData) {
       if (!enrollments.any((e) => e['student_id'] == att['student_id'])) {
         final profile = att['profiles'] as Map<String, dynamic>?;
@@ -236,7 +231,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             leading: CircleAvatar(
               backgroundColor: Colors.blue.shade50,
-              child: const Icon(IconlyBold.document, color: Colors.blue, size: 20),
+              child: const Icon(Icons.description, color: Colors.blue, size: 20),
             ),
             title: Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text(DateFormat('EEEE, d MMMM').format(startTime), style: const TextStyle(fontSize: 12)),
@@ -317,7 +312,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const SizedBox(height: 60),
-          Icon(IconlyLight.chart, size: 80, color: Colors.grey.shade200),
+          Icon(Icons.bar_chart, size: 80, color: Colors.grey.shade200),
           const SizedBox(height: 20),
           const Text("لا توجد بيانات كافية للتقارير", style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.bold)),
           const Text("ابدأ حصصك ليتم تجميع البيانات هنا", style: TextStyle(color: Colors.grey, fontSize: 12)),

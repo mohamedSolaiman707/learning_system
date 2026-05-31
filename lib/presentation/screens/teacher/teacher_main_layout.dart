@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import '../../../core/utils/responsive.dart';
 import 'tabs/teacher_home_tab.dart';
 import 'tabs/teacher_schedule_tab.dart'; 
@@ -23,18 +22,18 @@ class _TeacherMainLayoutState extends State<TeacherMainLayout> {
 
   final List<NavigationDestination> _destinations = const [
     NavigationDestination(
-      icon: Icon(IconlyLight.home),
-      selectedIcon: Icon(IconlyBold.home),
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home),
       label: 'الرئيسية',
     ),
     NavigationDestination(
-      icon: Icon(IconlyLight.calendar),
-      selectedIcon: Icon(IconlyBold.calendar),
+      icon: Icon(Icons.calendar_today_outlined),
+      selectedIcon: Icon(Icons.calendar_today),
       label: 'جدولي',
     ),
     NavigationDestination(
-      icon: Icon(IconlyLight.profile),
-      selectedIcon: Icon(IconlyBold.profile),
+      icon: Icon(Icons.person_outline),
+      selectedIcon: Icon(Icons.person),
       label: 'حسابي',
     ),
   ];

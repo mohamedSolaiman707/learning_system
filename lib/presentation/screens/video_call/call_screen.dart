@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import '../../../core/utils/responsive.dart';
 
 class VideoCallScreen extends StatefulWidget {
@@ -77,7 +76,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             ],
           ),
           const Spacer(),
-          const Icon(IconlyLight.user2, color: Colors.white70, size: 20),
+          const Icon(Icons.person, color: Colors.white70, size: 20),
           const SizedBox(width: 5),
           const Text("12 مشارك", style: TextStyle(color: Colors.white70, fontSize: 12)),
           const SizedBox(width: 15),
@@ -214,7 +213,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             padding: EdgeInsets.all(18),
             child: Row(
               children: [
-                Icon(IconlyLight.chat, color: Colors.blue, size: 20),
+                Icon(Icons.chat_outlined, color: Colors.blue, size: 20),
                 SizedBox(width: 10),
                 Text("الدردشة العامة", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ],
@@ -249,26 +248,26 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
         children: [
           _buildControlButton(
             onTap: () => setState(() => _isMicOn = !_isMicOn),
-            icon: _isMicOn ? IconlyBold.voice : Icons.mic_off,
+            icon: _isMicOn ? Icons.mic : Icons.mic_off,
             color: _isMicOn ? Colors.white.withOpacity(0.1) : Colors.red.withOpacity(0.8),
           ),
           const SizedBox(width: 15),
           _buildControlButton(
             onTap: () => setState(() => _isCameraOn = !_isCameraOn),
-            icon: _isCameraOn ? IconlyBold.video : Icons.videocam_off,
+            icon: _isCameraOn ? Icons.videocam : Icons.videocam_off,
             color: _isCameraOn ? Colors.white.withOpacity(0.1) : Colors.red.withOpacity(0.8),
           ),
           const SizedBox(width: 15),
           _buildControlButton(
             onTap: () {},
-            icon: IconlyBold.discovery,
+            icon: Icons.screen_share,
             color: Colors.white.withOpacity(0.1),
             label: "مشاركة",
           ),
           const SizedBox(width: 15),
           _buildControlButton(
             onTap: () => setState(() => _isChatOpen = !_isChatOpen),
-            icon: IconlyBold.chat,
+            icon: _isChatOpen ? Icons.chat : Icons.chat_outlined,
             color: _isChatOpen ? Colors.blue : Colors.white.withOpacity(0.1),
           ),
           const SizedBox(width: 40),

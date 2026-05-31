@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_iconly/flutter_iconly.dart'; // التحديث هنا
 import 'package:provider/provider.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/utils/responsive.dart';
@@ -223,7 +222,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             _buildDivider(),
             const SizedBox(height: 24),
             if (!_isLogin) ...[
-              CustomTextField(controller: _nameController, hintText: "الاسم الكامل", prefixIcon: IconlyLight.user2,
+              CustomTextField(controller: _nameController, hintText: "الاسم الكامل", prefixIcon: Icons.person_outline_rounded,
                 validator: (v) => (v == null || v.isEmpty) ? "يرجى كتابة اسمك" : null),
               const SizedBox(height: 16),
             ],
@@ -231,9 +230,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             _buildEmailField(),
             
             const SizedBox(height: 16),
-            CustomTextField(controller: _passwordController, hintText: "كلمة المرور", prefixIcon: IconlyLight.lock, isPassword: _obscureText,
+            CustomTextField(controller: _passwordController, hintText: "كلمة المرور", prefixIcon: Icons.lock_outline_rounded, isPassword: _obscureText,
               autofillHints: const [AutofillHints.password],
-              suffixIcon: IconButton(icon: Icon(_obscureText ? IconlyLight.hide : IconlyLight.show, size: 20),
+              suffixIcon: IconButton(icon: Icon(_obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
                 onPressed: () => setState(() => _obscureText = !_obscureText)),
               validator: (v) => (v == null || v.length < 6) ? "كلمة المرور قصيرة" : null),
             
@@ -255,7 +254,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     }
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        CustomTextField(controller: _emailController, hintText: "البريد الإلكتروني", prefixIcon: IconlyLight.message, keyboardType: TextInputType.emailAddress,
+        CustomTextField(controller: _emailController, hintText: "البريد الإلكتروني", prefixIcon: Icons.mail_outline_rounded, keyboardType: TextInputType.emailAddress,
           autofillHints: const [AutofillHints.email],
           suffixIcon: suffix,
           validator: (v) {

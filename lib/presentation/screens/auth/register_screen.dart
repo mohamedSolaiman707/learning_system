@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/routes/app_routes.dart';
@@ -45,6 +44,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'full_name': _nameController.text.trim(),
           'phone_number': _phoneController.text.trim(),
           'role': 'student',
+          'email': _emailController.text.trim(),
         });
 
         if (!mounted) return;
@@ -198,7 +198,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           CustomTextField(
             controller: _nameController,
             hintText: "الاسم الكامل",
-            prefixIcon: IconlyLight.user2,
+            prefixIcon: Icons.person_outline_rounded,
             autofillHints: const [AutofillHints.name],
             validator: (v) => (v == null || v.isEmpty) ? "يرجى إدخال اسمك" : null,
           ),
@@ -207,7 +207,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           CustomTextField(
             controller: _emailController,
             hintText: "البريد الإلكتروني",
-            prefixIcon: IconlyLight.message,
+            prefixIcon: Icons.mail_outline_rounded,
             keyboardType: TextInputType.emailAddress,
             autofillHints: const [AutofillHints.email],
             validator: (v) => (v == null || !v.contains('@')) ? "بريد إلكتروني غير صالح" : null,
@@ -217,7 +217,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           CustomTextField(
             controller: _phoneController,
             hintText: "رقم الهاتف",
-            prefixIcon: IconlyLight.call,
+            prefixIcon: Icons.phone_outlined,
             keyboardType: TextInputType.phone,
             autofillHints: const [AutofillHints.telephoneNumber],
             validator: (v) => (v == null || v.length < 8) ? "رقم هاتف غير صحيح" : null,
@@ -227,11 +227,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
           CustomTextField(
             controller: _passwordController,
             hintText: "كلمة المرور",
-            prefixIcon: IconlyLight.lock,
+            prefixIcon: Icons.lock_outline_rounded,
             isPassword: _obscureText,
             autofillHints: const [AutofillHints.newPassword],
             suffixIcon: IconButton(
-              icon: Icon(_obscureText ? IconlyLight.hide : IconlyLight.show),
+              icon: Icon(_obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined),
               onPressed: () => setState(() => _obscureText = !_obscureText),
             ),
             validator: (v) => (v == null || v.length < 6) ? "يجب أن تكون 6 أحرف على الأقل" : null,
@@ -254,10 +254,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           
           const SizedBox(height: 24),
-          // زر التكامل المستقبلي مع Blackboard
           OutlinedButton.icon(
             onPressed: () {
-               _showErrorSnackBar("سيتم تفعيل الدخول الموحد عبر Blackboard قريباً");
+               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("سيتم تفعيل الدخول الموحد عبر Blackboard قريباً")));
             },
             icon: const Icon(Icons.account_balance_rounded, size: 20),
             label: const Text("الدخول عبر حساب الجامعة"),

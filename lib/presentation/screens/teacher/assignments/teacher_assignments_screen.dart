@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
-import 'package:intl/intl.dart';
 import '../../../../core/models/assignment_model.dart';
 import '../../../../core/services/assignments_service.dart';
-import 'teacher_submissions_screen.dart'; // استدعاء شاشة التسليمات
+import 'teacher_submissions_screen.dart'; 
 
 class TeacherAssignmentsScreen extends StatefulWidget {
   final String sessionId;
@@ -64,13 +62,13 @@ class _TeacherAssignmentsScreenState extends State<TeacherAssignmentsScreen> {
               const SizedBox(height: 20),
               TextField(
                 controller: titleController,
-                decoration: const InputDecoration(labelText: "عنوان الواجب", prefixIcon: Icon(IconlyLight.document)),
+                decoration: const InputDecoration(labelText: "عنوان الواجب", prefixIcon: Icon(Icons.description_outlined)),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: descController,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: "وصف أو تعليمات", prefixIcon: Icon(IconlyLight.edit)),
+                decoration: const InputDecoration(labelText: "وصف أو تعليمات", prefixIcon: Icon(Icons.edit_outlined)),
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
@@ -78,7 +76,7 @@ class _TeacherAssignmentsScreenState extends State<TeacherAssignmentsScreen> {
                   final result = await FilePicker.pickFiles(withData: true);
                   if (result != null) setSheetState(() => pickedFile = result.files.first);
                 },
-                icon: const Icon(IconlyLight.upload),
+                icon: const Icon(Icons.upload_file_outlined),
                 label: Text(pickedFile?.name ?? "إرفاق ملف الواجب"),
               ),
               const SizedBox(height: 24),
@@ -124,12 +122,11 @@ class _TeacherAssignmentsScreenState extends State<TeacherAssignmentsScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     child: ListTile(
                       contentPadding: const EdgeInsets.all(16),
-                      leading: const CircleAvatar(backgroundColor: Colors.orange, child: Icon(IconlyBold.document, color: Colors.white)),
+                      leading: const CircleAvatar(backgroundColor: Colors.orange, child: Icon(Icons.assignment_outlined, color: Colors.white)),
                       title: Text(assignment.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text("اضغط لرؤية تسليمات الطلاب"),
+                      subtitle: const Text("اضغط لرؤية تسليمات الطلاب"),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: () {
-                        // 🚀 الانتقال لشاشة التسليمات
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -152,6 +149,6 @@ class _TeacherAssignmentsScreenState extends State<TeacherAssignmentsScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(child: Text("لا توجد واجبات مرفوعة"));
+    return const Center(child: Text("لا توجد واجبات مرفوعة"));
   }
 }

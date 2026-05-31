@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:shimmer/shimmer.dart';
@@ -92,7 +91,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
             if (initial) _isLoading = false;
           });
 
-          // تحسين UX: جلب إحصائيات الواجبات بشكل أدق
           int pending = 0;
           int completed = 0;
           for (var session in _enrolledSessions) {
@@ -215,7 +213,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
         title: Text("الرئيسية", style: TextStyle(color: Colors.black.withOpacity(0.8), fontWeight: FontWeight.bold, fontSize: 18)),
       ),
       actions: [
-        IconButton(onPressed: () {}, icon: const Badge(child: Icon(IconlyLight.notification, color: Colors.black87))),
+        IconButton(onPressed: () {}, icon: const Badge(child: Icon(Icons.notifications_none_rounded, color: Colors.black87))),
         const SizedBox(width: 8),
         Padding(
           padding: const EdgeInsets.only(left: 16),
@@ -397,12 +395,12 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
             const SizedBox(height: 8),
             Text("أ. ${session.teacherName}", style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 32),
-            _buildOptionTile(IconlyLight.document, "عرض الواجبات", Colors.blue, () {
+            _buildOptionTile(Icons.assignment_outlined, "عرض الواجبات", Colors.blue, () {
               Navigator.pop(context);
               Navigator.push(context, MaterialPageRoute(builder: (context) => StudentAssignmentsScreen(sessionId: session.id, subjectName: session.subjectName)));
             }),
             const SizedBox(height: 12),
-            _buildOptionTile(IconlyLight.folder, "المكتبة والمصادر", Colors.orange, () {
+            _buildOptionTile(Icons.folder_open_rounded, "المكتبة والمصادر", Colors.orange, () {
               Navigator.pop(context);
               Navigator.push(context, MaterialPageRoute(builder: (context) => StudentResourcesScreen(sessionId: session.id, subjectName: session.subjectName)));
             }),
@@ -426,7 +424,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
             const SizedBox(width: 16),
             Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const Spacer(),
-             Icon(IconlyLight.arrowLeft2, size: 18, color: Colors.grey),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 18, color: Colors.grey),
           ],
         ),
       ),

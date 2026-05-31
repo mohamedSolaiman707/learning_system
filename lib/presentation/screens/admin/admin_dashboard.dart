@@ -3,7 +3,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:animations/animations.dart';
-import 'package:flutter_iconly/flutter_iconly.dart'; // التعديل هنا
 
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/routes/app_routes.dart';
@@ -189,7 +188,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       elevation: 0,
       title: const Text("لوحة التحكم"),
       actions: [
-        IconButton(onPressed: _loadStats, icon: const Icon(IconlyLight.swap)),
+        IconButton(onPressed: _loadStats, icon: const Icon(Icons.refresh)),
         const SizedBox(width: 15),
       ],
     );
@@ -215,7 +214,7 @@ class _AdminDashboardState extends State<AdminDashboard>
         ),
         ElevatedButton.icon(
           onPressed: _loadStats,
-          icon: const Icon(IconlyLight.swap, size: 20),
+          icon: const Icon(Icons.refresh, size: 20),
           label: const Text("تحديث البيانات"),
           style: ElevatedButton.styleFrom(minimumSize: const Size(150, 50)),
         ),
@@ -244,7 +243,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(IconlyLight.dangerCircle, size: 60, color: Colors.red),
+          const Icon(Icons.error_outline, size: 60, color: Colors.red),
           const SizedBox(height: 16),
           Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
           const SizedBox(height: 24),
@@ -275,25 +274,25 @@ class _AdminDashboardState extends State<AdminDashboard>
             AdminStatCard(
               title: "إجمالي الطلاب",
               value: _totalStudents.toString(),
-              icon: IconlyLight.user2,
+              icon: Icons.person_outline,
               color: Colors.blue,
             ),
             AdminStatCard(
               title: "الغرف النشطة",
               value: _activeRooms.toString(),
-              icon: IconlyLight.video,
+              icon: Icons.videocam_outlined,
               color: Colors.green,
             ),
             AdminStatCard(
               title: "إجمالي المعلمين",
               value: _totalTeachers.toString(),
-              icon: IconlyLight.user2,
+              icon: Icons.person_outline,
               color: Colors.orange,
             ),
             AdminStatCard(
               title: "حصص اليوم",
               value: _todaySessions.toString(),
-              icon: IconlyLight.calendar,
+              icon: Icons.calendar_today_outlined,
               color: Colors.purple,
             ),
           ],
@@ -420,9 +419,9 @@ class _AdminDashboardState extends State<AdminDashboard>
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 40),
-        _buildSidebarItem(IconlyBold.chart, "لوحة التحكم", true, () {}),
+        _buildSidebarItem(Icons.bar_chart, "لوحة التحكم", true, () {}),
         _buildSidebarItem(
-          IconlyLight.user2,
+          Icons.person_outline,
           "المستخدمين",
           false,
           () => Navigator.push(
@@ -433,7 +432,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           ),
         ),
         _buildSidebarItem(
-          IconlyLight.video,
+          Icons.videocam_outlined,
           "الحصص",
           false,
           () => Navigator.push(
@@ -444,7 +443,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           ),
         ),
         _buildSidebarItem(
-          IconlyLight.setting,
+          Icons.settings_outlined,
           "الإعدادات",
           false,
           () => Navigator.push(
@@ -456,7 +455,7 @@ class _AdminDashboardState extends State<AdminDashboard>
         ),
         const Spacer(),
         _buildSidebarItem(
-          IconlyLight.logout,
+          Icons.logout,
           "خروج",
           false,
           (){

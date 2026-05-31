@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:provider/provider.dart';
 import '../../../core/models/session_model.dart';
@@ -134,7 +133,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                 color: Colors.blue.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(IconlyLight.timeCircle, color: Colors.blue, size: 64),
+              child: const Icon(Icons.access_time, color: Colors.blue, size: 64),
             ),
             const SizedBox(height: 32),
             Text(

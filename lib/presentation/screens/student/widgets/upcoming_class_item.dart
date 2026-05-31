@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 
 class UpcomingClassItem extends StatelessWidget {
   final String subject;
@@ -29,7 +28,7 @@ class UpcomingClassItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                IconlyLight.document,
+                Icons.description_outlined,
                 color: Theme.of(context).primaryColor,
               ),
             ),

@@ -1,6 +1,5 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
@@ -102,14 +101,14 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               const SizedBox(height: 24),
               TextField(
                 controller: subjectController,
-                decoration: const InputDecoration(labelText: "اسم المادة", prefixIcon: Icon(IconlyLight.document)),
+                decoration: const InputDecoration(labelText: "اسم المادة", prefixIcon: Icon(Icons.description_outlined)),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: codeController,
                 decoration: InputDecoration(
                   labelText: "كود الحصة",
-                  prefixIcon: const Icon(IconlyLight.password),
+                  prefixIcon: const Icon(Icons.vpn_key_outlined),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.bolt, color: Colors.orange),
                     onPressed: () => setSheetState(() => codeController.text = _generateRandomCode()),
@@ -119,7 +118,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: selectedTeacherId,
-                decoration:  InputDecoration(labelText: "اختر المدرس", prefixIcon: Icon(IconlyLight.user2)),
+                decoration:  const InputDecoration(labelText: "اختر المدرس", prefixIcon: Icon(Icons.person_outline)),
                 items: _teachers.map((t) => DropdownMenuItem(value: t['id'].toString(), child: Text(t['full_name']))).toList(),
                 onChanged: (val) => setSheetState(() => selectedTeacherId = val),
               ),
@@ -133,7 +132,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                         if (date != null) setSheetState(() => selectedDate = date);
                       },
                       style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      icon: const Icon(IconlyLight.calendar),
+                      icon: const Icon(Icons.calendar_today_outlined),
                       label: Text(DateFormat('yyyy/MM/dd').format(selectedDate)),
                     ),
                   ),
@@ -145,7 +144,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                         if (time != null) setSheetState(() => selectedTime = time);
                       },
                       style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      icon:  Icon(IconlyLight.timeCircle),
+                      icon:  const Icon(Icons.access_time_outlined),
                       label: Text(selectedTime.format(context)),
                     ),
                   ),
@@ -192,7 +191,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
       appBar: AppBar(
         title: const Text("إدارة الحصص"),
         actions: [
-          IconButton(onPressed: _fetchData, icon: const Icon(IconlyLight.swap)),
+          IconButton(onPressed: _fetchData, icon: const Icon(Icons.refresh)),
           const SizedBox(width: 10),
         ],
       ),
@@ -270,8 +269,8 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               DataCell(Text(DateFormat('yyyy/MM/dd - hh:mm a').format(startTime))),
               DataCell(Row(
                 children: [
-                  IconButton(onPressed: () => _showSessionSheet(session: session), icon: const Icon(IconlyLight.edit, color: Colors.blue, size: 20)),
-                  IconButton(onPressed: () => _confirmDelete(session['id']), icon: const Icon(IconlyLight.delete, color: Colors.red, size: 20)),
+                  IconButton(onPressed: () => _showSessionSheet(session: session), icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20)),
+                  IconButton(onPressed: () => _confirmDelete(session['id']), icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20)),
                 ],
               )),
             ]);
@@ -307,7 +306,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
           child: ListTile(
             title: Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text("${session['profiles']?['full_name']} | ${DateFormat('hh:mm a').format(startTime)}"),
-            trailing: IconButton(onPressed: () => _showSessionSheet(session: session), icon: const Icon(IconlyLight.edit)),
+            trailing: IconButton(onPressed: () => _showSessionSheet(session: session), icon: const Icon(Icons.edit_outlined)),
           ),
         );
       },

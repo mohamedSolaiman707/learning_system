@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -132,7 +131,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
         actions: [
           IconButton(
             onPressed: _showJoinCodeDialog,
-            icon: const Icon(IconlyLight.plus),
+            icon: const Icon(Icons.add),
             tooltip: "انضمام بكود",
           ),
           const SizedBox(width: 8),
@@ -150,7 +149,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       floatingActionButton: Responsive.isMobile(context) 
         ? FloatingActionButton.extended(
             onPressed: _showJoinCodeDialog,
-            icon: const Icon(IconlyLight.plus),
+            icon: const Icon(Icons.add),
             label: const Text("انضمام بكود"),
           )
         : null,

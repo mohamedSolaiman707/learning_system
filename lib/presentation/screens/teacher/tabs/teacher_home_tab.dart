@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:provider/provider.dart';
 import '../../../../core/models/session_model.dart';
@@ -51,7 +50,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
-
+      
       if (auth.user != null) {
         final results = await Future.wait([
           db.getTeacherSessions(auth.user!.id),
@@ -64,16 +63,14 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             _totalStudents = (results[1] as Map<String, dynamic>)['totalStudents'] ?? 0;
 
             final now = DateTime.now();
-
-            // تحديد الحصة الحالية النشطة
+            
             _activeSession = _sessions.cast<SessionModel?>().firstWhere(
-                  (s) => s!.status == 'active' || (s.startTime.isBefore(now) && s.endTime.isAfter(now)),
+              (s) => s!.status == 'active' || (s.startTime.isBefore(now) && s.endTime.isAfter(now)),
               orElse: () => null,
             );
 
-            // تحديد الحصة القادمة
             _nextSession = _sessions.cast<SessionModel?>().firstWhere(
-                  (s) => s!.startTime.isAfter(now) && s.id != _activeSession?.id,
+              (s) => s!.startTime.isAfter(now) && s.id != _activeSession?.id,
               orElse: () => null,
             );
 
@@ -93,56 +90,50 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      body: _isLoading
-          ? _buildSkeletonLoading()
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : RefreshIndicator(
-        onRefresh: _loadData,
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            _buildHeader(name),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(Responsive.isMobile(context) ? 20 : 30),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildStatsOverview(),
-                    const SizedBox(height: 32),
-                    if (_activeSession != null) ...[
-                      _buildSectionTitle("البث المباشر الآن", isLive: true),
-                      const SizedBox(height: 16),
-                      _buildActiveSessionCard(name),
-                      const SizedBox(height: 32),
-                    ],
-                    _buildSectionTitle("الإجراءات السريعة"),
-                    const SizedBox(height: 16),
-                    _buildSmartQuickActions(),
-                    const SizedBox(height: 32),
-                    if (_nextSession != null) ...[
-                      _buildSectionTitle("الحصة القادمة"),
-                      const SizedBox(height: 16),
-                      _buildNextSessionCard(),
-                    ],
-                  ],
-                ),
+              onRefresh: _loadData,
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  _buildHeader(name),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(Responsive.isMobile(context) ? 20 : 30),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildStatsOverview(),
+                          const SizedBox(height: 32),
+                          if (_activeSession != null) ...[
+                             _buildSectionTitle("البث المباشر الآن", isLive: true),
+                             const SizedBox(height: 16),
+                             _buildActiveSessionCard(name),
+                             const SizedBox(height: 32),
+                          ],
+                          _buildSectionTitle("الإجراءات السريعة"),
+                          const SizedBox(height: 16),
+                          _buildSmartQuickActions(),
+                          const SizedBox(height: 32),
+                          if (_nextSession != null) ...[
+                            _buildSectionTitle("الحصة القادمة"),
+                            const SizedBox(height: 16),
+                            _buildNextSessionCard(),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
     );
-  }
-
-  Widget _buildSkeletonLoading() {
-    return const Center(child: CircularProgressIndicator(strokeWidth: 2));
   }
 
   Widget _buildHeader(String name) {
     return SliverAppBar(
-      expandedHeight: 120,
-      pinned: true,
-      elevation: 0,
+      expandedHeight: 120, pinned: true, elevation: 0,
       backgroundColor: Colors.white,
       flexibleSpace: FlexibleSpaceBar(
         titlePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
@@ -161,7 +152,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
-            child: const Icon(IconlyLight.plus, color: Colors.blue, size: 20),
+            child: const Icon(Icons.add_rounded, color: Colors.blue, size: 20),
           ),
         ),
         const SizedBox(width: 10),
@@ -172,7 +163,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   Widget _buildSectionTitle(String title, {bool isLive = false}) {
     return Row(
       children: [
-        if (isLive)
+        if (isLive) 
           FadeTransition(
             opacity: _pulseController,
             child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
@@ -186,9 +177,9 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   Widget _buildStatsOverview() {
     return Row(
       children: [
-        Expanded(child: TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: IconlyLight.user2, color: Colors.blue)),
+        Expanded(child: TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: Icons.people_outline_rounded, color: Colors.blue)),
         const SizedBox(width: 16),
-        Expanded(child: TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: IconlyLight.video, color: Colors.orange)),
+        Expanded(child: TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: Icons.videocam_outlined, color: Colors.orange)),
       ],
     );
   }
@@ -205,7 +196,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         children: [
           Row(
             children: [
-              const CircleAvatar(backgroundColor: Colors.white24, radius: 25, child: Icon(Icons.bolt, color: Colors.white, size: 30)),
+              const CircleAvatar(backgroundColor: Colors.white24, radius: 25, child: Icon(Icons.bolt_rounded, color: Colors.white, size: 30)),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -242,10 +233,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildActionButton("التحضير", IconlyLight.user2, Colors.blue, 'attendance'),
-          _buildActionButton("الواجبات", IconlyLight.document, Colors.orange, 'assignment'),
-          _buildActionButton("المكتبة", IconlyLight.folder, Colors.purple, 'resources'),
-          _buildActionButton("التقارير", IconlyLight.chart, Colors.green, 'reports'),
+          _buildActionButton("التحضير", Icons.how_to_reg_outlined, Colors.blue, 'attendance'),
+          _buildActionButton("الواجبات", Icons.assignment_outlined, Colors.orange, 'assignment'),
+          _buildActionButton("المكتبة", Icons.folder_copy_outlined, Colors.purple, 'resources'),
+          _buildActionButton("التقارير", Icons.bar_chart_rounded, Colors.green, 'reports'),
         ],
       ),
     );
@@ -281,7 +272,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(16)),
-            child: const Icon(IconlyLight.calendar, color: Colors.blue),
+            child: const Icon(Icons.calendar_month_outlined, color: Colors.blue),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -293,13 +284,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
               ],
             ),
           ),
-          const Icon(IconlyLight.arrowLeft2, size: 18, color: Colors.grey),
+          const Icon(Icons.arrow_forward_ios_rounded, size: 18, color: Colors.grey),
         ],
       ),
     );
   }
 
-  // الدوال المساعدة (نفس المنطق السابق مع تحسين التفاعل)
   void _handleQuickAction(String type) {
     HapticFeedback.lightImpact();
     if (type == 'reports') {
@@ -345,7 +335,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                   final s = _sessions[index];
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)), child: const Icon(IconlyLight.video, color: Colors.blue)),
+                    leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.videocam_rounded, color: Colors.blue)),
                     title: Text(s.subjectName, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(intl.DateFormat('hh:mm a').format(s.startTime)),
                     onTap: () { Navigator.pop(context); _navigateToActionScreen(type, s); },
@@ -392,7 +382,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
-  // دالة إضافة حصة (تم تحسين تصميمها)
   void _showAddSessionDialog() {
     final nameController = TextEditingController();
     DateTime startDate = DateTime.now();
@@ -410,7 +399,14 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nameController, decoration: InputDecoration(labelText: "اسم الحصة", prefixIcon: const Icon(IconlyLight.edit), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)))),
+                TextField(
+                  controller: nameController, 
+                  decoration: InputDecoration(
+                    labelText: "اسم الحصة", 
+                    prefixIcon: const Icon(Icons.edit_note_outlined), 
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))
+                  ),
+                ),
                 const SizedBox(height: 20),
                 _buildDateTimePicker(label: "موقت البدء", date: startDate, time: startTime, onTap: () async {
                   final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 90)));
@@ -459,7 +455,19 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   }
 
   Widget _buildDateTimePicker({required String label, required DateTime date, required TimeOfDay time, required VoidCallback onTap}) {
-    return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade300)),
-        child: Row(children: [const Icon(IconlyLight.calendar, color: Colors.blue), const SizedBox(width: 12), Text("${intl.DateFormat('yyyy-MM-dd').format(date)} ${time.format(context)}", style: const TextStyle(fontWeight: FontWeight.bold))])));
+    return InkWell(
+      onTap: onTap, 
+      child: Container(
+        padding: const EdgeInsets.all(16), 
+        decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade300)),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_month_rounded, color: Colors.blue), 
+            const SizedBox(width: 12), 
+            Text("${intl.DateFormat('yyyy-MM-dd').format(date)} ${time.format(context)}", style: const TextStyle(fontWeight: FontWeight.bold))
+          ],
+        ),
+      ),
+    );
   }
 }

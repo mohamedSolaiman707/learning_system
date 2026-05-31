@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/providers/auth_provider.dart';
@@ -132,7 +131,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
                 color: (isSubmitted ? Colors.green : Colors.orange).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(isSubmitted ? IconlyBold.tickSquare : IconlyBold.document,
+              child: Icon(isSubmitted ? Icons.check_box : Icons.description,
                 color: isSubmitted ? Colors.green : Colors.orange, size: 24),
             ),
             title: Text(assignment.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -160,7 +159,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
                 if (assignment.fileUrl != null)
                   TextButton.icon(
                     onPressed: () => launchUrl(Uri.parse(assignment.fileUrl!)),
-                    icon: const Icon(IconlyLight.download, size: 18),
+                    icon: const Icon(Icons.download, size: 18),
                     label: const Text("تحميل الواجب"),
                   ),
                 const Spacer(),
@@ -184,7 +183,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
               decoration: BoxDecoration(color: Colors.amber.withOpacity(0.05), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20))),
               child: Row(
                 children: [
-                   Icon(IconlyLight.infoSquare, color: Colors.amber, size: 16),
+                   const Icon(Icons.info_outline, color: Colors.amber, size: 16),
                   const SizedBox(width: 8),
                   Expanded(child: Text("ملاحظة المدرس: ${submission.feedback}", style: const TextStyle(fontSize: 12, color: Colors.black87))),
                 ],
@@ -200,7 +199,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(IconlyLight.document, size: 60, color: Colors.grey.shade300),
+          Icon(Icons.description_outlined, size: 60, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           const Text("لا توجد واجبات مطلوبة حالياً", style: TextStyle(color: Colors.grey)),
         ],

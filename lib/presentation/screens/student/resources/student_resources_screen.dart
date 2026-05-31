@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -77,7 +76,7 @@ class _StudentResourcesScreenState extends State<StudentResourcesScreen> {
                         title: Text(res['title'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                         subtitle: Text("${res['file_type']?.toString().toUpperCase()} • ${res['created_at'].toString().split('T')[0]}", style: const TextStyle(fontSize: 12)),
                         trailing: IconButton(
-                          icon: const Icon(IconlyLight.download, color: Colors.blue),
+                          icon: const Icon(Icons.download_outlined, color: Colors.blue),
                           onPressed: () => launchUrl(Uri.parse(res['file_url'])),
                         ),
                       ),
@@ -88,9 +87,9 @@ class _StudentResourcesScreenState extends State<StudentResourcesScreen> {
   }
 
   Widget _buildFileIcon(String? type) {
-    IconData icon = IconlyBold.document;
+    IconData icon = Icons.description_outlined;
     Color color = Colors.blue;
-    if (type == 'pdf') { icon = Icons.picture_as_pdf; color = Colors.red; }
+    if (type == 'pdf') { icon = Icons.picture_as_pdf_outlined; color = Colors.red; }
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
@@ -103,7 +102,7 @@ class _StudentResourcesScreenState extends State<StudentResourcesScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(IconlyLight.folder, size: 60, color: Colors.grey.shade300),
+          Icon(Icons.folder_open_outlined, size: 60, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           const Text("لا توجد ملفات متوفرة حالياً", style: TextStyle(color: Colors.grey)),
         ],

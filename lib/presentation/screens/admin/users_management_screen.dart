@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../core/utils/responsive.dart';
@@ -130,7 +129,7 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
         title: const Text("إدارة المستخدمين"),
         elevation: 0,
         actions: [
-          IconButton(onPressed: _loadUsers, icon: const Icon(IconlyLight.swap)),
+          IconButton(onPressed: _loadUsers, icon: const Icon(Icons.refresh)),
           const SizedBox(width: 10),
         ],
       ),
@@ -165,7 +164,7 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: "بحث عن مستخدم بالاسم أو الرتبة...",
-                prefixIcon: const Icon(IconlyLight.search),
+                prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: Colors.grey.shade50,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -211,7 +210,7 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
                 _buildActionMenu(user),
                 IconButton(
                   onPressed: () => _confirmDelete(user['id'], user['full_name'] ?? 'مستخدم'),
-                  icon: const Icon(IconlyLight.delete, color: Colors.red, size: 20),
+                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
                 ),
               ],
             )),
@@ -239,7 +238,7 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
                 _buildActionMenu(user),
                 IconButton(
                   onPressed: () => _confirmDelete(user['id'], user['full_name'] ?? 'مستخدم'),
-                  icon: const Icon(IconlyLight.delete, color: Colors.red, size: 20),
+                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
                 ),
               ],
             ),
@@ -286,7 +285,7 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
     );
   }
 
-  Widget _buildErrorState() => Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [ Icon(IconlyLight.dangerCircle, size: 50, color: Colors.red), const SizedBox(height: 10), Text(_error!), TextButton(onPressed: _loadUsers, child: const Text("إعادة المحاولة"))]));
+  Widget _buildErrorState() => Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [ const Icon(Icons.error_outline, size: 50, color: Colors.red), const SizedBox(height: 10), Text(_error!), TextButton(onPressed: _loadUsers, child: const Text("إعادة المحاولة"))]));
   
-  Widget _buildEmptyState() => const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(IconlyLight.search, size: 50, color: Colors.grey), SizedBox(height: 10), Text("لم يتم العثور على مستخدمين")]));
+  Widget _buildEmptyState() => const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.search, size: 50, color: Colors.grey), SizedBox(height: 10), Text("لم يتم العثور على مستخدمين")]));
 }

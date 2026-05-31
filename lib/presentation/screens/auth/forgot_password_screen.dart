@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/widgets/custom_text_field.dart';
 
@@ -65,7 +64,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               CustomTextField(
                 controller: _emailController,
                 hintText: "البريد الإلكتروني",
-                prefixIcon: IconlyLight.message,
+                prefixIcon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) => (v == null || !v.contains('@')) ? "بريد غير صحيح" : null,
               ),

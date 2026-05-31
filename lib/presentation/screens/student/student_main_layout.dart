@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import '../../../core/utils/responsive.dart';
 import 'tabs/student_home_tab.dart';
 import 'tabs/student_schedule_tab.dart';
@@ -23,18 +22,18 @@ class _StudentMainLayoutState extends State<StudentMainLayout> {
 
   final List<NavigationDestination> _destinations = const [
     NavigationDestination(
-      icon: Icon(IconlyLight.home),
-      selectedIcon: Icon(IconlyBold.home),
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home_rounded),
       label: 'الرئيسية',
     ),
     NavigationDestination(
-      icon: Icon(IconlyLight.calendar),
-      selectedIcon: Icon(IconlyBold.calendar),
+      icon: Icon(Icons.calendar_today_outlined),
+      selectedIcon: Icon(Icons.calendar_today_rounded),
       label: 'الجدول',
     ),
     NavigationDestination(
-      icon: Icon(IconlyLight.profile),
-      selectedIcon: Icon(IconlyBold.profile),
+      icon: Icon(Icons.person_outline_rounded),
+      selectedIcon: Icon(Icons.person_rounded),
       label: 'حسابي',
     ),
   ];
@@ -60,7 +59,7 @@ class _StudentMainLayoutState extends State<StudentMainLayout> {
                 padding: const EdgeInsets.symmetric(vertical: 30),
                 child: CircleAvatar(
                   backgroundColor: Colors.blue.withOpacity(0.1),
-                  child: const Icon(Icons.school, color: Colors.blue),
+                  child: const Icon(Icons.school_rounded, color: Colors.blue),
                 ),
               ),
               destinations: _destinations.map((d) => NavigationRailDestination(

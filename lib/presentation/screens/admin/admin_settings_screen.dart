@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:provider/provider.dart';
 import '../../../core/utils/responsive.dart';
-import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/theme_provider.dart';
 import '../../../core/localization/app_localizations.dart';
-import '../profile/profile_screen.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -138,7 +135,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   Widget _buildPlatformSettings() {
     return _buildCard([
       _buildSwitchItem(
-        IconlyLight.work,
+        Icons.build_outlined,
         "وضع الصيانة",
         "منع دخول الحصص مؤقتاً",
         _maintenanceMode,
@@ -146,7 +143,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       ),
       const Divider(indent: 60),
       _buildSwitchItem(
-        IconlyLight.addUser,
+        Icons.person_add_outlined,
         "تسجيل الطلاب",
         "السماح بإنشاء حسابات جديدة",
         _allowGuestRegistration,
@@ -157,9 +154,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   Widget _buildSystemSettings() {
     return _buildCard([
-      _buildSimpleItem(IconlyLight.infoSquare, "عن المنصة", "v1.5.0 Professional", null),
+      _buildSimpleItem(Icons.info_outline, "عن المنصة", "v1.5.0 Professional", null),
       const Divider(indent: 60),
-      _buildSimpleItem(IconlyLight.dangerCircle, "مسح السجلات", "تنظيف البيانات القديمة", () {}, color: Colors.red),
+      _buildSimpleItem(Icons.delete_outline, "مسح السجلات", "تنظيف البيانات القديمة", () {}, color: Colors.red),
     ]);
   }
 

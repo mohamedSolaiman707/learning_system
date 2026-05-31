@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -85,7 +84,7 @@ class _TeacherResourcesScreenState extends State<TeacherResourcesScreen> {
       appBar: AppBar(
         title: Text("المكتبة: ${widget.subjectName}"),
         actions: [
-          IconButton(onPressed: _uploadResource, icon: const Icon(IconlyLight.upload)),
+          IconButton(onPressed: _uploadResource, icon: const Icon(Icons.upload_file)),
         ],
       ),
       body: _isLoading
@@ -105,7 +104,7 @@ class _TeacherResourcesScreenState extends State<TeacherResourcesScreen> {
                         title: Text(res['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text("${res['file_type']?.toString().toUpperCase()}"),
                         trailing: IconButton(
-                          icon: const Icon(IconlyLight.show, color: Colors.blue),
+                          icon: const Icon(Icons.visibility_outlined, color: Colors.blue),
                           onPressed: () => launchUrl(Uri.parse(res['file_url'])),
                         ),
                       ),
@@ -115,13 +114,13 @@ class _TeacherResourcesScreenState extends State<TeacherResourcesScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _uploadResource,
         label: const Text("رفع ملف جديد"),
-        icon: const Icon(IconlyLight.upload),
+        icon: const Icon(Icons.upload_file),
       ),
     );
   }
 
   Widget _buildFileIcon(String? type) {
-    IconData icon = IconlyBold.document;
+    IconData icon = Icons.description;
     Color color = Colors.blue;
     if (type == 'pdf') { icon = Icons.picture_as_pdf; color = Colors.red; }
     return CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color));
@@ -132,7 +131,7 @@ class _TeacherResourcesScreenState extends State<TeacherResourcesScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(IconlyLight.folder, size: 60, color: Colors.grey.shade300),
+          Icon(Icons.folder_open_outlined, size: 60, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           const Text("لا توجد ملفات في المكتبة حالياً", style: TextStyle(color: Colors.grey)),
         ],

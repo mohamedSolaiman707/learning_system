@@ -41,7 +41,7 @@ class VideoRoomScreen extends StatelessWidget {
       )..init(),
       child: const Scaffold(
         backgroundColor: Colors.black,
-        resizeToAvoidBottomInset: true, // يضمن رفع الواجهة عند ظهور لوحة المفاتيح
+        resizeToAvoidBottomInset: true,
         body: SafeArea(
           child: _VideoRoomContent(),
         ),
@@ -162,50 +162,78 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
     final bool isMobile = size.width < 600;
 
     if (controller.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Colors.blue),
+            SizedBox(height: 20),
+            Text("جاري الاتصال بالقاعة...", style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      );
+    }
+
+    if (controller.errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 60, color: Colors.redAccent),
+              const SizedBox(height: 16),
+              Text(
+                controller.errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => controller.connectToRoom(controller.roomName),
+                icon: const Icon(Icons.refresh),
+                label: const Text("إعادة محاولة الاتصال"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("خروج", style: TextStyle(color: Colors.white70)),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return Stack(
       children: [
-        // 1. شبكة المشاركين
         Positioned.fill(
           child: Padding(
             padding: const EdgeInsets.only(bottom: 80),
             child: const ParticipantGrid(),
           ),
         ),
-
-        // 2. القائمة العلوية الشفافة
         Positioned(
           top: 0, left: 0, right: 0,
           child: _buildHeader(context, controller),
         ),
-
-        // 3. الميزات العائمة (السبورة، التصويت، الاختبار)
         if (controller.isWhiteboardOpen) const WhiteboardPanel(),
-        
         if (controller.isPollsOpen) 
           _buildCenterPanel(const PollPanel(), isMobile, size),
-          
         if (controller.isQuizOpen)
           _buildCenterPanel(const QuizPanel(), isMobile, size),
-
-        // 5. التفاعلات الطائرة
         ..._reactions,
-
-        // 6. شريط التحكم السفلي (يظل في مكانه)
         const Align(
           alignment: Alignment.bottomCenter,
           child: ControlsBar(),
         ),
-
-        // 4. اللوحات الجانبية/السفلية (تظهر فوق شريط التحكم في الهاتف)
         if (controller.isChatOpen)
           _buildFeaturePanel(const ChatPanel(), isMobile, size),
-          
         if (controller.isQAOpen)
           _buildFeaturePanel(const QAPanel(), isMobile, size),
-          
         if (controller.isParticipantsOpen)
           _buildFeaturePanel(const ParticipantsPanel(), isMobile, size),
       ],
@@ -273,7 +301,6 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
       child: Container(
         width: isMobile ? size.width : 360,
         height: isMobile ? size.height * 0.7 : size.height,
-        // تم رفع اللوحة بمسافة 95 لكي تظهر فوق شريط الأزرار تماماً
         margin: isMobile 
             ? const EdgeInsets.only(bottom: 95) 
             : const EdgeInsets.only(right: 16, top: 16, bottom: 100),

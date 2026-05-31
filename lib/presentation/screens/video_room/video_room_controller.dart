@@ -43,6 +43,7 @@ class VideoRoomController extends ChangeNotifier {
   bool _isCamEnabled = false;
   bool _isHandRaised = false;
   bool _isMicLocked = false;
+  bool _isCamLocked = false;
   bool _isRecording = false;
   bool _isScreenSharing = false;
 
@@ -50,6 +51,8 @@ class VideoRoomController extends ChangeNotifier {
   bool _isWhiteboardLocked = false;
   bool _isScreenShareLocked = false; 
   String? _spotlightUserId; 
+  bool _isAllMuted = false;
+  bool _isRoomLocked = false;
 
   bool _isChatOpen = false;
   bool _isWhiteboardOpen = false;
@@ -70,8 +73,9 @@ class VideoRoomController extends ChangeNotifier {
   Timer? _quizTimer;
   bool _quizSubmitted = false;
   List<Map<String, dynamic>> _messages = [];
-  List<Map<String, dynamic>> _questions = [];
+  final List<Map<String, dynamic>> _questions = [];
   final Map<String, bool> _remoteHandStates = {};
+  final List<String> _handRaiseOrder = [];
 
   bool _isConnected = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
@@ -99,11 +103,15 @@ class VideoRoomController extends ChangeNotifier {
   List<Map<String, dynamic>> get messages => _messages;
   List<Map<String, dynamic>> get questions => _questions;
   Map<String, bool> get remoteHandStates => _remoteHandStates;
+  List<String> get handRaiseOrder => _handRaiseOrder;
   
   bool get isChatLocked => _isChatLocked;
   bool get isWhiteboardLocked => _isWhiteboardLocked;
   bool get isScreenShareLocked => _isScreenShareLocked;
   String? get spotlightUserId => _spotlightUserId;
+  bool get isAllMuted => _isAllMuted;
+  bool get isCamLocked => _isCamLocked;
+  bool get isRoomLocked => _isRoomLocked;
 
   Color get selectedColor => _selectedColor;
   bool get isBreakoutActive => _isBreakoutActive;
@@ -137,7 +145,8 @@ class VideoRoomController extends ChangeNotifier {
       } else if (!_isConnected && hasInternet) {
         _isConnected = true;
         onNotification?.call("تم استعادة الاتصال بالإنترنت ✅", Colors.green);
-        if (_room == null || _room!.connectionState == ConnectionState.disconnected) {
+        if (_room == null || 
+            _room!.connectionState == ConnectionState.disconnected) {
           connectToRoom(_currentRoomName ?? roomName);
         }
       }
@@ -181,12 +190,12 @@ class VideoRoomController extends ChangeNotifier {
     try {
       final res = await supabase.from('sessions').select().eq('id', sessionId!).single();
       final DateTime endTime = DateTime.parse(res['end_time']);
-      if (res['status'] == 'ended' || DateTime.now().isAfter(endTime)) {
+      if (res['status'] == 'ended' || res['status'] == 'archived' || DateTime.now().isAfter(endTime)) {
         onSessionEnded?.call("هذه الجلسة انتهت بالفعل.");
         return false;
       }
       _statusSubscription = DatabaseService().watchSessionStatus(sessionId!).listen((data) {
-        if (data.isNotEmpty && data.first['status'] == 'ended') {
+        if (data.isNotEmpty && (data.first['status'] == 'ended' || data.first['status'] == 'archived')) {
           onNotification?.call("🔴 تم إنهاء البث المباشر من قبل المعلم.", Colors.redAccent);
           Future.delayed(const Duration(seconds: 3), () => onSessionEnded?.call("انتهت الحصة الدراسية."));
         }
@@ -206,9 +215,14 @@ class VideoRoomController extends ChangeNotifier {
       return;
     }
 
-    _isLoading = true; notifyListeners();
+    _isLoading = true; 
+    _errorMessage = null;
+    notifyListeners();
+
     try {
-      final effectiveUserId = isTeacher ? "teacher_$userId" : userId;
+      // إضافة وسم زمني للهوية للطالب لمنع تعارض الهوية (Identity Collision) عند إعادة الاتصال السريع
+      final suffix = DateTime.now().millisecondsSinceEpoch.toString().substring(10);
+      final effectiveUserId = isTeacher ? "teacher_$userId" : "${userId}_$suffix";
       
       final token = await LiveKitService().getRoomToken(
         roomName: targetRoomName, 
@@ -216,21 +230,50 @@ class VideoRoomController extends ChangeNotifier {
         userName: userName
       );
       
+      if (token == null) throw Exception("فشل الحصول على رمز الدخول من السيرفر");
+
       if (_room != null) { 
         await _listener?.dispose(); 
         await _room!.disconnect(); 
+        await Future.delayed(const Duration(milliseconds: 800));
       }
-      
-      _room = Room();
+
+      _room = Room(
+        roomOptions: const RoomOptions(
+          adaptiveStream: true,
+          dynacast: true,
+          defaultVideoPublishOptions: VideoPublishOptions(simulcast: true),
+        ),
+      );
+
       _listener = _room!.createListener();
       _setupEventListeners();
-      await _room!.connect('wss://learning-system-07wdu0v6.livekit.cloud', token!);
+
+      int retryCount = 0;
+      bool connected = false;
+      
+      while (retryCount < 3 && !connected) {
+        try {
+          await _room!.connect(
+            'wss://learning-system-07wdu0v6.livekit.cloud', 
+            token,
+            connectOptions: const ConnectOptions(autoSubscribe: true),
+          );
+          connected = true;
+        } catch (e) {
+          retryCount++;
+          if (retryCount >= 3) rethrow;
+          await Future.delayed(Duration(seconds: retryCount * 2));
+        }
+      }
       
       _currentRoomName = targetRoomName;
       _isLoading = false; 
+      _errorMessage = null;
       notifyListeners();
     } catch (e) { 
-      _errorMessage = e.toString(); 
+      debugPrint("Connection Error: $e");
+      _errorMessage = "حدث خطأ أثناء الاتصال بالقاعة. تأكد من جودة الإنترنت لديك."; 
       _isLoading = false; 
       notifyListeners(); 
     }
@@ -246,16 +289,21 @@ class VideoRoomController extends ChangeNotifier {
       })
       ..on<ParticipantConnectedEvent>((event) {
         Future.delayed(const Duration(milliseconds: 1000), () {
-          String name = event.participant.name ?? event.participant.identity;
-          if (name.isEmpty || name.length > 30) name = "مشارك جديد";
+          final String name = event.participant.name ?? event.participant.identity;
           onNotification?.call("👋 انضم $name للبث", Colors.green.shade700);
           notifyListeners();
         });
       })
       ..on<ParticipantDisconnectedEvent>((event) {
-        String name = event.participant.name ?? event.participant.identity ?? "مشارك";
+        final String name = event.participant.name ?? event.participant.identity;
         onNotification?.call("🚪 غادر $name القاعة", Colors.blueGrey.shade700);
+        _handRaiseOrder.remove(event.participant.identity);
         notifyListeners();
+      })
+      ..on<RoomDisconnectedEvent>((event) {
+        if (_isConnected) {
+          onNotification?.call("⚠️ انقطع الاتصال بالقاعة، جاري المحاولة مرة أخرى...", Colors.orange);
+        }
       })
       ..on<ActiveSpeakersChangedEvent>((_) => notifyListeners())
       ..on<TrackSubscribedEvent>((_) => notifyListeners())
@@ -271,6 +319,12 @@ class VideoRoomController extends ChangeNotifier {
   bool _isMe(String? targetId) {
     if (targetId == null) return true;
     final myId = _room?.localParticipant?.identity ?? userId;
+    // التحقيق من الهوية مع تجاهل السابقة (الـ Suffix)
+    if (targetId.contains('_')) {
+        final baseTarget = targetId.split('_').first;
+        final baseMe = myId.split('_').first;
+        return baseTarget.toLowerCase() == baseMe.toLowerCase();
+    }
     return targetId.toLowerCase() == myId.toLowerCase();
   }
 
@@ -284,6 +338,9 @@ class VideoRoomController extends ChangeNotifier {
         break;
       case 'control_mic':
         _handleMicControl(data);
+        break;
+      case 'control_cam':
+        _handleCamControl(data);
         break;
       case 'kick_participant':
         if (_isMe(data['target'])) {
@@ -304,8 +361,14 @@ class VideoRoomController extends ChangeNotifier {
       case 'hand_raise': 
         if (p != null) {
           _remoteHandStates[p.identity] = data['value'];
-          if (isTeacher && data['value'] == true) {
-            onNotification?.call("قام ${p.name ?? 'طالب'} برفع يده ✋", Colors.orange);
+          if (data['value'] == true) {
+            if (!_handRaiseOrder.contains(p.identity)) _handRaiseOrder.add(p.identity);
+            if (isTeacher) {
+              final studentName = p.name ?? p.identity;
+              onNotification?.call("قام $studentName برفع يده ✋", Colors.orange);
+            }
+          } else {
+            _handRaiseOrder.remove(p.identity);
           }
         }
         break;
@@ -314,11 +377,13 @@ class VideoRoomController extends ChangeNotifier {
           _isHandRaised = false;
           onNotification?.call("قام المدرس بإنزال يدك", Colors.blueGrey);
         } else {
-          _remoteHandStates[data['target']] = false;
+          _remoteHandStates[data['target'] ?? ''] = false;
+          _handRaiseOrder.remove(data['target']);
         }
         break;
       case 'lower_all_hands':
         _remoteHandStates.clear();
+        _handRaiseOrder.clear();
         _isHandRaised = false;
         onNotification?.call("تم إنزال أيدي الجميع", Colors.blueGrey);
         break;
@@ -407,16 +472,25 @@ class VideoRoomController extends ChangeNotifier {
       final shouldEnable = data['value'] as bool;
       _isMicEnabled = shouldEnable;
       _isMicLocked = data['lock'] ?? false;
-      
       _room?.localParticipant?.setMicrophoneEnabled(shouldEnable);
-      
-      String msg = "";
-      if (data['target'] != null) {
-        msg = shouldEnable ? "قام المعلم بتفعيل الميكروفون لك" : "قام المعلم بكتم صوتك";
-      } else {
-        msg = _isMicLocked ? "المدرس كتم صوت الجميع" : "المدرس سمح للجميع بالتحدث";
-      }
+      String msg = data['target'] != null 
+          ? (shouldEnable ? "قام المعلم بتفعيل الميكروفون لك" : "قام المعلم بكتم صوتك")
+          : (_isMicLocked ? "المدرس كتم صوت الجميع" : "المدرس سمح للجميع بالتحدث");
       onNotification?.call(msg, _isMicLocked ? Colors.red : Colors.green);
+      notifyListeners();
+    }
+  }
+
+  void _handleCamControl(Map<String, dynamic> data) {
+    if (!isTeacher && _isMe(data['target'])) {
+      final shouldEnable = data['value'] as bool;
+      _isCamEnabled = shouldEnable;
+      _isCamLocked = data['lock'] ?? false;
+      _room?.localParticipant?.setCameraEnabled(shouldEnable);
+      String msg = data['target'] != null 
+          ? (shouldEnable ? "المعلم يطلب منك تفعيل الكاميرا" : "قام المعلم بإغلاق الكاميرا لك")
+          : (_isCamLocked ? "المدرس أغلق كاميرات الجميع" : "المدرس سمح بفتح الكاميرات");
+      onNotification?.call(msg, _isCamLocked ? Colors.red : Colors.green);
       notifyListeners();
     }
   }
@@ -481,21 +555,14 @@ class VideoRoomController extends ChangeNotifier {
       onNotification?.call("الدردشة مقفلة حالياً", Colors.orange);
       return;
     }
-
     final newMessage = {
       'user_name': userName,
       'content': text,
       'created_at': DateTime.now().toIso8601String(),
     };
-
     _messages.insert(0, newMessage);
     notifyListeners();
-
-    sendData({
-      'type': 'chat_message',
-      ...newMessage
-    });
-    
+    sendData({'type': 'chat_message', ...newMessage});
     try {
       await supabase.from('messages').insert({
         'room_name': roomName,
@@ -518,17 +585,26 @@ class VideoRoomController extends ChangeNotifier {
   
   void toggleCam() { 
     if (!_isConnected) { onNotification?.call("تحقق من الإنترنت أولاً", Colors.orange); return; }
-    _isCamEnabled = !_isCamEnabled; _room?.localParticipant?.setCameraEnabled(_isCamEnabled); notifyListeners(); 
+    if (!_isCamLocked) {
+      _isCamEnabled = !_isCamEnabled; 
+      _room?.localParticipant?.setCameraEnabled(_isCamEnabled); 
+      notifyListeners(); 
+    } else {
+      onNotification?.call("المدرس منع استخدام الكاميرا", Colors.red);
+    }
   }
   
   void toggleHand() { 
     if (!_isConnected) { onNotification?.call("تحقق من الإنترنت أولاً", Colors.orange); return; }
-    _isHandRaised = !_isHandRaised; sendData({'type': 'hand_raise', 'value': _isHandRaised}); notifyListeners(); 
+    _isHandRaised = !_isHandRaised; 
+    sendData({'type': 'hand_raise', 'value': _isHandRaised}); 
+    notifyListeners(); 
   }
   
   void lowerParticipantHand(String identity) {
     if (!isTeacher || !_isConnected) return;
     _remoteHandStates[identity] = false;
+    _handRaiseOrder.remove(identity);
     sendData({'type': 'lower_hand', 'target': identity});
     notifyListeners();
   }
@@ -536,6 +612,7 @@ class VideoRoomController extends ChangeNotifier {
   void lowerAllHands() {
     if (!isTeacher || !_isConnected) return;
     _remoteHandStates.clear();
+    _handRaiseOrder.clear();
     _isHandRaised = false;
     sendData({'type': 'lower_all_hands'});
     notifyListeners();
@@ -576,7 +653,6 @@ class VideoRoomController extends ChangeNotifier {
       onNotification?.call("لا يوجد طلاب لتقسيمهم", Colors.red);
       return;
     }
-
     _isBreakoutActive = true;
     for (int i = 0; i < students.length; i++) {
       int groupNum = (i % count) + 1;
@@ -602,30 +678,32 @@ class VideoRoomController extends ChangeNotifier {
 
   void muteParticipant(String targetUserId, bool mute) {
     if (!isTeacher || !_isConnected) return;
-    sendData({
-      'type': 'control_mic',
-      'target': targetUserId,
-      'value': !mute,
-      'lock': mute
-    });
+    sendData({'type': 'control_mic', 'target': targetUserId, 'value': !mute, 'lock': mute});
   }
 
   void muteAllParticipants(bool mute) {
     if (!isTeacher || !_isConnected) return;
-    sendData({
-      'type': 'control_mic',
-      'target': null, 
-      'value': !mute,
-      'lock': mute
-    });
+    _isAllMuted = mute;
+    _isMicLocked = mute;
+    sendData({'type': 'control_mic', 'target': null, 'value': !mute, 'lock': mute});
+    notifyListeners();
+  }
+
+  void disableParticipantCamera(String targetUserId, bool disable) {
+    if (!isTeacher || !_isConnected) return;
+    sendData({'type': 'control_cam', 'target': targetUserId, 'value': !disable, 'lock': disable});
+  }
+
+  void disableAllCameras(bool disable) {
+    if (!isTeacher || !_isConnected) return;
+    _isCamLocked = disable;
+    sendData({'type': 'control_cam', 'target': null, 'value': !disable, 'lock': disable});
+    notifyListeners();
   }
 
   void kickParticipant(String targetUserId) {
     if (!isTeacher || !_isConnected) return;
-    sendData({
-      'type': 'kick_participant',
-      'target': targetUserId
-    });
+    sendData({'type': 'kick_participant', 'target': targetUserId});
   }
 
   Future<void> toggleScreenShare() async {
@@ -653,10 +731,7 @@ class VideoRoomController extends ChangeNotifier {
   void sendData(Map<String, dynamic> d) {
     if (_isConnected && _room != null) {
       final data = utf8.encode(jsonEncode(d));
-      _room!.localParticipant?.publishData(
-        data,
-        reliable: true,
-      );
+      _room!.localParticipant?.publishData(data, reliable: true);
     }
   }
 
@@ -668,15 +743,29 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> endSessionForAll() async {
     if (isTeacher && sessionId != null && _isConnected) {
       try {
+        // 1. إبلاغ الجميع بانتهاء الحصة (للإغلاق التلقائي عند الطلاب)
         sendData({'type': 'session_ended'});
-        onNotification?.call("جاري إنهاء البث وحذف البيانات من المنصة...", Colors.blueAccent);
-        await Future.delayed(const Duration(seconds: 3));
-        await DatabaseService().deleteSession(sessionId!);
+
+        onNotification?.call("جاري حفظ بيانات الحصة وأرشفة السجلات...", Colors.blueAccent);
+
+        // 2. تأخير بسيط لضمان وصول الرسالة للطلاب
+        await Future.delayed(const Duration(seconds: 2));
+
+        // 3. تحديث حالة الجلسة إلى 'archived' بدلاً من الحذف
+        // نقوم بتسجيل وقت النهاية الفعلي أيضاً
+        await DatabaseService().updateSessionStatus(sessionId!, 'archived');
+        await DatabaseService().saveSession({
+          'end_time': DateTime.now().toUtc().toIso8601String(),
+        }, id: sessionId!);
+
+        // 4. إغلاق الغرفة (LiveKit Room)
+        await DatabaseService().toggleRoomStatus(sessionId!, false);
+
         _room?.disconnect();
-        onSessionEnded?.call("تم إنهاء الحصة الدراسية بنجاح وحذف السجل.");
-      } catch (e) { 
-        debugPrint("Error ending session: $e");
-        onNotification?.call("حدث خطأ أثناء إنهاء الجلسة", Colors.red);
+        onSessionEnded?.call("تم إنهاء الحصة بنجاح وحفظ كافة التقارير.");
+      } catch (e) {
+        debugPrint("Error archiving session: $e");
+        onNotification?.call("حدث خطأ أثناء أرشفة الجلسة", Colors.red);
       }
     }
   }

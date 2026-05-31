@@ -45,7 +45,6 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> {
           _buildHeader(controller, allParticipants.length),
           _buildSearchField(),
           
-          // قسم صلاحيات القاعة (للمدرس فقط)
           if (controller.isTeacher) _buildGlobalPermissions(controller),
 
           Expanded(
@@ -156,14 +155,10 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> {
             children: [
               Expanded(
                 child: _DashboardAction(
-                  label: "كتم الجميع",
-                  icon: Icons.mic_off,
-                  color: Colors.red,
-                  onTap: () {
-                    for (var p in room.remoteParticipants.values) {
-                      controller.muteParticipant(p.identity, true);
-                    }
-                  },
+                  label: controller.isAllMuted ? "فتح المايك للكل" : "كتم الجميع",
+                  icon: controller.isAllMuted ? Icons.mic : Icons.mic_off,
+                  color: controller.isAllMuted ? Colors.green : Colors.red,
+                  onTap: () => controller.muteAllParticipants(!controller.isAllMuted),
                 ),
               ),
               const SizedBox(width: 8),
@@ -322,8 +317,14 @@ class _ParticipantTile extends StatelessWidget {
     final bool isSpotlight = controller.spotlightUserId == participant.identity;
     final quality = participant.connectionQuality;
 
-    String displayName = participant.name ?? participant.identity;
-    if (displayName.isEmpty || displayName == "طالب") displayName = participant.identity;
+    // جلب ترتيب رفع اليد
+    final handRaiseIndex = controller.handRaiseOrder.indexOf(participant.identity) + 1;
+
+    String displayName = participant.name ?? "";
+    if (displayName.isEmpty || displayName.length > 30) {
+      displayName = participant.identity.replaceAll("teacher_", "");
+    }
+    if (displayName.isEmpty) displayName = "مشارك";
 
     return ListTile(
       leading: Stack(
@@ -344,7 +345,22 @@ class _ParticipantTile extends StatelessWidget {
             ),
           ),
           if (handRaised)
-            const Positioned(right: -2, bottom: -2, child: Icon(Icons.front_hand, color: Colors.orange, size: 18)),
+            Positioned(
+              right: -4, 
+              bottom: -4, 
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.front_hand, color: Colors.white, size: 12),
+                    if (handRaiseIndex > 0)
+                      Text("$handRaiseIndex", style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ),
           if (isSpotlight)
             const Positioned(left: -2, bottom: -2, child: Icon(Icons.star, color: Colors.purple, size: 18)),
         ],

@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
@@ -119,7 +119,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: selectedTeacherId,
-                decoration: const InputDecoration(labelText: "اختر المدرس", prefixIcon: Icon(IconlyLight.user_1)),
+                decoration:  InputDecoration(labelText: "اختر المدرس", prefixIcon: Icon(IconlyLight.user2)),
                 items: _teachers.map((t) => DropdownMenuItem(value: t['id'].toString(), child: Text(t['full_name']))).toList(),
                 onChanged: (val) => setSheetState(() => selectedTeacherId = val),
               ),
@@ -145,7 +145,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                         if (time != null) setSheetState(() => selectedTime = time);
                       },
                       style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      icon: const Icon(IconlyLight.time_circle),
+                      icon:  Icon(IconlyLight.timeCircle),
                       label: Text(selectedTime.format(context)),
                     ),
                   ),

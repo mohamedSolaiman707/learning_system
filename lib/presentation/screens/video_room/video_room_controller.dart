@@ -77,7 +77,7 @@ class VideoRoomController extends ChangeNotifier {
   List<Map<String, dynamic>> _messages = [];
   final List<Map<String, dynamic>> _questions = [];
   
-  // نظام تتبع رفع اليد المطور (UX: FIFO Queue)
+  // نظام تتبع رفع اليد المطور
   final Map<String, bool> _remoteHandStates = {};
   final List<Map<String, dynamic>> _handRaiseQueue = []; 
 
@@ -288,7 +288,7 @@ class VideoRoomController extends ChangeNotifier {
       notifyListeners();
     } catch (e) { 
       debugPrint("Connection Error: $e");
-      _errorMessage = "حدث خطأ أثناء الاتصال بالقاعة. تأكد من جودة الإنترنت لديك."; 
+      _errorMessage = "فشل الاتصال بالقاعة. تأكد من جودة الإنترنت لديك."; 
       _isLoading = false; 
       notifyListeners(); 
     }
@@ -314,7 +314,6 @@ class VideoRoomController extends ChangeNotifier {
         String name = event.participant.name ?? event.participant.identity;
         onNotification?.call("🚪 غادر $name القاعة", Colors.blueGrey.shade700);
         
-        // إزالة من قائمة انتظار رفع اليد
         _handRaiseQueue.removeWhere((item) => item['identity'] == event.participant.identity);
         
         notifyListeners();
@@ -402,7 +401,6 @@ class VideoRoomController extends ChangeNotifier {
         if (p != null) {
           _remoteHandStates[p.identity] = data['value'];
           if (data['value'] == true) {
-            // إضافة للطابور مع الزمن
             if (!_handRaiseQueue.any((item) => item['identity'] == p.identity)) {
               _handRaiseQueue.add({
                 'identity': p.identity,
@@ -426,7 +424,7 @@ class VideoRoomController extends ChangeNotifier {
         break;
       case 'lower_all_hands':
         _remoteHandStates.clear();
-        _handRaiseQueue.clear();
+        _handRaiseQueue.clear(); 
         _isHandRaised = false;
         onNotification?.call("تم إنزال أيدي الجميع", Colors.blueGrey);
         break;
@@ -658,7 +656,6 @@ class VideoRoomController extends ChangeNotifier {
     _triggerHaptic();
     sendData({'type': 'hand_raise', 'value': _isHandRaised}); 
     
-    // إدارة الطابور محلياً أيضاً للمستخدم الحالي
     if (_isHandRaised) {
       if (!_handRaiseQueue.any((item) => item['identity'] == userId)) {
         _handRaiseQueue.add({
@@ -670,7 +667,6 @@ class VideoRoomController extends ChangeNotifier {
     } else {
       _handRaiseQueue.removeWhere((item) => item['identity'] == userId);
     }
-    
     notifyListeners(); 
   }
   
@@ -685,7 +681,7 @@ class VideoRoomController extends ChangeNotifier {
   void lowerAllHands() {
     if (!isTeacher || !_isConnected) return;
     _remoteHandStates.clear();
-    _handRaiseQueue.clear();
+    _handRaiseQueue.clear(); 
     _isHandRaised = false;
     sendData({'type': 'lower_all_hands'});
     notifyListeners();

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import '../../../core/utils/responsive.dart';
 import 'tabs/student_home_tab.dart';
 import 'tabs/student_schedule_tab.dart';

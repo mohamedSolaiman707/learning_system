@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/services/attendance_pdf_service.dart';
@@ -222,7 +222,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             const Text("حالة الحضور اللحظية", style: TextStyle(color: Colors.white70, fontSize: 14)),
             Text("$present طالب حاضر من أصل $total", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
           ]),
-          const Icon(IconlyBold.user_3, color: Colors.white24, size: 40),
+          const Icon(IconlyBold.user3, color: Colors.white24, size: 40),
         ],
       ),
     );

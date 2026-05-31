@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/models/assignment_model.dart';
 import '../../../../core/services/assignments_service.dart';

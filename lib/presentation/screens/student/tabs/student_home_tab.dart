@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:shimmer/shimmer.dart';
@@ -426,7 +426,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
             const SizedBox(width: 16),
             Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const Spacer(),
-            const Icon(IconlyLight.arrow_left_2, size: 18, color: Colors.grey),
+             Icon(IconlyLight.arrowLeft2, size: 18, color: Colors.grey),
           ],
         ),
       ),

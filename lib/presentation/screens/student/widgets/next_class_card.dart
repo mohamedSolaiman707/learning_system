@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 
 class NextClassCard extends StatefulWidget {
   final String subject;
@@ -91,11 +91,11 @@ class _NextClassCardState extends State<NextClassCard> {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(IconlyLight.user_1, color: Colors.white70, size: 18),
+              const Icon(IconlyLight.user2, color: Colors.white70, size: 18),
               const SizedBox(width: 8),
               Text(widget.teacher, style: const TextStyle(color: Colors.white70, fontSize: 16)),
               const Spacer(),
-              const Icon(IconlyLight.time_circle, color: Colors.white70, size: 18),
+               Icon(IconlyLight.timeCircle, color: Colors.white70, size: 18),
               const SizedBox(width: 8),
               Text(widget.startTime, style: const TextStyle(color: Colors.white70, fontSize: 16)),
             ],

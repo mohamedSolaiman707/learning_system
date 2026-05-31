@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 
 class UpcomingClassItem extends StatelessWidget {
   final String subject;

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:provider/provider.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -213,7 +213,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _buildInfoItem(IconlyLight.lock, "كلمة المرور", "********", () {
              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يمكنك تغيير كلمة المرور من خلال بريدك الإلكتروني")));
           }),
-          _buildInfoItem(IconlyLight.shield_done, "حالة الحساب", "نشط", null),
+          _buildInfoItem(IconlyLight.shieldDone, "حالة الحساب", "نشط", null),
         ]),
       ],
     );

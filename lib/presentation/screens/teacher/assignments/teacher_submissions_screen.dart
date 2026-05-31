@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/models/submission_model.dart'; // استخدام الموديل الجديد
 import '../../../../core/services/assignments_service.dart';
@@ -107,7 +107,7 @@ class _TeacherSubmissionsScreenState extends State<TeacherSubmissionsScreen> {
                       margin: const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       child: ListTile(
-                        leading: const CircleAvatar(child: Icon(IconlyLight.user_1)),
+                        leading: const CircleAvatar(child: Icon(IconlyLight.user2)),
                         title: Text(sub.studentName ?? 'طالب'),
                         subtitle: Text(sub.grade != null ? "الدرجة: ${sub.grade}" : "بانتظار التصحيح"),
                         trailing: Row(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/routes/app_routes.dart';
@@ -198,7 +198,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           CustomTextField(
             controller: _nameController,
             hintText: "الاسم الكامل",
-            prefixIcon: IconlyLight.user,
+            prefixIcon: IconlyLight.user2,
             autofillHints: const [AutofillHints.name],
             validator: (v) => (v == null || v.isEmpty) ? "يرجى إدخال اسمك" : null,
           ),

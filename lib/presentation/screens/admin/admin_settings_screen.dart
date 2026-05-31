@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:provider/provider.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -146,7 +146,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       ),
       const Divider(indent: 60),
       _buildSwitchItem(
-        IconlyLight.add_user,
+        IconlyLight.addUser,
         "تسجيل الطلاب",
         "السماح بإنشاء حسابات جديدة",
         _allowGuestRegistration,
@@ -157,9 +157,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   Widget _buildSystemSettings() {
     return _buildCard([
-      _buildSimpleItem(IconlyLight.info_square, "عن المنصة", "v1.5.0 Professional", null),
+      _buildSimpleItem(IconlyLight.infoSquare, "عن المنصة", "v1.5.0 Professional", null),
       const Divider(indent: 60),
-      _buildSimpleItem(IconlyLight.danger, "مسح السجلات", "تنظيف البيانات القديمة", () {}, color: Colors.red),
+      _buildSimpleItem(IconlyLight.dangerCircle, "مسح السجلات", "تنظيف البيانات القديمة", () {}, color: Colors.red),
     ]);
   }
 

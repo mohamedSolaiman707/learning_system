@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:animations/animations.dart';
+import 'package:flutter_iconly/flutter_iconly.dart'; // التعديل هنا
 
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/routes/app_routes.dart';
@@ -244,7 +244,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(IconlyLight.danger, size: 60, color: Colors.red),
+          const Icon(IconlyLight.dangerCircle, size: 60, color: Colors.red),
           const SizedBox(height: 16),
           Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
           const SizedBox(height: 24),
@@ -275,7 +275,7 @@ class _AdminDashboardState extends State<AdminDashboard>
             AdminStatCard(
               title: "إجمالي الطلاب",
               value: _totalStudents.toString(),
-              icon: IconlyLight.user_1,
+              icon: IconlyLight.user2,
               color: Colors.blue,
             ),
             AdminStatCard(
@@ -287,7 +287,7 @@ class _AdminDashboardState extends State<AdminDashboard>
             AdminStatCard(
               title: "إجمالي المعلمين",
               value: _totalTeachers.toString(),
-              icon: IconlyLight.user_1,
+              icon: IconlyLight.user2,
               color: Colors.orange,
             ),
             AdminStatCard(
@@ -410,7 +410,6 @@ class _AdminDashboardState extends State<AdminDashboard>
   }
 
   Widget _buildSidebar(BuildContext context, {bool isDrawer = true}) {
-    final authProvider = Provider.of<AuthProvider>(context);
     return Column(
       children: [
         const SizedBox(height: 60),
@@ -423,7 +422,7 @@ class _AdminDashboardState extends State<AdminDashboard>
         const SizedBox(height: 40),
         _buildSidebarItem(IconlyBold.chart, "لوحة التحكم", true, () {}),
         _buildSidebarItem(
-          IconlyLight.user_1,
+          IconlyLight.user2,
           "المستخدمين",
           false,
           () => Navigator.push(
@@ -461,7 +460,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           "خروج",
           false,
           (){
-            AuthProvider().logout();
+            Provider.of<AuthProvider>(context, listen: false).logout();
             Navigator.pushReplacementNamed(context, AppRoutes.login);
           },
           isDestructive: true,

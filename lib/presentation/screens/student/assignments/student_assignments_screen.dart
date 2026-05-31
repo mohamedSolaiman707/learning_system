@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/providers/auth_provider.dart';
@@ -132,7 +132,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
                 color: (isSubmitted ? Colors.green : Colors.orange).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(isSubmitted ? IconlyBold.tick_square : IconlyBold.document, 
+              child: Icon(isSubmitted ? IconlyBold.tickSquare : IconlyBold.document,
                 color: isSubmitted ? Colors.green : Colors.orange, size: 24),
             ),
             title: Text(assignment.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -184,7 +184,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
               decoration: BoxDecoration(color: Colors.amber.withOpacity(0.05), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20))),
               child: Row(
                 children: [
-                  const Icon(IconlyLight.info_square, color: Colors.amber, size: 16),
+                   Icon(IconlyLight.infoSquare, color: Colors.amber, size: 16),
                   const SizedBox(width: 8),
                   Expanded(child: Text("ملاحظة المدرس: ${submission.feedback}", style: const TextStyle(fontSize: 12, color: Colors.black87))),
                 ],

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import '../../../core/utils/responsive.dart';
 
 class VideoCallScreen extends StatefulWidget {
@@ -77,7 +77,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             ],
           ),
           const Spacer(),
-          const Icon(IconlyLight.user_1, color: Colors.white70, size: 20),
+          const Icon(IconlyLight.user2, color: Colors.white70, size: 20),
           const SizedBox(width: 5),
           const Text("12 مشارك", style: TextStyle(color: Colors.white70, fontSize: 12)),
           const SizedBox(width: 15),

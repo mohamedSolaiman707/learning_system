@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:iconly/iconly.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 

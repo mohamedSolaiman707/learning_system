@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart'; // التحديث هنا
 import 'package:provider/provider.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/utils/responsive.dart';
@@ -25,7 +25,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   bool _obscureText = true;
   bool _rememberMe = true;
   
-  // حالات التحقق اللحظي
   bool _isEmailValidFormat = false;
   bool _isCheckingEmail = false;
   bool? _isEmailAvailable;
@@ -50,7 +49,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     _passwordController.addListener(_checkPasswordStrength);
   }
 
-  // منطق التحقق اللحظي من الإيميل
   void _onEmailChanged() async {
     final email = _emailController.text.trim();
     final isValidFormat = RegExp(r'\S+@\S+\.\S+').hasMatch(email);
@@ -63,10 +61,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       }
     });
 
-    // إذا كانت الصيغة صحيحة ونحن في وضع "إنشاء حساب"، نفحص التوفر
     if (isValidFormat && !_isLogin && _isEmailAvailable == null && !_isCheckingEmail) {
       setState(() => _isCheckingEmail = true);
-      
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final available = await authProvider.isEmailAvailable(email);
       
@@ -75,9 +71,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           _isEmailAvailable = available;
           _isCheckingEmail = false;
         });
-        if (!available) {
-           _triggerHaptic();
-        }
       }
     }
   }
@@ -230,12 +223,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             _buildDivider(),
             const SizedBox(height: 24),
             if (!_isLogin) ...[
-              CustomTextField(controller: _nameController, hintText: "الاسم الكامل", prefixIcon: IconlyLight.user,
+              CustomTextField(controller: _nameController, hintText: "الاسم الكامل", prefixIcon: IconlyLight.user2,
                 validator: (v) => (v == null || v.isEmpty) ? "يرجى كتابة اسمك" : null),
               const SizedBox(height: 16),
             ],
             
-            // حقل الإيميل مع التحقق الذكي
             _buildEmailField(),
             
             const SizedBox(height: 16),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:iconly/iconly.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:provider/provider.dart';
 import '../../../../core/models/session_model.dart';
@@ -51,7 +51,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
-      
+
       if (auth.user != null) {
         final results = await Future.wait([
           db.getTeacherSessions(auth.user!.id),
@@ -64,16 +64,16 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             _totalStudents = (results[1] as Map<String, dynamic>)['totalStudents'] ?? 0;
 
             final now = DateTime.now();
-            
+
             // تحديد الحصة الحالية النشطة
             _activeSession = _sessions.cast<SessionModel?>().firstWhere(
-              (s) => s!.status == 'active' || (s.startTime.isBefore(now) && s.endTime.isAfter(now)),
+                  (s) => s!.status == 'active' || (s.startTime.isBefore(now) && s.endTime.isAfter(now)),
               orElse: () => null,
             );
 
             // تحديد الحصة القادمة
             _nextSession = _sessions.cast<SessionModel?>().firstWhere(
-              (s) => s!.startTime.isAfter(now) && s.id != _activeSession?.id,
+                  (s) => s!.startTime.isAfter(now) && s.id != _activeSession?.id,
               orElse: () => null,
             );
 
@@ -93,44 +93,44 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      body: _isLoading 
+      body: _isLoading
           ? _buildSkeletonLoading()
           : RefreshIndicator(
-              onRefresh: _loadData,
-              child: CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  _buildHeader(name),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(Responsive.isMobile(context) ? 20 : 30),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildStatsOverview(),
-                          const SizedBox(height: 32),
-                          if (_activeSession != null) ...[
-                             _buildSectionTitle("البث المباشر الآن", isLive: true),
-                             const SizedBox(height: 16),
-                             _buildActiveSessionCard(name),
-                             const SizedBox(height: 32),
-                          ],
-                          _buildSectionTitle("الإجراءات السريعة"),
-                          const SizedBox(height: 16),
-                          _buildSmartQuickActions(),
-                          const SizedBox(height: 32),
-                          if (_nextSession != null) ...[
-                            _buildSectionTitle("الحصة القادمة"),
-                            const SizedBox(height: 16),
-                            _buildNextSessionCard(),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+        onRefresh: _loadData,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            _buildHeader(name),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(Responsive.isMobile(context) ? 20 : 30),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildStatsOverview(),
+                    const SizedBox(height: 32),
+                    if (_activeSession != null) ...[
+                      _buildSectionTitle("البث المباشر الآن", isLive: true),
+                      const SizedBox(height: 16),
+                      _buildActiveSessionCard(name),
+                      const SizedBox(height: 32),
+                    ],
+                    _buildSectionTitle("الإجراءات السريعة"),
+                    const SizedBox(height: 16),
+                    _buildSmartQuickActions(),
+                    const SizedBox(height: 32),
+                    if (_nextSession != null) ...[
+                      _buildSectionTitle("الحصة القادمة"),
+                      const SizedBox(height: 16),
+                      _buildNextSessionCard(),
+                    ],
+                  ],
+                ),
               ),
             ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -172,7 +172,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   Widget _buildSectionTitle(String title, {bool isLive = false}) {
     return Row(
       children: [
-        if (isLive) 
+        if (isLive)
           FadeTransition(
             opacity: _pulseController,
             child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
@@ -186,7 +186,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   Widget _buildStatsOverview() {
     return Row(
       children: [
-        Expanded(child: TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: IconlyLight.user_1, color: Colors.blue)),
+        Expanded(child: TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: IconlyLight.user2, color: Colors.blue)),
         const SizedBox(width: 16),
         Expanded(child: TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: IconlyLight.video, color: Colors.orange)),
       ],
@@ -242,7 +242,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildActionButton("التحضير", IconlyLight.user, Colors.blue, 'attendance'),
+          _buildActionButton("التحضير", IconlyLight.user2, Colors.blue, 'attendance'),
           _buildActionButton("الواجبات", IconlyLight.document, Colors.orange, 'assignment'),
           _buildActionButton("المكتبة", IconlyLight.folder, Colors.purple, 'resources'),
           _buildActionButton("التقارير", IconlyLight.chart, Colors.green, 'reports'),
@@ -293,7 +293,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
               ],
             ),
           ),
-          const Icon(IconlyLight.arrow_left_2, size: 18, color: Colors.grey),
+          const Icon(IconlyLight.arrowLeft2, size: 18, color: Colors.grey),
         ],
       ),
     );
@@ -315,11 +315,11 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
 
   void _showNoSessionAlert() {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text("لا توجد حصص مسجلة لديك حالياً"),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      )
+        SnackBar(
+          content: const Text("لا توجد حصص مسجلة لديك حالياً"),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        )
     );
   }
 
@@ -376,16 +376,16 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       final db = Provider.of<DatabaseService>(context, listen: false);
       await db.toggleRoomStatus(session.id, true);
       if (!mounted) return;
-      
+
       Navigator.push(context, MaterialPageRoute(
-        builder: (context) => VideoRoomScreen(
-          title: session.subjectName, 
-          roomName: "room_${session.id}", 
-          userName: "أ. $teacherName",
-          userId: auth.user!.id, 
-          isTeacher: true,
-          sessionId: session.id,
-        )
+          builder: (context) => VideoRoomScreen(
+            title: session.subjectName,
+            roomName: "room_${session.id}",
+            userName: "أ. $teacherName",
+            userId: auth.user!.id,
+            isTeacher: true,
+            sessionId: session.id,
+          )
       ));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل بدء البث")));
@@ -413,11 +413,11 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                 TextField(controller: nameController, decoration: InputDecoration(labelText: "اسم الحصة", prefixIcon: const Icon(IconlyLight.edit), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)))),
                 const SizedBox(height: 20),
                 _buildDateTimePicker(label: "موقت البدء", date: startDate, time: startTime, onTap: () async {
-                   final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 90)));
-                   if (d != null) {
-                     final t = await showTimePicker(context: context, initialTime: startTime);
-                     if (t != null) setDS(() { startDate = d; startTime = t; });
-                   }
+                  final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 90)));
+                  if (d != null) {
+                    final t = await showTimePicker(context: context, initialTime: startTime);
+                    if (t != null) setDS(() { startDate = d; startTime = t; });
+                  }
                 }),
                 const SizedBox(height: 20),
                 DropdownButtonFormField<int>(
@@ -460,6 +460,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
 
   Widget _buildDateTimePicker({required String label, required DateTime date, required TimeOfDay time, required VoidCallback onTap}) {
     return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade300)),
-      child: Row(children: [const Icon(IconlyLight.calendar, color: Colors.blue), const SizedBox(width: 12), Text("${intl.DateFormat('yyyy-MM-dd').format(date)} ${time.format(context)}", style: const TextStyle(fontWeight: FontWeight.bold))])));
+        child: Row(children: [const Icon(IconlyLight.calendar, color: Colors.blue), const SizedBox(width: 12), Text("${intl.DateFormat('yyyy-MM-dd').format(date)} ${time.format(context)}", style: const TextStyle(fontWeight: FontWeight.bold))])));
   }
 }

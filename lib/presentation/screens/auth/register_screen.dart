@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/custom_text_field.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -13,6 +14,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -23,69 +25,86 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final supabase = Supabase.instance.client;
 
   Future<void> _handleRegister() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-    final phone = _phoneController.text.trim();
-    final name = _nameController.text.trim();
-
-    if (email.isEmpty || password.isEmpty || name.isEmpty) {
-      _showErrorSnackBar('يرجى ملء جميع الحقول الأساسية');
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
       final response = await supabase.auth.signUp(
-        email: email,
-        password: password,
-        data: {'full_name': name, 'role': 'student'},
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+        data: {
+          'full_name': _nameController.text.trim(),
+          'role': 'student',
+        },
       );
 
       if (response.user != null) {
         await supabase.from('profiles').upsert({
           'id': response.user!.id,
-          'full_name': name,
-          'phone_number': phone,
+          'full_name': _nameController.text.trim(),
+          'phone_number': _phoneController.text.trim(),
           'role': 'student',
         });
 
         if (!mounted) return;
 
         if (response.session != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تم إنشاء الحساب والدخول بنجاح!')),
-          );
           Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
         } else {
-          _showInfoDialog("تم إنشاء الحساب! يرجى تفعيل حسابك إذا كان نظام التأكيد مفعلاً.");
+          _showSuccessDialog("تم إنشاء الحساب بنجاح! يرجى مراجعة بريدك الإلكتروني لتفعيل الحساب.");
         }
       }
     } on AuthApiException catch (e) {
-      if (!mounted) return;
-      _showErrorSnackBar(e.message);
+      _handleAuthError(e);
     } catch (e) {
-      if (!mounted) return;
-      _showErrorSnackBar("حدث خطأ غير متوقع: $e");
+      _showErrorSnackBar("حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  void _handleAuthError(AuthApiException e) {
+    String message = "فشل إنشاء الحساب";
+    if (e.message.contains("already registered")) {
+      message = "هذا البريد الإلكتروني مسجل بالفعل";
+    } else if (e.message.contains("Password should be")) {
+      message = "كلمة المرور ضعيفة جداً";
+    }
+    _showErrorSnackBar(message);
+  }
+
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
   }
 
-  void _showInfoDialog(String message) {
+  void _showSuccessDialog(String message) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("تنبيه"),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 10),
+            Text("نجاح"),
+          ],
+        ),
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("حسناً")),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            child: const Text("فهمت"),
+          ),
         ],
       ),
     );
@@ -126,18 +145,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const Icon(Icons.person_add_rounded, size: 120, color: Colors.blue),
                 const SizedBox(height: 40),
                 const Text(
-                  "انضم إلى مجتمعنا التعليمي",
+                  "ابدأ رحلتك التعليمية",
                   style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E)),
-                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 50),
-                  child: Text(
-                    "ابدأ رحلتك التعليمية اليوم مع أفضل الأدوات والتقنيات للتواصل والتعلم عن بعد.",
-                    style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
-                    textAlign: TextAlign.center,
-                  ),
+                Text(
+                  "انضم لآلاف الطلاب والمعلمين في بيئة تفاعلية",
+                  style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
                 ),
               ],
             ),
@@ -145,12 +159,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         Expanded(
           flex: 2,
-          child: Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 60),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(32),
                 child: _buildRegisterForm(),
               ),
             ),
@@ -161,98 +174,112 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildRegisterForm() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Center(
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: SvgPicture.asset(
-              'assets/icons/logo.svg',
-              width: 50,
-              height: 50,
-              placeholderBuilder: (context) => const Icon(Icons.school, size: 50, color: Colors.blue),
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: SvgPicture.asset('assets/icons/logo.svg', width: 40, height: 40, 
+                  placeholderBuilder: (_) => const Icon(Icons.school, color: Colors.blue)),
             ),
           ),
-        ),
-        const SizedBox(height: 40),
-        const Text(
-          "إنشاء حساب جديد",
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E)),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          "املأ البيانات التالية للبدء في المنصة",
-          style: TextStyle(color: Colors.grey),
-        ),
-        const SizedBox(height: 32),
-        TextField(
-          controller: _nameController,
-          decoration: const InputDecoration(
+          const SizedBox(height: 32),
+          const Text("إنشاء حساب جديد", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          const Text("سجل بياناتك للوصول إلى كافة الدروس والمصادر", style: TextStyle(color: Colors.grey)),
+          const SizedBox(height: 32),
+          
+          CustomTextField(
+            controller: _nameController,
             hintText: "الاسم الكامل",
-            prefixIcon: Icon(IconlyLight.user),
+            prefixIcon: IconlyLight.user,
+            autofillHints: const [AutofillHints.name],
+            validator: (v) => (v == null || v.isEmpty) ? "يرجى إدخال اسمك" : null,
           ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _emailController,
-          decoration: const InputDecoration(
+          const SizedBox(height: 16),
+          
+          CustomTextField(
+            controller: _emailController,
             hintText: "البريد الإلكتروني",
-            prefixIcon: Icon(IconlyLight.message),
+            prefixIcon: IconlyLight.message,
+            keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
+            validator: (v) => (v == null || !v.contains('@')) ? "بريد إلكتروني غير صالح" : null,
           ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _phoneController,
-          decoration: const InputDecoration(
+          const SizedBox(height: 16),
+
+          CustomTextField(
+            controller: _phoneController,
             hintText: "رقم الهاتف",
-            prefixIcon: Icon(IconlyLight.call),
+            prefixIcon: IconlyLight.call,
+            keyboardType: TextInputType.phone,
+            autofillHints: const [AutofillHints.telephoneNumber],
+            validator: (v) => (v == null || v.length < 8) ? "رقم هاتف غير صحيح" : null,
           ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _passwordController,
-          obscureText: _obscureText,
-          decoration: InputDecoration(
+          const SizedBox(height: 16),
+
+          CustomTextField(
+            controller: _passwordController,
             hintText: "كلمة المرور",
-            prefixIcon: const Icon(IconlyLight.lock),
+            prefixIcon: IconlyLight.lock,
+            isPassword: _obscureText,
+            autofillHints: const [AutofillHints.newPassword],
             suffixIcon: IconButton(
               icon: Icon(_obscureText ? IconlyLight.hide : IconlyLight.show),
               onPressed: () => setState(() => _obscureText = !_obscureText),
             ),
+            validator: (v) => (v == null || v.length < 6) ? "يجب أن تكون 6 أحرف على الأقل" : null,
           ),
-        ),
-        const SizedBox(height: 32),
-        SizedBox(
-          width: double.infinity,
-          height: 55,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _handleRegister,
-            style: ElevatedButton.styleFrom(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: _isLoading 
+          
+          const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            height: 55,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _handleRegister,
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+              child: _isLoading 
                 ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text("إنشاء الحساب", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text("لديك حساب بالفعل؟"),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("سجل دخولك الآن"),
+                : const Text("إنشاء حساب", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
-          ],
-        ),
-      ],
+          ),
+          
+          const SizedBox(height: 24),
+          // زر التكامل المستقبلي مع Blackboard
+          OutlinedButton.icon(
+            onPressed: () {
+               _showErrorSnackBar("سيتم تفعيل الدخول الموحد عبر Blackboard قريباً");
+            },
+            icon: const Icon(Icons.account_balance_rounded, size: 20),
+            label: const Text("الدخول عبر حساب الجامعة"),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 55),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+
+          const SizedBox(height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text("لديك حساب بالفعل؟"),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("سجل دخولك"),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -285,6 +285,12 @@ class VideoRoomController extends ChangeNotifier {
       _currentRoomName = targetRoomName;
       _isLoading = false; 
       _errorMessage = null;
+
+      // تسجيل دخول الطالب في نظام الحضور
+      if (!isTeacher && sessionId != null) {
+        DatabaseService().logStudentEntry(sessionId!, userId);
+      }
+
       notifyListeners();
     } catch (e) { 
       debugPrint("Connection Error: $e");
@@ -303,11 +309,12 @@ class VideoRoomController extends ChangeNotifier {
         _handleIncomingData(data, event.participant);
       })
       ..on<ParticipantConnectedEvent>((event) {
-        Future.delayed(const Duration(milliseconds: 1000), () {
+        // تحديث الواجهة فوراً لزيادة العداد
+        notifyListeners();
+        Future.delayed(const Duration(milliseconds: 500), () {
           String name = event.participant.name ?? event.participant.identity;
           if (name.length > 30) name = "مشارك جديد";
           onNotification?.call("👋 انضم $name للبث", Colors.green.shade700);
-          notifyListeners();
         });
       })
       ..on<ParticipantDisconnectedEvent>((event) {

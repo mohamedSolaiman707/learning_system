@@ -22,10 +22,12 @@ class AuthProvider extends ChangeNotifier {
     }
     
     _supabase.auth.onAuthStateChange.listen((data) {
-      _user = data.session?.user;
-      if (_user != null) {
+      final newUser = data.session?.user;
+      if (newUser != null && newUser.id != _user?.id) {
+        _user = newUser;
         _loadProfile();
-      } else {
+      } else if (newUser == null) {
+        _user = null;
         _profile = null;
         notifyListeners();
       }
@@ -33,15 +35,21 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _loadProfile() async {
+    if (_user == null) return;
     try {
       final data = await _supabase
           .from('profiles')
           .select()
           .eq('id', _user!.id)
-          .single();
-      _profile = data;
-      _profile?['email'] = _user?.email;
-      notifyListeners();
+          .maybeSingle();
+
+      if (data != null) {
+        _profile = data;
+        _profile?['email'] = _user?.email;
+        notifyListeners();
+      } else {
+        debugPrint("Profile not found for user: ${_user!.id}");
+      }
     } catch (e) {
       debugPrint("Error loading profile: $e");
     }
@@ -57,7 +65,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // ميزة استعادة كلمة المرور لتحسين الـ UX
   Future<void> resetPassword(String email) async {
     try {
       await _supabase.auth.resetPasswordForEmail(email);
@@ -66,7 +73,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // ميزة UX: التحقق من توفر البريد الإلكتروني قبل التسجيل
   Future<bool> isEmailAvailable(String email) async {
     try {
       final res = await _supabase
@@ -74,14 +80,13 @@ class AuthProvider extends ChangeNotifier {
           .select('id')
           .eq('email', email)
           .maybeSingle();
-      return res == null; // إذا كان null يعني البريد متاح
+      return res == null;
     } catch (e) {
       debugPrint("Check email availability error: $e");
       return true;
     }
   }
 
-  // التكامل مع الأنظمة الخارجية (Blackboard)
   Future<bool> handleExternalAuth(String externalId, String email, String fullName, String role) async {
     _isLoading = true;
     notifyListeners();
@@ -93,7 +98,9 @@ class AuthProvider extends ChangeNotifier {
           .maybeSingle();
 
       if (existingProfile != null) {
-        await _loadProfile();
+        _profile = existingProfile;
+        _user = _supabase.auth.currentUser;
+        notifyListeners();
         return true;
       }
       return false;
@@ -122,18 +129,22 @@ class AuthProvider extends ChangeNotifier {
       );
 
       if (response.user != null) {
-        await _supabase.from('profiles').upsert({
+        final profileData = {
           'id': response.user!.id,
           'full_name': fullName,
           'email': email,
           'phone_number': phoneNumber,
           'role': 'student',
-        });
+        };
+
+        // إنشاء الملف الشخصي في قاعدة البيانات
+        await _supabase.from('profiles').upsert(profileData);
         
-        if (response.session != null) {
-          _user = response.user;
-          await _loadProfile();
-        }
+        _user = response.user;
+        // تحديث محلي فوري لضمان ظهور الاسم في الصفحة الرئيسية فوراً
+        _profile = profileData;
+        notifyListeners();
+        
         return true;
       }
       return false;
@@ -153,11 +164,13 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         password: password,
       );
-      _user = response.user;
-      if (_user != null) {
+      
+      if (response.user != null) {
+        _user = response.user;
         await _loadProfile();
+        return true;
       }
-      return true;
+      return false;
     } catch (e) {
       rethrow;
     } finally {

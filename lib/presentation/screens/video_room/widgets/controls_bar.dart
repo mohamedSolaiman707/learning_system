@@ -9,6 +9,10 @@ class ControlsBar extends StatelessWidget {
   final GlobalKey? camKey;
   final GlobalKey? chatKey;
   final GlobalKey? handKey;
+  final GlobalKey? emojiKey;
+  final GlobalKey? screenShareKey;
+  final GlobalKey? qaKey;
+  final GlobalKey? whiteboardKey;
 
   const ControlsBar({
     super.key,
@@ -16,6 +20,10 @@ class ControlsBar extends StatelessWidget {
     this.camKey,
     this.chatKey,
     this.handKey,
+    this.emojiKey,
+    this.screenShareKey,
+    this.qaKey,
+    this.whiteboardKey,
   });
 
   @override
@@ -72,16 +80,26 @@ class ControlsBar extends StatelessWidget {
                     ),
                     
                     const SizedBox(width: 8),
-                    _ReactionButton(controller: controller),
+                    _buildShowcase(
+                      key: emojiKey,
+                      title: 'التفاعلات',
+                      description: 'عبر عن مشاعرك باستخدام الإيموجي أثناء الشرح.',
+                      child: _ReactionButton(controller: controller),
+                    ),
                     const SizedBox(width: 8),
 
                     if (controller.isTeacher || !controller.isScreenShareLocked)
-                      _AnimatedControlButton(
-                        icon: controller.isScreenSharing ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
-                        isActive: controller.isScreenSharing,
-                        activeColor: Colors.green,
-                        onPressed: controller.toggleScreenShare,
-                        tooltip: "مشاركة الشاشة",
+                      _buildShowcase(
+                        key: screenShareKey,
+                        title: 'مشاركة الشاشة',
+                        description: 'يمكنك عرض شاشة جهازك للمشاركين في القاعة.',
+                        child: _AnimatedControlButton(
+                          icon: controller.isScreenSharing ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
+                          isActive: controller.isScreenSharing,
+                          activeColor: Colors.green,
+                          onPressed: controller.toggleScreenShare,
+                          tooltip: "مشاركة الشاشة",
+                        ),
                       ),
 
                     _buildShowcase(
@@ -111,19 +129,29 @@ class ControlsBar extends StatelessWidget {
                         tooltip: "الدردشة",
                       ),
                     ),
-                    _AnimatedControlButton(
-                      icon: Icons.help_outline_rounded,
-                      isActive: controller.isQAOpen,
-                      activeColor: Colors.orange,
-                      onPressed: controller.toggleQA,
-                      tooltip: "الأسئلة",
+                    _buildShowcase(
+                      key: qaKey,
+                      title: 'الأسئلة والأجوبة',
+                      description: 'اطرح أسئلتك التعليمية ليجيب عليها المعلم.',
+                      child: _AnimatedControlButton(
+                        icon: Icons.help_outline_rounded,
+                        isActive: controller.isQAOpen,
+                        activeColor: Colors.orange,
+                        onPressed: controller.toggleQA,
+                        tooltip: "الأسئلة",
+                      ),
                     ),
-                    _AnimatedControlButton(
-                      icon: Icons.edit_note_rounded,
-                      isActive: controller.isWhiteboardOpen,
-                      activeColor: Colors.green,
-                      onPressed: controller.toggleWhiteboard,
-                      tooltip: "السبورة",
+                    _buildShowcase(
+                      key: whiteboardKey,
+                      title: 'السبورة التفاعلية',
+                      description: 'افتح السبورة لمتابعة الشروحات التوضيحية.',
+                      child: _AnimatedControlButton(
+                        icon: Icons.edit_note_rounded,
+                        isActive: controller.isWhiteboardOpen,
+                        activeColor: Colors.green,
+                        onPressed: controller.toggleWhiteboard,
+                        tooltip: "السبورة",
+                      ),
                     ),
 
                     if (controller.isTeacher) ...[
@@ -153,8 +181,9 @@ class ControlsBar extends StatelessWidget {
       title: title,
       description: description,
       titleTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF102A43), fontFamily: 'Cairo'),
-      descTextStyle: const TextStyle(fontFamily: 'Cairo'),
+      descTextStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
       tooltipBackgroundColor: Colors.white,
+      targetShapeBorder: const CircleBorder(), // لأن الأزرار دائرية
       child: child,
     );
   }
@@ -221,7 +250,7 @@ class _ReactionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      offset: const Offset(0, -70), // تقليل الإزاحة لتناسب العرض الأفقي
+      offset: const Offset(0, -70),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
       color: Colors.black.withOpacity(0.9),
       padding: EdgeInsets.zero,
@@ -232,14 +261,14 @@ class _ReactionButton extends StatelessWidget {
       ),
       itemBuilder: (context) => [
         PopupMenuItem<String>(
-          enabled: false, // لتعطيل تأثير التحديد الافتراضي (Hover) على السطر بالكامل
+          enabled: false,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: ['👏', '👍', '❤️', '😂', '🎉'].map((emoji) {
               return InkWell(
                 onTap: () {
                   controller.sendReaction(emoji);
-                  Navigator.pop(context); // إغلاق القائمة بعد اختيار الإيموجي
+                  Navigator.pop(context);
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

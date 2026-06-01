@@ -65,12 +65,17 @@ class _VideoRoomContent extends StatefulWidget {
 
 class _VideoRoomContentState extends State<_VideoRoomContent> {
   final List<Widget> _reactions = [];
+  bool _tourStarted = false;
   
-  // مفاتيح الجولة داخل اللايف
+  // مفاتيح الجولة الكاملة داخل اللايف
   final GlobalKey _micKey = GlobalKey();
   final GlobalKey _camKey = GlobalKey();
-  final GlobalKey _chatKey = GlobalKey();
+  final GlobalKey _emojiKey = GlobalKey();
+  final GlobalKey _screenShareKey = GlobalKey();
   final GlobalKey _handKey = GlobalKey();
+  final GlobalKey _chatKey = GlobalKey();
+  final GlobalKey _qaKey = GlobalKey();
+  final GlobalKey _whiteboardKey = GlobalKey();
   final GlobalKey _exitKey = GlobalKey();
 
   @override
@@ -78,18 +83,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = context.read<VideoRoomController>();
-      final auth = context.read<AuthProvider>();
-
-      // تشغيل الجولة إذا كان طالباً ولم يشاهدها من قبل
-      if (!auth.isTeacher && !auth.hasSeenVideoTour) {
-        ShowCaseWidget.of(context).startShowCase([
-          _micKey,
-          _camKey,
-          _handKey,
-          _chatKey,
-          _exitKey,
-        ]);
-      }
+      controller.addListener(_checkAndStartTour);
       
       controller.onSessionEnded = (msg) {
         showDialog(
@@ -97,12 +91,12 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
           barrierDismissible: false,
           builder: (context) => AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            title: const Text("تنبيه"),
-            content: Text(msg),
+            title: const Text("تنبيه", style: TextStyle(fontFamily: 'Cairo')),
+            content: Text(msg, style: const TextStyle(fontFamily: 'Cairo')),
             actions: [
               ElevatedButton(
                 onPressed: () { Navigator.pop(context); Navigator.pop(context); },
-                child: const Text("حسناً"),
+                child: const Text("حسناً", style: TextStyle(fontFamily: 'Cairo')),
               ),
             ],
           ),
@@ -112,7 +106,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
       controller.onNotification = (title, color) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            content: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
             backgroundColor: color,
             behavior: SnackBarBehavior.floating,
             margin: const EdgeInsets.fromLTRB(20, 0, 20, 100),
@@ -127,16 +121,16 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
           barrierDismissible: false,
           builder: (context) => AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text("دعوة لمجموعة عمل"),
-            content: Text("دعاك المدرس للانضمام إلى: $name\nمدة النقاش: $duration دقيقة"),
+            title: const Text("دعوة لمجموعة عمل", style: TextStyle(fontFamily: 'Cairo')),
+            content: Text("دعاك المدرس للانضمام إلى: $name\nمدة النقاش: $duration دقيقة", style: const TextStyle(fontFamily: 'Cairo')),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text("تجاهل")),
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text("تجاهل", style: TextStyle(fontFamily: 'Cairo'))),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
                   context.read<VideoRoomController>().connectToRoom(room);
                 },
-                child: const Text("انضمام الآن"),
+                child: const Text("انضمام الآن", style: TextStyle(fontFamily: 'Cairo')),
               ),
             ],
           ),
@@ -159,6 +153,27 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
     });
   }
 
+  void _checkAndStartTour() {
+    if (!mounted) return;
+    final controller = context.read<VideoRoomController>();
+    final auth = context.read<AuthProvider>();
+
+    if (!controller.isLoading && !auth.isTeacher && !auth.hasSeenVideoTour && !_tourStarted) {
+      _tourStarted = true;
+      ShowCaseWidget.of(context).startShowCase([
+        _micKey,
+        _camKey,
+        _emojiKey,
+        _screenShareKey,
+        _handKey,
+        _chatKey,
+        _qaKey,
+        _whiteboardKey,
+        _exitKey,
+      ]);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<VideoRoomController>();
@@ -172,7 +187,10 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
           children: [
             const CircularProgressIndicator(color: Colors.blue, strokeWidth: 3),
             const SizedBox(height: 24),
-            const Text("جاري الاتصال بالقاعة التعليمية...", style: TextStyle(color: Colors.white, fontSize: 16)),
+            const Text("جاري الاتصال بالقاعة التعليمية...", 
+                style: TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
+            const SizedBox(height: 8),
+            Text(controller.roomName, style: const TextStyle(color: Colors.white38, fontSize: 12, fontFamily: 'Cairo')),
           ],
         ),
       );
@@ -187,13 +205,15 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
             children: [
               const Icon(Icons.wifi_off_rounded, size: 80, color: Colors.redAccent),
               const SizedBox(height: 24),
-              Text(controller.errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16)),
+              Text(controller.errorMessage!, textAlign: TextAlign.center, 
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: () => controller.connectToRoom(controller.roomName),
                 icon: const Icon(Icons.refresh_rounded),
-                label: const Text("إعادة محاولة الاتصال"),
+                label: const Text("إعادة محاولة الاتصال", style: TextStyle(fontFamily: 'Cairo')),
               ),
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text("خروج", style: TextStyle(color: Colors.white54, fontFamily: 'Cairo'))),
             ],
           ),
         ),
@@ -222,8 +242,12 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
           child: ControlsBar(
             micKey: _micKey,
             camKey: _camKey,
-            chatKey: _chatKey,
+            emojiKey: _emojiKey,
+            screenShareKey: _screenShareKey,
             handKey: _handKey,
+            chatKey: _chatKey,
+            qaKey: _qaKey,
+            whiteboardKey: _whiteboardKey,
           ),
         ),
 
@@ -254,7 +278,9 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
           Showcase(
             key: _exitKey,
             title: 'مغادرة الحصة',
-            description: 'عند انتهاء الحصة، يمكنك الخروج من هنا.',
+            description: 'عند انتهاء الحصة، يمكنك الخروج من هنا للعودة للرئيسية.',
+            titleTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF102A43), fontFamily: 'Cairo'),
+            descTextStyle: const TextStyle(fontFamily: 'Cairo'),
             child: IconButton(
               icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
               onPressed: () => _showExitConfirmation(context, controller),
@@ -266,7 +292,9 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(controller.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                Text(controller.title, 
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'), 
+                    overflow: TextOverflow.ellipsis),
                 Row(
                   children: [
                     if (controller.isRecording) ...[
@@ -279,6 +307,20 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
               ],
             ),
           ),
+          if (controller.isBreakoutRoom && !controller.isTeacher)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: ElevatedButton.icon(
+                onPressed: controller.returnToMainRoom,
+                icon: const Icon(Icons.home_rounded, size: 16, color: Colors.white),
+                label: const Text("العودة للقاعة الرئيسية", style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -288,7 +330,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)),
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
     );
   }
 
@@ -297,18 +339,18 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("مغادرة القاعة"),
-        content: Text(controller.isTeacher ? "هل تريد إنهاء الحصة للجميع أم المغادرة فقط؟" : "هل أنت متأكد من مغادرة الحصة؟"),
+        title: const Text("مغادرة القاعة", style: TextStyle(fontFamily: 'Cairo')),
+        content: Text(controller.isTeacher ? "هل تريد إنهاء الحصة للجميع أم المغادرة فقط؟" : "هل أنت متأكد من مغادرة الحصة؟", style: const TextStyle(fontFamily: 'Cairo')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo'))),
           if (controller.isTeacher)
             TextButton(
               onPressed: () { controller.endSessionForAll(); Navigator.pop(context); Navigator.pop(context); },
-              child: const Text("إنهاء للكل", style: TextStyle(color: Colors.red)),
+              child: const Text("إنهاء للكل", style: TextStyle(color: Colors.red, fontFamily: 'Cairo')),
             ),
           ElevatedButton(
             onPressed: () { Navigator.pop(context); Navigator.pop(context); },
-            child: const Text("مغادرة"),
+            child: const Text("مغادرة", style: TextStyle(fontFamily: 'Cairo')),
           ),
         ],
       ),
@@ -362,9 +404,7 @@ class _FlyingEmojiState extends State<_FlyingEmoji> with SingleTickerProviderSta
     super.initState();
     _randomX = (math.Random().nextDouble() * 150) - 75;
     _randomRotation = (math.Random().nextDouble() * 1.0) - 0.5;
-
     _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 2500));
-
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) _anim.forward().then((_) => widget.onComplete());
     });

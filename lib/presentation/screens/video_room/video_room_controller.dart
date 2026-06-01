@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/services/livekit_service.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/attendance_pdf_service.dart';
 import '../../../core/models/quiz_model.dart';
 
 class Stroke {
@@ -841,10 +842,33 @@ class VideoRoomController extends ChangeNotifier {
     if (!isTeacher || sessionId == null) return;
     _isProcessing = true;
     notifyListeners();
-    sendData({'type': 'session_ended'});
-    await DatabaseService().updateSessionStatus(sessionId!, 'archived');
-    _room?.disconnect();
-    onSessionEnded?.call("تم إنهاء الحصة.");
+    try {
+      // 1. إرسال إشارة لجميع المشاركين بإنهاء الجلسة
+      sendData({'type': 'session_ended'});
+
+      // 2. تحديث حالة الجلسة في قاعدة البيانات إلى مؤرشفة
+      await DatabaseService().updateSessionStatus(sessionId!, 'archived');
+
+      // 3. جلب بيانات الحضور لتوليد التقرير
+      final attendanceData = await DatabaseService().getSessionAttendance(sessionId!);
+      
+      // 4. توليد تقرير PDF وحفظه/عرضه
+      await AttendancePdfService().generateReport(
+        subjectName: title,
+        teacherName: userName,
+        studentsData: attendanceData,
+      );
+
+      // 5. فصل الاتصال
+      _room?.disconnect();
+      onSessionEnded?.call("تم إنهاء الحصة وتوليد تقرير الحضور بنجاح ✅");
+    } catch (e) {
+      debugPrint("Error ending session: $e");
+      onNotification?.call("حدث خطأ أثناء أرشفة الجلسة", Colors.red);
+    } finally {
+      _isProcessing = false;
+      notifyListeners();
+    }
   }
 
   @override

@@ -18,20 +18,36 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider() {
     _user = _supabase.auth.currentUser;
     if (_user != null) {
+      _initializeProfileFromMetadata();
       _loadProfile();
     }
     
     _supabase.auth.onAuthStateChange.listen((data) {
       final newUser = data.session?.user;
-      if (newUser != null && newUser.id != _user?.id) {
-        _user = newUser;
-        _loadProfile();
-      } else if (newUser == null) {
+      if (newUser != null) {
+        if (newUser.id != _user?.id) {
+          _user = newUser;
+          _initializeProfileFromMetadata();
+          _loadProfile();
+        }
+      } else {
         _user = null;
         _profile = null;
         notifyListeners();
       }
     });
+  }
+
+  // ميزة جديدة: تهيئة الملف الشخصي من بيانات Auth Metadata لتفادي فراغ البيانات
+  void _initializeProfileFromMetadata() {
+    if (_user == null) return;
+    _profile = {
+      'id': _user!.id,
+      'full_name': _user!.userMetadata?['full_name'] ?? 'مستخدم جديد',
+      'role': _user!.userMetadata?['role'] ?? 'student',
+      'email': _user!.email,
+    };
+    notifyListeners();
   }
 
   Future<void> _loadProfile() async {
@@ -44,14 +60,14 @@ class AuthProvider extends ChangeNotifier {
           .maybeSingle();
 
       if (data != null) {
-        _profile = data;
+        _profile = Map<String, dynamic>.from(data);
         _profile?['email'] = _user?.email;
         notifyListeners();
       } else {
-        debugPrint("Profile not found for user: ${_user!.id}");
+        debugPrint("Profile not found in DB, using metadata fallback.");
       }
     } catch (e) {
-      debugPrint("Error loading profile: $e");
+      debugPrint("Error loading profile from DB: $e");
     }
   }
 
@@ -129,6 +145,8 @@ class AuthProvider extends ChangeNotifier {
       );
 
       if (response.user != null) {
+        _user = response.user;
+        
         final profileData = {
           'id': response.user!.id,
           'full_name': fullName,
@@ -137,13 +155,12 @@ class AuthProvider extends ChangeNotifier {
           'role': 'student',
         };
 
-        // إنشاء الملف الشخصي في قاعدة البيانات
-        await _supabase.from('profiles').upsert(profileData);
-        
-        _user = response.user;
-        // تحديث محلي فوري لضمان ظهور الاسم في الصفحة الرئيسية فوراً
+        // تعيين البيانات محلياً فوراً
         _profile = profileData;
         notifyListeners();
+
+        // إنشاء السجل في قاعدة البيانات في الخلفية
+        await _supabase.from('profiles').upsert(profileData);
         
         return true;
       }
@@ -167,7 +184,8 @@ class AuthProvider extends ChangeNotifier {
       
       if (response.user != null) {
         _user = response.user;
-        await _loadProfile();
+        _initializeProfileFromMetadata(); // تحميل البيانات الأولية فوراً
+        await _loadProfile(); // ثم جلب البيانات الكاملة من DB
         return true;
       }
       return false;

@@ -123,6 +123,8 @@ class DatabaseService {
           .from('sessions')
           .select('*, profiles!teacher_id(full_name), rooms!inner(is_active, room_name)')
           .eq('rooms.is_active', true)
+          .neq('status', 'archived')
+          .neq('status', 'ended')
           .gt('end_time', now);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
@@ -146,7 +148,13 @@ class DatabaseService {
       final startBoundary = DateTime(now.year, now.month, now.day).subtract(const Duration(hours: 12)).toUtc().toIso8601String();
       final endBoundary = DateTime(now.year, now.month, now.day).add(const Duration(hours: 36)).toUtc().toIso8601String();
 
-      final response = await _supabase.from('sessions').select('*, profiles!teacher_id(full_name), rooms(is_active)').eq('teacher_id', teacherId).gte('start_time', startBoundary).lte('start_time', endBoundary).order('start_time', ascending: true);
+      final response = await _supabase.from('sessions')
+          .select('*, profiles!teacher_id(full_name), rooms(is_active)')
+          .eq('teacher_id', teacherId)
+          .neq('status', 'archived')
+          .gte('start_time', startBoundary)
+          .lte('start_time', endBoundary)
+          .order('start_time', ascending: true);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       rethrow;
@@ -274,7 +282,7 @@ class DatabaseService {
     }
   }
 
-  // --- Attendance & Kick Features ---
+  // --- Attendance Features ---
   
   Future<bool> isStudentKicked(String sessionId, String studentId) async {
     try {
@@ -358,22 +366,39 @@ class DatabaseService {
     }
   }
 
-  // الدالة التي كانت مفقودة وتسبب الخطأ
   Future<List<Map<String, dynamic>>> getSessionAttendance(String sessionId) async {
     try {
-      final data = await getAttendanceReportData(sessionId);
-      return data.map((record) {
-        final profile = record['profiles'] as Map<String, dynamic>?;
+      final enrollments = await _supabase
+          .from('enrollments')
+          .select('student_id, profiles:student_id(full_name)')
+          .eq('session_id', sessionId);
+      
+      final attendance = await _supabase
+          .from('attendance')
+          .select('*')
+          .eq('session_id', sessionId);
+      
+      final attendanceList = List<Map<String, dynamic>>.from(attendance);
+
+      return (enrollments as List).map((en) {
+        final studentId = en['student_id'];
+        final profile = en['profiles'] as Map<String, dynamic>?;
+        
+        final record = attendanceList.firstWhere(
+          (a) => a['student_id'] == studentId,
+          orElse: () => {},
+        );
+        
         return {
-          'name': profile?['full_name'] ?? 'غير معروف',
-          'present': record['status'] != 'away' && record['status'] != 'kicked', 
-          'joined_at': record['joined_at'],
-          'left_at': record['left_at'],
+          'name': profile?['full_name'] ?? 'طالب غير معروف',
+          'present': record.isNotEmpty, 
+          'joined_at': record['joined_at'] ?? 'لم يحضر',
+          'left_at': record['left_at'] ?? '---',
           'duration': record['total_duration_minutes'] ?? 0,
         };
       }).toList();
     } catch (e) {
-      debugPrint("Error fetching session attendance: $e");
+      debugPrint("Error generating attendance report: $e");
       return [];
     }
   }

@@ -55,11 +55,10 @@ class ControlsBar extends StatelessWidget {
                     _buildShowcase(
                       key: micKey,
                       title: 'الميكروفون',
-                      description: 'من هنا يمكنك كتم أو تفعيل صوتك أثناء الحصة.',
+                      description: 'اضغط لكتم أو تفعيل صوتك أثناء المحاضرة.',
                       child: _AnimatedControlButton(
                         icon: controller.isMicEnabled ? Icons.mic_rounded : Icons.mic_off_rounded,
                         isActive: controller.isMicEnabled,
-                        color: Colors.white,
                         activeColor: Colors.blue,
                         onPressed: controller.toggleMic,
                         tooltip: "الميكروفون",
@@ -68,11 +67,10 @@ class ControlsBar extends StatelessWidget {
                     _buildShowcase(
                       key: camKey,
                       title: 'الكاميرا',
-                      description: 'اضغط هنا لفتح الكاميرا ومشاركة صورتك مع زملائك.',
+                      description: 'يمكنك فتح الكاميرا لمشاركة صورتك مع المعلم وزملائك.',
                       child: _AnimatedControlButton(
                         icon: controller.isCamEnabled ? Icons.videocam_rounded : Icons.videocam_off_rounded,
                         isActive: controller.isCamEnabled,
-                        color: Colors.white,
                         activeColor: Colors.blue,
                         onPressed: controller.toggleCam,
                         tooltip: "الكاميرا",
@@ -83,7 +81,7 @@ class ControlsBar extends StatelessWidget {
                     _buildShowcase(
                       key: emojiKey,
                       title: 'التفاعلات',
-                      description: 'عبر عن مشاعرك باستخدام الإيموجي أثناء الشرح.',
+                      description: 'عبر عن مشاعرك وتفاعل مع الشرح باستخدام الإيموجي.',
                       child: _ReactionButton(controller: controller),
                     ),
                     const SizedBox(width: 8),
@@ -92,7 +90,7 @@ class ControlsBar extends StatelessWidget {
                       _buildShowcase(
                         key: screenShareKey,
                         title: 'مشاركة الشاشة',
-                        description: 'يمكنك عرض شاشة جهازك للمشاركين في القاعة.',
+                        description: 'تسمح لك هذه الميزة بعرض شاشة جهازك للجميع.',
                         child: _AnimatedControlButton(
                           icon: controller.isScreenSharing ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
                           isActive: controller.isScreenSharing,
@@ -105,7 +103,7 @@ class ControlsBar extends StatelessWidget {
                     _buildShowcase(
                       key: handKey,
                       title: 'رفع اليد',
-                      description: 'استخدم هذه الميزة إذا كان لديك سؤال للمعلم.',
+                      description: 'استخدمها لتنبيه المعلم أن لديك سؤالاً أو استفساراً.',
                       child: _AnimatedControlButton(
                         icon: Icons.front_hand_rounded,
                         isActive: controller.isHandRaised,
@@ -119,8 +117,8 @@ class ControlsBar extends StatelessWidget {
 
                     _buildShowcase(
                       key: chatKey,
-                      title: 'الدردشة',
-                      description: 'تواصل مع المعلم وزملائك نصياً من هنا.',
+                      title: 'الدردشة العامة',
+                      description: 'تواصل نصياً مع جميع الحاضرين في القاعة.',
                       child: _AnimatedControlButton(
                         icon: Icons.chat_bubble_rounded,
                         isActive: controller.isChatOpen,
@@ -132,7 +130,7 @@ class ControlsBar extends StatelessWidget {
                     _buildShowcase(
                       key: qaKey,
                       title: 'الأسئلة والأجوبة',
-                      description: 'اطرح أسئلتك التعليمية ليجيب عليها المعلم.',
+                      description: 'اطرح أسئلة تعليمية محددة ليجيب عليها المعلم.',
                       child: _AnimatedControlButton(
                         icon: Icons.help_outline_rounded,
                         isActive: controller.isQAOpen,
@@ -144,7 +142,7 @@ class ControlsBar extends StatelessWidget {
                     _buildShowcase(
                       key: whiteboardKey,
                       title: 'السبورة التفاعلية',
-                      description: 'افتح السبورة لمتابعة الشروحات التوضيحية.',
+                      description: 'افتح السبورة لمتابعة الرسومات والشروحات التوضيحية.',
                       child: _AnimatedControlButton(
                         icon: Icons.edit_note_rounded,
                         isActive: controller.isWhiteboardOpen,
@@ -183,7 +181,7 @@ class ControlsBar extends StatelessWidget {
       titleTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF102A43), fontFamily: 'Cairo'),
       descTextStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
       tooltipBackgroundColor: Colors.white,
-      targetShapeBorder: const CircleBorder(), // لأن الأزرار دائرية
+      targetShapeBorder: const CircleBorder(),
       child: child,
     );
   }

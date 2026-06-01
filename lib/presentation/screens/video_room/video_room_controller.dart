@@ -315,6 +315,12 @@ class VideoRoomController extends ChangeNotifier {
         'wss://learning-system-07wdu0v6.livekit.cloud',
         token,
       );
+
+      // تسجيل دخول الطالب في جدول الحضور عند نجاح الاتصال
+      if (!isTeacher && sessionId != null) {
+        await DatabaseService().logStudentEntry(sessionId!, userId);
+      }
+
       _currentRoomName = targetRoomName;
       if (isBreakoutRoom) {
         _whiteboardStrokes.clear();
@@ -843,28 +849,31 @@ class VideoRoomController extends ChangeNotifier {
     _isProcessing = true;
     notifyListeners();
     try {
-      // 1. إرسال إشارة لجميع المشاركين بإنهاء الجلسة
+      // 1. إرسال إشارة لجميع المشاركين بإنهاء الجلسة فوراً
       sendData({'type': 'session_ended'});
 
-      // 2. تحديث حالة الجلسة في قاعدة البيانات إلى مؤرشفة
+      // 2. إيقاف تفعيل الغرفة في جدول الـ rooms لضمان عدم ظهورها في الحصص النشطة
+      await DatabaseService().toggleRoomStatus(sessionId!, false);
+
+      // 3. تحديث حالة الجلسة في قاعدة البيانات إلى مؤرشفة (أرشفة نهائية)
       await DatabaseService().updateSessionStatus(sessionId!, 'archived');
 
-      // 3. جلب بيانات الحضور لتوليد التقرير
+      // 4. جلب بيانات الحضور النهائية لتوليد التقرير
       final attendanceData = await DatabaseService().getSessionAttendance(sessionId!);
       
-      // 4. توليد تقرير PDF وحفظه/عرضه
+      // 5. توليد تقرير PDF وحفظه
       await AttendancePdfService().generateReport(
         subjectName: title,
         teacherName: userName,
         studentsData: attendanceData,
       );
 
-      // 5. فصل الاتصال
+      // 6. فصل الاتصال
       _room?.disconnect();
-      onSessionEnded?.call("تم إنهاء الحصة وتوليد تقرير الحضور بنجاح ✅");
+      onSessionEnded?.call("تم إنهاء الحصة وأرشفتها وتوليد التقرير بنجاح ✅");
     } catch (e) {
       debugPrint("Error ending session: $e");
-      onNotification?.call("حدث خطأ أثناء أرشفة الجلسة", Colors.red);
+      onNotification?.call("حدث خطأ أثناء إنهاء الجلسة", Colors.red);
     } finally {
       _isProcessing = false;
       notifyListeners();

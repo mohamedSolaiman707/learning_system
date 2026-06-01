@@ -67,7 +67,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
   final List<Widget> _reactions = [];
   bool _tourStarted = false;
   
-  // مفاتيح الجولة الكاملة داخل اللايف
+  // مفاتيح الجولة الكاملة
   final GlobalKey _micKey = GlobalKey();
   final GlobalKey _camKey = GlobalKey();
   final GlobalKey _emojiKey = GlobalKey();

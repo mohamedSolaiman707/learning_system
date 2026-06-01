@@ -12,7 +12,8 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _user != null;
 
-  String get role => _profile?['role'] ?? 'student';
+  // تحديد الـ Role بدقة (الأولوية للـ Profile ثم الـ Metadata القادم من Blackboard/Auth)
+  String get role => _profile?['role'] ?? _user?.userMetadata?['role'] ?? 'student';
   String? get externalId => _profile?['external_id'];
 
   AuthProvider() {
@@ -38,7 +39,7 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
-  // ميزة جديدة: تهيئة الملف الشخصي من بيانات Auth Metadata لتفادي فراغ البيانات
+  // تهيئة سريعة للبيانات من الـ Metadata لمنع ظهور "الطالب" أو الـ Loading المستمر
   void _initializeProfileFromMetadata() {
     if (_user == null) return;
     _profile = {
@@ -63,8 +64,6 @@ class AuthProvider extends ChangeNotifier {
         _profile = Map<String, dynamic>.from(data);
         _profile?['email'] = _user?.email;
         notifyListeners();
-      } else {
-        debugPrint("Profile not found in DB, using metadata fallback.");
       }
     } catch (e) {
       debugPrint("Error loading profile from DB: $e");
@@ -103,23 +102,33 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> handleExternalAuth(String externalId, String email, String fullName, String role) async {
+  // دالة مطورة للتكامل مع Blackboard (تنشئ الحساب تلقائياً إذا لم يوجد)
+  Future<bool> handleExternalAuth({
+    required String externalId,
+    required String email,
+    required String fullName,
+    required String role,
+  }) async {
     _isLoading = true;
     notifyListeners();
     try {
-      final existingProfile = await _supabase
-          .from('profiles')
-          .select()
-          .eq('external_id', externalId)
-          .maybeSingle();
+      _user = _supabase.auth.currentUser;
+      if (_user == null) return false;
 
-      if (existingProfile != null) {
-        _profile = existingProfile;
-        _user = _supabase.auth.currentUser;
-        notifyListeners();
-        return true;
-      }
-      return false;
+      final profileData = {
+        'id': _user!.id,
+        'external_id': externalId,
+        'full_name': fullName,
+        'email': email,
+        'role': role,
+      };
+
+      // استخدام upsert لضمان إنشاء أو تحديث بيانات المستخدم القادم من Blackboard
+      await _supabase.from('profiles').upsert(profileData);
+      
+      _profile = profileData;
+      notifyListeners();
+      return true;
     } catch (e) {
       debugPrint("External Auth Error: $e");
       return false;
@@ -155,13 +164,10 @@ class AuthProvider extends ChangeNotifier {
           'role': 'student',
         };
 
-        // تعيين البيانات محلياً فوراً
         _profile = profileData;
         notifyListeners();
 
-        // إنشاء السجل في قاعدة البيانات في الخلفية
         await _supabase.from('profiles').upsert(profileData);
-        
         return true;
       }
       return false;
@@ -184,8 +190,8 @@ class AuthProvider extends ChangeNotifier {
       
       if (response.user != null) {
         _user = response.user;
-        _initializeProfileFromMetadata(); // تحميل البيانات الأولية فوراً
-        await _loadProfile(); // ثم جلب البيانات الكاملة من DB
+        _initializeProfileFromMetadata(); 
+        await _loadProfile(); 
         return true;
       }
       return false;

@@ -11,10 +11,7 @@ class LiveKitService {
     required String userName,
   }) async {
     try {
-      if (supabaseUrl.isEmpty) {
-        print('Error: SUPABASE_URL is not set.');
-        return null;
-      }
+      if (supabaseUrl.isEmpty) return null;
 
       final response = await http.post(
         Uri.parse('$supabaseUrl/functions/v1/get-livekit-token'),
@@ -32,13 +29,36 @@ class LiveKitService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['token'];
-      } else {
-        print('Error getting token: ${response.body}');
-        return null;
       }
-    } catch (e) {
-      print('Exception getting token: $e');
       return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ميزة جديدة: تسجيل مجموعات العمل في قاعدة البيانات للتقارير
+  Future<bool> logBreakoutSession({
+    required String parentSessionId,
+    required List<Map<String, dynamic>> groups, // قائمة تحتوي على الطلاب في كل مجموعة
+    required int durationMinutes,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$supabaseUrl/functions/v1/manage-breakout'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $supabaseAnonKey',
+        },
+        body: jsonEncode({
+          'action': 'start',
+          'sessionId': parentSessionId,
+          'groups': groups,
+          'duration': durationMinutes,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -58,7 +78,6 @@ class LiveKitService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      print('Error starting recording: $e');
       return false;
     }
   }
@@ -79,7 +98,6 @@ class LiveKitService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      print('Error stopping recording: $e');
       return false;
     }
   }

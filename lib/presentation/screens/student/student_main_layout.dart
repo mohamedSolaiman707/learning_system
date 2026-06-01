@@ -26,18 +26,18 @@ class _StudentMainLayoutState extends State<StudentMainLayout> {
     bool isDesktop = Responsive.isDesktop(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F8), // لون خلفية أهدأ وأكثر احترافية
+      backgroundColor: const Color(0xFFF0F4F8),
       body: Row(
         children: [
           if (!isMobile) _buildCustomSidebar(isDesktop),
           Expanded(
             child: Container(
-              margin: isMobile ? EdgeInsets.zero : const EdgeInsets.all(16), // إضافة هامش بسيط للشاشات الكبيرة
+              margin: isMobile ? EdgeInsets.zero : const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: isMobile 
                     ? BorderRadius.zero 
-                    : BorderRadius.circular(32), // زوايا مستديرة من كل الجهات للمحتوى
+                    : BorderRadius.circular(32),
                 boxShadow: [
                   if (!isMobile)
                     BoxShadow(
@@ -81,13 +81,6 @@ class _StudentMainLayoutState extends State<StudentMainLayout> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF102A43),
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF102A43).withOpacity(0.2),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      )
-                    ],
                   ),
                   child: const Icon(Icons.school_rounded, color: Colors.white, size: 28),
                 ),
@@ -125,37 +118,14 @@ class _StudentMainLayoutState extends State<StudentMainLayout> {
           const SizedBox(height: 10),
 
           // Menu Items
-          _sidebarItem(0, Icons.dashboard_rounded, Icons.dashboard_outlined, "لوحة التحكم", isExpanded),
+          _sidebarItem(0, Icons.grid_view_rounded, Icons.grid_view_outlined, "لوحة التحكم", isExpanded),
           _sidebarItem(1, Icons.calendar_month_rounded, Icons.calendar_month_outlined, "الجدول الدراسي", isExpanded),
           _sidebarItem(2, Icons.person_rounded, Icons.person_outline_rounded, "الملف الشخصي", isExpanded),
           
           const Spacer(),
           
           // Support Section
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: isExpanded ? const EdgeInsets.all(16) : const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFD9E2EC)),
-            ),
-            child: Column(
-              children: [
-                Icon(Icons.support_agent_rounded, color: const Color(0xFF102A43), size: isExpanded ? 24 : 20),
-                if (isExpanded) ...[
-                  const SizedBox(height: 8),
-                  const Text("هل تحتاج مساعدة؟", 
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF102A43))
-                  ),
-                  const SizedBox(height: 4),
-                  const Text("تواصل مع الدعم الفني", 
-                    style: TextStyle(fontSize: 10, color: Color(0xFF627D98)), textAlign: TextAlign.center,
-                  ),
-                ],
-              ],
-            ),
-          ),
+          _sidebarItem(99, Icons.support_agent_rounded, Icons.support_agent_outlined, "الدعم الفني", isExpanded),
           const SizedBox(height: 20),
         ],
       ),
@@ -163,12 +133,21 @@ class _StudentMainLayoutState extends State<StudentMainLayout> {
   }
 
   Widget _sidebarItem(int index, IconData selectedIcon, IconData unselectedIcon, String label, bool isExpanded) {
+    // التحقق من أن الـ index موجود في قائمة التابات
     bool isSelected = _selectedIndex == index;
     
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: InkWell(
-        onTap: () => setState(() => _selectedIndex = index),
+        onTap: () {
+          if (index == 99) {
+             ScaffoldMessenger.of(context).showSnackBar(
+               const SnackBar(content: Text("جاري تحويلك للدعم الفني...")),
+             );
+          } else {
+            setState(() => _selectedIndex = index);
+          }
+        },
         borderRadius: BorderRadius.circular(16),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),

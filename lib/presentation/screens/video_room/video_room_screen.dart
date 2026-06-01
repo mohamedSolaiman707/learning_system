@@ -97,13 +97,14 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
         );
       };
 
-      controller.onBreakoutInvite = (room, name) {
+      controller.onBreakoutInvite = (room, name, duration) {
         showDialog(
           context: context,
+          barrierDismissible: false,
           builder: (context) => AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text("دعوة لمجموعة عمل"),
-            content: Text("دعاك المدرس للانضمام إلى: $name"),
+            content: Text("دعاك المدرس للانضمام إلى: $name\nمدة النقاش: $duration دقيقة"),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context), child: const Text("تجاهل")),
               ElevatedButton(
@@ -140,7 +141,6 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 600;
 
-    // 1. معالجة حالة التحميل (Premium Loading UI)
     if (controller.isLoading) {
       return Center(
         child: Column(
@@ -149,14 +149,11 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
             const CircularProgressIndicator(color: Colors.blue, strokeWidth: 3),
             const SizedBox(height: 24),
             const Text("جاري الاتصال بالقاعة التعليمية...", style: TextStyle(color: Colors.white, fontSize: 16)),
-            const SizedBox(height: 8),
-            Text(controller.roomName, style: const TextStyle(color: Colors.white38, fontSize: 12)),
           ],
         ),
       );
     }
 
-    // 2. معالجة حالة الخطأ (Professional Error UI)
     if (controller.errorMessage != null) {
       return Center(
         child: Padding(
@@ -172,9 +169,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
                 onPressed: () => controller.connectToRoom(controller.roomName),
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text("إعادة محاولة الاتصال"),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
               ),
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text("خروج", style: TextStyle(color: Colors.white54))),
             ],
           ),
         ),
@@ -217,6 +212,13 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
   }
 
   Widget _buildHeader(BuildContext context, VideoRoomController controller) {
+    String timerText = "";
+    if (controller.breakoutTimeLeft > 0) {
+      final mins = (controller.breakoutTimeLeft / 60).floor();
+      final secs = controller.breakoutTimeLeft % 60;
+      timerText = "${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}";
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: BoxDecoration(
@@ -237,7 +239,8 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(controller.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                Text(controller.isBreakoutRoom ? "مجموعة عمل فرعية" : controller.title, 
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                 Row(
                   children: [
                     if (controller.isRecording) ...[
@@ -245,24 +248,21 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
                        const SizedBox(width: 8),
                     ],
                     _buildStatusBadge("${controller.room?.remoteParticipants.length ?? 0} مشارك", Colors.white24),
+                    if (timerText.isNotEmpty) ...[
+                      const SizedBox(width: 12),
+                      _buildStatusBadge("ينتهي خلال $timerText", Colors.orange.shade800),
+                    ]
                   ],
                 ),
               ],
             ),
           ),
           if (controller.isBreakoutRoom && !controller.isTeacher)
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: ElevatedButton.icon(
-                onPressed: controller.returnToMainRoom,
-                icon: const Icon(Icons.home_rounded, size: 16, color: Colors.white),
-                label: const Text("العودة للقاعة الرئيسية", style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                ),
-              ),
+            ElevatedButton.icon(
+              onPressed: controller.returnToMainRoom,
+              icon: const Icon(Icons.home_rounded, size: 16, color: Colors.white),
+              label: const Text("عودة للقاعة", style: TextStyle(fontSize: 11, color: Colors.white)),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
             ),
         ],
       ),
@@ -307,11 +307,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
         width: isMobile ? size.width : 380,
         height: isMobile ? size.height * 0.75 : size.height * 0.85,
         margin: isMobile ? const EdgeInsets.only(bottom: 95) : const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 20, spreadRadius: -5)],
-        ),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 20, spreadRadius: -5)]),
         child: ClipRRect(borderRadius: BorderRadius.circular(30), child: child),
       ),
     );
@@ -347,9 +343,7 @@ class _FlyingEmojiState extends State<_FlyingEmoji> with SingleTickerProviderSta
     super.initState();
     _randomX = (math.Random().nextDouble() * 150) - 75; 
     _randomRotation = (math.Random().nextDouble() * 1.0) - 0.5;
-    
     _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 2500));
-    
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) _anim.forward().then((_) => widget.onComplete());
     });

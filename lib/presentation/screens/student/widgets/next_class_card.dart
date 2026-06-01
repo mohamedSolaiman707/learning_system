@@ -22,7 +22,6 @@ class NextClassCard extends StatefulWidget {
 }
 
 class _NextClassCardState extends State<NextClassCard> {
-  // هذا الجزء لإضافة لمسة جمالية (زر نابض)
   double _opacity = 1.0;
   late Timer _timer;
 
@@ -30,8 +29,8 @@ class _NextClassCardState extends State<NextClassCard> {
   void initState() {
     super.initState();
     if (widget.isLive) {
-      _timer = Timer.periodic(const Duration(milliseconds: 800), (timer) {
-        if (mounted) setState(() => _opacity = _opacity == 1.0 ? 0.5 : 1.0);
+      _timer = Timer.periodic(const Duration(milliseconds: 1000), (timer) {
+        if (mounted) setState(() => _opacity = _opacity == 1.0 ? 0.6 : 1.0);
       });
     }
   }
@@ -46,91 +45,135 @@ class _NextClassCardState extends State<NextClassCard> {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: widget.isLive 
-              ? [Colors.red.shade700, Colors.red.shade400] 
-              : [const Color(0xFF2196F3), const Color(0xFF1976D2)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(30),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: (widget.isLive ? Colors.red : Colors.blue).withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
         ],
+        border: Border.all(color: Colors.grey.shade100),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildBadge(
-                widget.isLive ? "بث مباشر الآن" : "الحصة القادمة",
-                widget.isLive ? Colors.white : Colors.white24,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Column(
+          children: [
+            // Header الجزء العلوي الملون بشكل خفيف
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              decoration: BoxDecoration(
+                color: widget.isLive ? const Color(0xFFFFF1F0) : const Color(0xFFF0F7FF),
               ),
-              if (widget.isLive)
-                AnimatedOpacity(
-                  opacity: _opacity,
-                  duration: const Duration(milliseconds: 400),
-                  child: const Icon(Icons.circle, color: Colors.white, size: 12),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            widget.subject,
-            style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.person_outline, color: Colors.white70, size: 18),
-              const SizedBox(width: 8),
-              Text(widget.teacher, style: const TextStyle(color: Colors.white70, fontSize: 16)),
-              const Spacer(),
-              const Icon(Icons.access_time, color: Colors.white70, size: 18),
-              const SizedBox(width: 8),
-              Text(widget.startTime, style: const TextStyle(color: Colors.white70, fontSize: 16)),
-            ],
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: widget.isLive ? widget.onJoin : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: widget.isLive ? Colors.white : Colors.white10,
-              foregroundColor: widget.isLive ? Colors.red.shade700 : Colors.white38,
-              minimumSize: const Size(double.infinity, 56),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              elevation: 0,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: widget.isLive ? Colors.red.shade400 : Colors.blue.shade400,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      widget.isLive ? Icons.sensors_rounded : Icons.event_note_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    widget.isLive ? "بث مباشر الآن" : "الحصة القادمة",
+                    style: TextStyle(
+                      color: widget.isLive ? Colors.red.shade700 : Colors.blue.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (widget.isLive)
+                    AnimatedOpacity(
+                      opacity: _opacity,
+                      duration: const Duration(milliseconds: 500),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text("LIVE", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            child: Text(
-              widget.isLive ? "انضم للحصة الآن" : "بانتظار بدء المعلم للدرس",
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.subject,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF102A43),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _buildInfoTile(Icons.person_outline_rounded, widget.teacher),
+                      const SizedBox(width: 24),
+                      _buildInfoTile(Icons.access_time_rounded, widget.startTime),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // الزر بتصميم عصري
+                  ElevatedButton(
+                    onPressed: widget.isLive ? widget.onJoin : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: widget.isLive ? const Color(0xFF102A43) : Colors.grey.shade100,
+                      foregroundColor: widget.isLive ? Colors.white : Colors.grey.shade400,
+                      minimumSize: const Size(double.infinity, 54),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          widget.isLive ? "انضم للحصة الآن" : "بانتظار المعلم",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        if (widget.isLive) ...[
+                          const SizedBox(width: 8),
+                          const Icon(Icons.arrow_forward_rounded, size: 18),
+                        ]
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildBadge(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: widget.isLive ? Colors.red.shade700 : Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
+  Widget _buildInfoTile(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.grey.shade500),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(color: Colors.grey.shade700, fontSize: 14, fontWeight: FontWeight.w500),
         ),
-      ),
+      ],
     );
   }
 }

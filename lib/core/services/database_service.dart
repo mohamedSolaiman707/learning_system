@@ -278,7 +278,6 @@ class DatabaseService {
   
   Future<bool> isStudentKicked(String sessionId, String studentId) async {
     try {
-      // استخدام limit(1) لضمان السرعة وتجنب الأخطاء
       final res = await _supabase
           .from('attendance')
           .select('status')
@@ -356,6 +355,26 @@ class DatabaseService {
           .eq('session_id', sessionId);
     } catch (e) {
       rethrow;
+    }
+  }
+
+  // الدالة التي كانت مفقودة وتسبب الخطأ
+  Future<List<Map<String, dynamic>>> getSessionAttendance(String sessionId) async {
+    try {
+      final data = await getAttendanceReportData(sessionId);
+      return data.map((record) {
+        final profile = record['profiles'] as Map<String, dynamic>?;
+        return {
+          'name': profile?['full_name'] ?? 'غير معروف',
+          'present': record['status'] != 'away' && record['status'] != 'kicked', 
+          'joined_at': record['joined_at'],
+          'left_at': record['left_at'],
+          'duration': record['total_duration_minutes'] ?? 0,
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint("Error fetching session attendance: $e");
+      return [];
     }
   }
 

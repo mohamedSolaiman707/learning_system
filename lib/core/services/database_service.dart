@@ -278,13 +278,16 @@ class DatabaseService {
   
   Future<bool> isStudentKicked(String sessionId, String studentId) async {
     try {
+      // استخدام limit(1) لضمان السرعة وتجنب الأخطاء
       final res = await _supabase
           .from('attendance')
           .select('status')
           .eq('session_id', sessionId)
           .eq('student_id', studentId)
-          .maybeSingle();
-      return res != null && res['status'] == 'kicked';
+          .limit(1); 
+      
+      if (res.isEmpty) return false;
+      return res[0]['status'] == 'kicked';
     } catch (e) {
       return false;
     }
@@ -305,8 +308,8 @@ class DatabaseService {
 
   Future<void> logStudentEntry(String sessionId, String studentId) async {
     try {
-      // نتحقق أولاً هل هو مطرود؟ إذا نعم لا نسجل دخول جديد
-      if (await isStudentKicked(sessionId, studentId)) return;
+      final isKicked = await isStudentKicked(sessionId, studentId);
+      if (isKicked) return;
 
       await _supabase.from('attendance').upsert({
         'session_id': sessionId,
@@ -321,24 +324,23 @@ class DatabaseService {
 
   Future<void> logStudentExit(String sessionId, String studentId) async {
     try {
-      // لا نحدث الحالة إذا كان مطروداً (نريد الحفاظ على حالة kicked)
-      if (await isStudentKicked(sessionId, studentId)) return;
-
       final record = await _supabase.from('attendance')
-          .select('joined_at')
+          .select('status, joined_at')
           .eq('session_id', sessionId)
           .eq('student_id', studentId)
-          .maybeSingle();
+          .limit(1);
 
-      if (record != null && record['joined_at'] != null) {
-        final joinTime = DateTime.parse(record['joined_at']);
+      if (record.isNotEmpty) {
+        if (record[0]['status'] == 'kicked') return;
+
+        final joinTime = record[0]['joined_at'] != null ? DateTime.parse(record[0]['joined_at']) : DateTime.now();
         final exitTime = DateTime.now();
         final duration = exitTime.difference(joinTime).inMinutes;
 
         await _supabase.from('attendance').update({
           'left_at': exitTime.toIso8601String(),
           'total_duration_minutes': duration,
-          'status': 'away' // تغيير الحالة إلى غادر (وليس مطرود)
+          'status': 'away' 
         }).eq('session_id', sessionId).eq('student_id', studentId);
       }
     } catch (e) {

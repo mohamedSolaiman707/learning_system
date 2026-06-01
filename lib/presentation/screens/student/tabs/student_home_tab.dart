@@ -25,6 +25,7 @@ class StudentHomeTab extends StatefulWidget {
 
 class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProviderStateMixin {
   bool _isLoading = true;
+  bool _isJoining = false; 
   List<SessionModel> _enrolledSessions = [];
   List<SessionModel> _allActiveSessions = [];
   SessionModel? _nextSession;
@@ -116,54 +117,68 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
   }
 
   Future<void> _joinActiveSession(SessionModel session) async {
+    if (_isJoining) return; 
+    
+    setState(() => _isJoining = true);
     HapticFeedback.mediumImpact();
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    final db = Provider.of<DatabaseService>(context, listen: false);
-    
-    // 1. التحقق مما إذا كان الطالب مطروداً مسبقاً
-    final isKicked = await db.isStudentKicked(session.id, auth.user!.id);
-    if (isKicked) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.error_outline, color: Colors.white),
-              SizedBox(width: 12),
-              Text("غير مسموح لك بدخول البث بسبب طردك مسبقاً", style: TextStyle(fontWeight: FontWeight.bold)),
-            ],
+
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final db = Provider.of<DatabaseService>(context, listen: false);
+      
+      // 1. التحقق من الطرد مع "مهلة زمنية" (Timeout) لضمان عدم تعليق الزر
+      final isKicked = await db.isStudentKicked(session.id, auth.user!.id)
+          .timeout(const Duration(seconds: 5), onTimeout: () => false);
+
+      if (isKicked) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("عذراً، لا يمكنك دخول هذه الحصة بسبب طردك مسبقاً 🚫", style: TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
           ),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        ),
-      );
-      return;
-    }
+        );
+        setState(() => _isJoining = false);
+        return;
+      }
 
-    await db.enrollStudentBySessionId(auth.user!.id, session.id);
-    
-    if (!mounted) return;
+      // 2. تسجيل الانضمام
+      await db.enrollStudentBySessionId(auth.user!.id, session.id)
+          .timeout(const Duration(seconds: 5), onTimeout: () {});
+      
+      if (!mounted) return;
 
-    if (session.status == 'waiting') {
-      Navigator.push(context, MaterialPageRoute(
-        builder: (context) => WaitingRoomScreen(
-          session: session,
-          userName: auth.profile?['full_name'] ?? "الطالب",
-          userId: auth.user!.id,
-        ),
-      ));
-    } else {
-      Navigator.push(context, MaterialPageRoute(
-        builder: (context) => VideoRoomScreen(
-          title: session.subjectName,
-          roomName: "room_${session.id}",
-          userName: auth.profile?['full_name'] ?? "الطالب",
-          userId: auth.user!.id,
-          isTeacher: false,
-          sessionId: session.id,
-        ),
-      ));
+      // 3. التوجيه الفوري
+      if (session.status == 'waiting') {
+        await Navigator.push(context, MaterialPageRoute(
+          builder: (context) => WaitingRoomScreen(
+            session: session,
+            userName: auth.profile?['full_name'] ?? "الطالب",
+            userId: auth.user!.id,
+          ),
+        ));
+      } else {
+        await Navigator.push(context, MaterialPageRoute(
+          builder: (context) => VideoRoomScreen(
+            title: session.subjectName,
+            roomName: "room_${session.id}",
+            userName: auth.profile?['full_name'] ?? "الطالب",
+            userId: auth.user!.id,
+            isTeacher: false,
+            sessionId: session.id,
+          ),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("فشل الاتصال، يرجى المحاولة مرة أخرى"), backgroundColor: Colors.orange),
+        );
+      }
+    } finally {
+      // نضمن دائماً إعادة تفعيل الزر عند العودة أو الفشل
+      if (mounted) setState(() => _isJoining = false);
     }
   }
 
@@ -174,54 +189,77 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      body: _isLoading 
-          ? _buildLoadingSkeleton()
-          : RefreshIndicator(
-              onRefresh: () => _loadStudentData(initial: true),
-              child: CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  _buildSliverAppBar(userName),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(Responsive.isMobile(context) ? 20 : 30),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildEnhancedWelcome(userName),
-                          const SizedBox(height: 32),
-                          
-                          if (_allActiveSessions.isNotEmpty) ...[
-                            _buildSectionHeader("بث مباشر الآن", isLive: true),
-                            const SizedBox(height: 16),
-                            _buildLiveSessionsCarousel(),
-                            const SizedBox(height: 32),
-                          ],
+      body: Stack(
+        children: [
+          _isLoading 
+              ? _buildLoadingSkeleton()
+              : RefreshIndicator(
+                  onRefresh: () => _loadStudentData(initial: true),
+                  child: CustomScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    slivers: [
+                      _buildSliverAppBar(userName),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.all(Responsive.isMobile(context) ? 20 : 30),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildEnhancedWelcome(userName),
+                              const SizedBox(height: 32),
+                              
+                              if (_allActiveSessions.isNotEmpty) ...[
+                                _buildSectionHeader("بث مباشر الآن", isLive: true),
+                                const SizedBox(height: 16),
+                                _buildLiveSessionsCarousel(),
+                                const SizedBox(height: 32),
+                              ],
 
-                          _buildSectionHeader("خطتك الدراسية"),
-                          const SizedBox(height: 16),
-                          _buildProgressOverview(),
-                          const SizedBox(height: 32),
+                              _buildSectionHeader("خطتك الدراسية"),
+                              const SizedBox(height: 16),
+                              _buildProgressOverview(),
+                              const SizedBox(height: 32),
 
-                          if (_nextSession != null) ...[
-                            _buildSectionHeader("الحصة القادمة"),
-                            const SizedBox(height: 16),
-                            _buildNextClassCard(userName),
-                            const SizedBox(height: 32),
-                          ],
-                          
-                          if (_enrolledSessions.isNotEmpty) ...[
-                            _buildSectionHeader("جدول الحصص"),
-                            const SizedBox(height: 16),
-                            _buildUpcomingGrid(),
-                          ],
-                        ],
+                              if (_nextSession != null) ...[
+                                _buildSectionHeader("الحصة القادمة"),
+                                const SizedBox(height: 16),
+                                _buildNextClassCard(userName),
+                                const SizedBox(height: 32),
+                              ],
+                              
+                              if (_enrolledSessions.isNotEmpty) ...[
+                                _buildSectionHeader("جدول الحصص"),
+                                const SizedBox(height: 16),
+                                _buildUpcomingGrid(),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
+          
+          if (_isJoining)
+            Container(
+              color: Colors.black.withOpacity(0.3),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+                  child: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(strokeWidth: 3),
+                      SizedBox(height: 16),
+                      Text("جاري الدخول...", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
               ),
             ),
+        ],
+      ),
     );
   }
 

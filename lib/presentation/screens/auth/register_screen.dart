@@ -214,15 +214,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           const SizedBox(height: 16),
 
-          CustomTextField(
-            controller: _phoneController,
-            hintText: "رقم الهاتف",
-            prefixIcon: Icons.phone_outlined,
-            keyboardType: TextInputType.phone,
-            autofillHints: const [AutofillHints.telephoneNumber],
-            validator: (v) => (v == null || v.length < 8) ? "رقم هاتف غير صحيح" : null,
-          ),
-          const SizedBox(height: 16),
+          // CustomTextField(
+          //   controller: _phoneController,
+          //   hintText: "رقم الهاتف",
+          //   prefixIcon: Icons.phone_outlined,
+          //   keyboardType: TextInputType.phone,
+          //   autofillHints: const [AutofillHints.telephoneNumber],
+          //   validator: (v) => (v == null || v.length < 8) ? "رقم هاتف غير صحيح" : null,
+          // ),
+          // const SizedBox(height: 16),
 
           CustomTextField(
             controller: _passwordController,

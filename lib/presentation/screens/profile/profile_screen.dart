@@ -195,7 +195,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 15),
         _buildInfoCard([
           _buildInfoItem(Icons.person_outline, "الاسم الكامل", profile['full_name'] ?? '', () => _showEditDialog("الاسم", "full_name", profile['full_name'])),
-          _buildInfoItem(Icons.phone_outlined, "رقم الهاتف", profile['phone_number'] ?? 'غير مسجل', () => _showEditDialog("الهاتف", "phone_number", profile['phone_number'] ?? '')),
           _buildInfoItem(Icons.email_outlined, "البريد الإلكتروني", profile['email'] ?? 'جاري التحميل...', null),
         ]),
       ],

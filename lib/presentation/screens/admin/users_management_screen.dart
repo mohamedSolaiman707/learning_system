@@ -192,7 +192,6 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
           columns: const [
             DataColumn(label: Text('المستخدم', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(label: Text('الرتبة', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('رقم الهاتف', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(label: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
           ],
           rows: _filteredUsers.map((user) => DataRow(cells: [
@@ -204,7 +203,6 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
               ],
             )),
             DataCell(_buildRoleChip(user['role'])),
-            DataCell(Text(user['phone_number'] ?? 'غير متوفر')),
             DataCell(Row(
               children: [
                 _buildActionMenu(user),

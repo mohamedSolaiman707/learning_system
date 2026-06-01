@@ -142,7 +142,6 @@ class AuthProvider extends ChangeNotifier {
     required String email,
     required String password,
     required String fullName,
-    String? phoneNumber,
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -150,7 +149,10 @@ class AuthProvider extends ChangeNotifier {
       final response = await _supabase.auth.signUp(
         email: email,
         password: password,
-        data: {'full_name': fullName, 'role': 'student'},
+        data: {
+          'full_name': fullName, 
+          'role': 'student',
+        },
       );
 
       if (response.user != null) {
@@ -160,7 +162,6 @@ class AuthProvider extends ChangeNotifier {
           'id': response.user!.id,
           'full_name': fullName,
           'email': email,
-          'phone_number': phoneNumber,
           'role': 'student',
         };
 

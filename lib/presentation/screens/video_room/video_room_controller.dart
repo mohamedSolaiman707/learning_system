@@ -192,10 +192,10 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> init() async {
     _currentRoomName = roomName;
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      List<ConnectivityResult> results,
-    ) {
+        List<ConnectivityResult> results,
+        ) {
       final hasInternet = results.any(
-        (result) => result != ConnectivityResult.none,
+            (result) => result != ConnectivityResult.none,
       );
       if (_isConnected && !hasInternet) {
         _isConnected = false;
@@ -258,22 +258,22 @@ class VideoRoomController extends ChangeNotifier {
       _statusSubscription = DatabaseService()
           .watchSessionStatus(sessionId!)
           .listen((data) {
-            if (data.isNotEmpty &&
-                (data.first['status'] == 'ended' ||
-                    data.first['status'] == 'archived')) {
-              onNotification?.call(
-                "🔴 تم إنهاء البث المباشر.",
-                Colors.redAccent,
-              );
-              Future.delayed(
-                const Duration(seconds: 3),
+        if (data.isNotEmpty &&
+            (data.first['status'] == 'ended' ||
+                data.first['status'] == 'archived')) {
+          onNotification?.call(
+            "🔴 تم إنهاء البث المباشر.",
+            Colors.redAccent,
+          );
+          Future.delayed(
+            const Duration(seconds: 3),
                 () => onSessionEnded?.call("انتهت الحصة الدراسية."),
-              );
-            }
-          });
+          );
+        }
+      });
       _expiryTimer = Timer(
         endTime.difference(DateTime.now()),
-        () => onSessionEnded?.call("انتهى وقت الحصة."),
+            () => onSessionEnded?.call("انتهى وقت الحصة."),
       );
       if (isTeacher && res['is_recording_enabled'] == true) startRecording();
       return true;
@@ -351,14 +351,14 @@ class VideoRoomController extends ChangeNotifier {
           Colors.blueGrey.shade700,
         );
         _handRaiseQueue.removeWhere(
-          (item) => item['identity'] == event.participant.identity,
+              (item) => item['identity'] == event.participant.identity,
         );
         notifyListeners();
       })
       ..on<ActiveSpeakersChangedEvent>((event) {
         if (_room?.localParticipant != null && !_isMicEnabled) {
           final isSpeaking = event.speakers.any(
-            (s) => s.identity == _room!.localParticipant!.identity,
+                (s) => s.identity == _room!.localParticipant!.identity,
           );
           if (isSpeaking) {
             final now = DateTime.now();
@@ -470,7 +470,7 @@ class VideoRoomController extends ChangeNotifier {
         onNotification?.call("🔴 انتهى البث.", Colors.redAccent);
         Future.delayed(
           const Duration(seconds: 2),
-          () => onSessionEnded?.call("انتهت الحصة."),
+              () => onSessionEnded?.call("انتهت الحصة."),
         );
         break;
       case 'whiteboard_draw':

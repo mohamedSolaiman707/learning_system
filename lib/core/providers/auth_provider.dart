@@ -1,3 +1,4 @@
+import 'dart:typed_index';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -12,7 +13,6 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _user != null;
 
-  // تحديد الـ Role بدقة (الأولوية للـ Profile ثم الـ Metadata القادم من Blackboard/Auth)
   String get role => _profile?['role'] ?? _user?.userMetadata?['role'] ?? 'student';
   String? get externalId => _profile?['external_id'];
 
@@ -39,7 +39,6 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
-  // تهيئة سريعة للبيانات من الـ Metadata لمنع ظهور "الطالب" أو الـ Loading المستمر
   void _initializeProfileFromMetadata() {
     if (_user == null) return;
     _profile = {
@@ -47,6 +46,7 @@ class AuthProvider extends ChangeNotifier {
       'full_name': _user!.userMetadata?['full_name'] ?? 'مستخدم جديد',
       'role': _user!.userMetadata?['role'] ?? 'student',
       'email': _user!.email,
+      'avatar_url': _user!.userMetadata?['avatar_url'],
     };
     notifyListeners();
   }
@@ -80,6 +80,33 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<String?> uploadAvatar(Uint8List bytes, String fileName) async {
+    if (_user == null) return null;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final fileExt = fileName.split('.').last;
+      final path = '${_user!.id}/avatar_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+      
+      await _supabase.storage.from('avatars').uploadBinary(
+        path,
+        bytes,
+        fileOptions: const FileOptions(upsert: true),
+      );
+
+      final imageUrl = _supabase.storage.from('avatars').getPublicUrl(path);
+      
+      await updateProfile({'avatar_url': imageUrl});
+      return imageUrl;
+    } catch (e) {
+      debugPrint("Upload Error: $e");
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> resetPassword(String email) async {
     try {
       await _supabase.auth.resetPasswordForEmail(email);
@@ -102,7 +129,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // دالة مطورة للتكامل مع Blackboard (تنشئ الحساب تلقائياً إذا لم يوجد)
   Future<bool> handleExternalAuth({
     required String externalId,
     required String email,
@@ -123,7 +149,6 @@ class AuthProvider extends ChangeNotifier {
         'role': role,
       };
 
-      // استخدام upsert لضمان إنشاء أو تحديث بيانات المستخدم القادم من Blackboard
       await _supabase.from('profiles').upsert(profileData);
       
       _profile = profileData;

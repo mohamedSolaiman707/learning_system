@@ -1,10 +1,22 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:showcaseview/showcaseview.dart';
 import '../video_room_controller.dart';
 
 class ControlsBar extends StatelessWidget {
-  const ControlsBar({super.key});
+  final GlobalKey? micKey;
+  final GlobalKey? camKey;
+  final GlobalKey? chatKey;
+  final GlobalKey? handKey;
+
+  const ControlsBar({
+    super.key,
+    this.micKey,
+    this.camKey,
+    this.chatKey,
+    this.handKey,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +28,7 @@ class ControlsBar extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(40),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // تأثير الزجاج الحقيقي
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             decoration: BoxDecoration(
@@ -32,21 +44,31 @@ class ControlsBar extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _AnimatedControlButton(
-                      icon: controller.isMicEnabled ? Icons.mic_rounded : Icons.mic_off_rounded,
-                      isActive: controller.isMicEnabled,
-                      color: Colors.white,
-                      activeColor: Colors.blue,
-                      onPressed: controller.toggleMic,
-                      tooltip: "الميكروفون",
+                    _buildShowcase(
+                      key: micKey,
+                      title: 'الميكروفون',
+                      description: 'من هنا يمكنك كتم أو تفعيل صوتك أثناء الحصة.',
+                      child: _AnimatedControlButton(
+                        icon: controller.isMicEnabled ? Icons.mic_rounded : Icons.mic_off_rounded,
+                        isActive: controller.isMicEnabled,
+                        color: Colors.white,
+                        activeColor: Colors.blue,
+                        onPressed: controller.toggleMic,
+                        tooltip: "الميكروفون",
+                      ),
                     ),
-                    _AnimatedControlButton(
-                      icon: controller.isCamEnabled ? Icons.videocam_rounded : Icons.videocam_off_rounded,
-                      isActive: controller.isCamEnabled,
-                      color: Colors.white,
-                      activeColor: Colors.blue,
-                      onPressed: controller.toggleCam,
-                      tooltip: "الكاميرا",
+                    _buildShowcase(
+                      key: camKey,
+                      title: 'الكاميرا',
+                      description: 'اضغط هنا لفتح الكاميرا ومشاركة صورتك مع زملائك.',
+                      child: _AnimatedControlButton(
+                        icon: controller.isCamEnabled ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+                        isActive: controller.isCamEnabled,
+                        color: Colors.white,
+                        activeColor: Colors.blue,
+                        onPressed: controller.toggleCam,
+                        tooltip: "الكاميرا",
+                      ),
                     ),
                     
                     const SizedBox(width: 8),
@@ -62,22 +84,32 @@ class ControlsBar extends StatelessWidget {
                         tooltip: "مشاركة الشاشة",
                       ),
 
-                    _AnimatedControlButton(
-                      icon: Icons.front_hand_rounded,
-                      isActive: controller.isHandRaised,
-                      activeColor: Colors.amber,
-                      onPressed: controller.toggleHand,
-                      tooltip: "رفع اليد",
+                    _buildShowcase(
+                      key: handKey,
+                      title: 'رفع اليد',
+                      description: 'استخدم هذه الميزة إذا كان لديك سؤال للمعلم.',
+                      child: _AnimatedControlButton(
+                        icon: Icons.front_hand_rounded,
+                        isActive: controller.isHandRaised,
+                        activeColor: Colors.amber,
+                        onPressed: controller.toggleHand,
+                        tooltip: "رفع اليد",
+                      ),
                     ),
                     
                     _buildDivider(),
 
-                    _AnimatedControlButton(
-                      icon: Icons.chat_bubble_rounded,
-                      isActive: controller.isChatOpen,
-                      activeColor: Colors.blue,
-                      onPressed: controller.toggleChat,
-                      tooltip: "الدردشة",
+                    _buildShowcase(
+                      key: chatKey,
+                      title: 'الدردشة',
+                      description: 'تواصل مع المعلم وزملائك نصياً من هنا.',
+                      child: _AnimatedControlButton(
+                        icon: Icons.chat_bubble_rounded,
+                        isActive: controller.isChatOpen,
+                        activeColor: Colors.blue,
+                        onPressed: controller.toggleChat,
+                        tooltip: "الدردشة",
+                      ),
                     ),
                     _AnimatedControlButton(
                       icon: Icons.help_outline_rounded,
@@ -111,6 +143,19 @@ class ControlsBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildShowcase({required GlobalKey? key, required String title, required String description, required Widget child}) {
+    if (key == null) return child;
+    return Showcase(
+      key: key,
+      title: title,
+      description: description,
+      titleTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF102A43), fontFamily: 'Cairo'),
+      descTextStyle: const TextStyle(fontFamily: 'Cairo'),
+      tooltipBackgroundColor: Colors.white,
+      child: child,
     );
   }
 
@@ -176,29 +221,38 @@ class _ReactionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      offset: const Offset(0, -280),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-      color: Colors.black.withOpacity(0.8),
+      offset: const Offset(0, -70), // تقليل الإزاحة لتناسب العرض الأفقي
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      color: Colors.black.withOpacity(0.9),
+      padding: EdgeInsets.zero,
       icon: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), shape: BoxShape.circle),
         child: const Icon(Icons.add_reaction_rounded, color: Colors.white, size: 22),
       ),
-      onSelected: (emoji) => controller.sendReaction(emoji),
       itemBuilder: (context) => [
-        _buildEmojiItem('👏'),
-        _buildEmojiItem('👍'),
-        _buildEmojiItem('❤️'),
-        _buildEmojiItem('😂'),
-        _buildEmojiItem('🎉'),
+        PopupMenuItem<String>(
+          enabled: false, // لتعطيل تأثير التحديد الافتراضي (Hover) على السطر بالكامل
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: ['👏', '👍', '❤️', '😂', '🎉'].map((emoji) {
+              return InkWell(
+                onTap: () {
+                  controller.sendReaction(emoji);
+                  Navigator.pop(context); // إغلاق القائمة بعد اختيار الإيموجي
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: Text(
+                    emoji,
+                    style: const TextStyle(fontSize: 26),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
       ],
-    );
-  }
-
-  PopupMenuItem<String> _buildEmojiItem(String emoji) {
-    return PopupMenuItem(
-      value: emoji,
-      child: Center(child: Text(emoji, style: const TextStyle(fontSize: 28))),
     );
   }
 }

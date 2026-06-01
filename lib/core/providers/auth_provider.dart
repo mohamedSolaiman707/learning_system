@@ -9,14 +9,19 @@ class AuthProvider extends ChangeNotifier {
   Map<String, dynamic>? _profile;
   bool _isLoading = false;
   bool _hasSeenTour = false;
+  bool _hasSeenVideoTour = false;
 
   User? get user => _user;
   Map<String, dynamic>? get profile => _profile;
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _user != null;
   bool get hasSeenTour => _hasSeenTour;
+  bool get hasSeenVideoTour => _hasSeenVideoTour;
 
   String get role => _profile?['role'] ?? _user?.userMetadata?['role'] ?? 'student';
+  bool get isTeacher => role == 'teacher'; // الخاصية المفقودة التي أضفتها الآن
+  bool get isAdmin => role == 'admin';
+  
   String? get externalId => _profile?['external_id'];
 
   AuthProvider() {
@@ -44,6 +49,7 @@ class AuthProvider extends ChangeNotifier {
         _user = null;
         _profile = null;
         _hasSeenTour = false;
+        _hasSeenVideoTour = false;
         notifyListeners();
       }
     });
@@ -53,6 +59,7 @@ class AuthProvider extends ChangeNotifier {
     if (_user == null) return;
     final prefs = await SharedPreferences.getInstance();
     _hasSeenTour = prefs.getBool('tour_seen_${_user!.id}') ?? false;
+    _hasSeenVideoTour = prefs.getBool('video_tour_seen_${_user!.id}') ?? false;
     notifyListeners();
   }
 
@@ -61,6 +68,14 @@ class AuthProvider extends ChangeNotifier {
     _hasSeenTour = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('tour_seen_${_user!.id}', true);
+    notifyListeners();
+  }
+
+  Future<void> completeVideoTour() async {
+    if (_user == null) return;
+    _hasSeenVideoTour = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('video_tour_seen_${_user!.id}', true);
     notifyListeners();
   }
 
@@ -261,6 +276,7 @@ class AuthProvider extends ChangeNotifier {
     _user = null;
     _profile = null;
     _hasSeenTour = false;
+    _hasSeenVideoTour = false;
     notifyListeners();
   }
 }

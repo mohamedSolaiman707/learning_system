@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:showcaseview/showcaseview.dart';
+import '../../../core/providers/auth_provider.dart';
 import 'video_room_controller.dart';
 import 'widgets/participant_grid.dart';
 import 'widgets/controls_bar.dart';
@@ -40,11 +42,14 @@ class VideoRoomScreen extends StatelessWidget {
         isTeacher: isTeacher,
         sessionId: sessionId,
       )..init(),
-      child: const Scaffold(
-        backgroundColor: Colors.black,
-        resizeToAvoidBottomInset: true,
-        body: SafeArea(
-          child: _VideoRoomContent(),
+      child: ShowCaseWidget(
+        onFinish: () => context.read<AuthProvider>().completeVideoTour(),
+        builder: (context) => const Scaffold(
+          backgroundColor: Colors.black,
+          resizeToAvoidBottomInset: true,
+          body: SafeArea(
+            child: _VideoRoomContent(),
+          ),
         ),
       ),
     );
@@ -60,12 +65,31 @@ class _VideoRoomContent extends StatefulWidget {
 
 class _VideoRoomContentState extends State<_VideoRoomContent> {
   final List<Widget> _reactions = [];
+  
+  // مفاتيح الجولة داخل اللايف
+  final GlobalKey _micKey = GlobalKey();
+  final GlobalKey _camKey = GlobalKey();
+  final GlobalKey _chatKey = GlobalKey();
+  final GlobalKey _handKey = GlobalKey();
+  final GlobalKey _exitKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = context.read<VideoRoomController>();
+      final auth = context.read<AuthProvider>();
+
+      // تشغيل الجولة إذا كان طالباً ولم يشاهدها من قبل
+      if (!auth.isTeacher && !auth.hasSeenVideoTour) {
+        ShowCaseWidget.of(context).startShowCase([
+          _micKey,
+          _camKey,
+          _handKey,
+          _chatKey,
+          _exitKey,
+        ]);
+      }
       
       controller.onSessionEnded = (msg) {
         showDialog(
@@ -141,7 +165,6 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 600;
 
-    // 1. معالجة حالة التحميل (Premium Loading UI)
     if (controller.isLoading) {
       return Center(
         child: Column(
@@ -150,14 +173,11 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
             const CircularProgressIndicator(color: Colors.blue, strokeWidth: 3),
             const SizedBox(height: 24),
             const Text("جاري الاتصال بالقاعة التعليمية...", style: TextStyle(color: Colors.white, fontSize: 16)),
-            const SizedBox(height: 8),
-            Text(controller.roomName, style: const TextStyle(color: Colors.white38, fontSize: 12)),
           ],
         ),
       );
     }
 
-    // 2. معالجة حالة الخطأ (Professional Error UI)
     if (controller.errorMessage != null) {
       return Center(
         child: Padding(
@@ -173,9 +193,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
                 onPressed: () => controller.connectToRoom(controller.roomName),
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text("إعادة محاولة الاتصال"),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
               ),
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text("خروج", style: TextStyle(color: Colors.white54))),
             ],
           ),
         ),
@@ -199,9 +217,14 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
 
         ..._reactions,
 
-        const Align(
+        Align(
           alignment: Alignment.bottomCenter,
-          child: ControlsBar(),
+          child: ControlsBar(
+            micKey: _micKey,
+            camKey: _camKey,
+            chatKey: _chatKey,
+            handKey: _handKey,
+          ),
         ),
 
         if (controller.isChatOpen) _buildFeaturePanel(const ChatPanel(), isMobile, size),
@@ -228,9 +251,14 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
-            onPressed: () => _showExitConfirmation(context, controller),
+          Showcase(
+            key: _exitKey,
+            title: 'مغادرة الحصة',
+            description: 'عند انتهاء الحصة، يمكنك الخروج من هنا.',
+            child: IconButton(
+              icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+              onPressed: () => _showExitConfirmation(context, controller),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -251,20 +279,6 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
               ],
             ),
           ),
-          if (controller.isBreakoutRoom && !controller.isTeacher)
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: ElevatedButton.icon(
-                onPressed: controller.returnToMainRoom,
-                icon: const Icon(Icons.home_rounded, size: 16, color: Colors.white),
-                label: const Text("العودة للقاعة الرئيسية", style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                ),
-              ),
-            ),
         ],
       ),
     );

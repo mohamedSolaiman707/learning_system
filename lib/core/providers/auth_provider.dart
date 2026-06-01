@@ -1,42 +1,67 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthProvider extends ChangeNotifier {
   final _supabase = Supabase.instance.client;
   User? _user;
   Map<String, dynamic>? _profile;
   bool _isLoading = false;
+  bool _hasSeenTour = false;
 
   User? get user => _user;
   Map<String, dynamic>? get profile => _profile;
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _user != null;
+  bool get hasSeenTour => _hasSeenTour;
 
   String get role => _profile?['role'] ?? _user?.userMetadata?['role'] ?? 'student';
   String? get externalId => _profile?['external_id'];
 
   AuthProvider() {
+    _init();
+  }
+
+  Future<void> _init() async {
     _user = _supabase.auth.currentUser;
     if (_user != null) {
       _initializeProfileFromMetadata();
-      _loadProfile();
+      await _loadProfile();
+      await _checkTourStatus();
     }
-    
-    _supabase.auth.onAuthStateChange.listen((data) {
+
+    _supabase.auth.onAuthStateChange.listen((data) async {
       final newUser = data.session?.user;
       if (newUser != null) {
         if (newUser.id != _user?.id) {
           _user = newUser;
           _initializeProfileFromMetadata();
-          _loadProfile();
+          await _loadProfile();
+          await _checkTourStatus();
         }
       } else {
         _user = null;
         _profile = null;
+        _hasSeenTour = false;
         notifyListeners();
       }
     });
+  }
+
+  Future<void> _checkTourStatus() async {
+    if (_user == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    _hasSeenTour = prefs.getBool('tour_seen_${_user!.id}') ?? false;
+    notifyListeners();
+  }
+
+  Future<void> completeTour() async {
+    if (_user == null) return;
+    _hasSeenTour = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('tour_seen_${_user!.id}', true);
+    notifyListeners();
   }
 
   void _initializeProfileFromMetadata() {
@@ -87,7 +112,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       final fileExt = fileName.split('.').last;
       final path = '${_user!.id}/avatar_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
-      
+
       await _supabase.storage.from('avatars').uploadBinary(
         path,
         bytes,
@@ -95,7 +120,7 @@ class AuthProvider extends ChangeNotifier {
       );
 
       final imageUrl = _supabase.storage.from('avatars').getPublicUrl(path);
-      
+
       await updateProfile({'avatar_url': imageUrl});
       return imageUrl;
     } catch (e) {
@@ -150,7 +175,7 @@ class AuthProvider extends ChangeNotifier {
       };
 
       await _supabase.from('profiles').upsert(profileData);
-      
+
       _profile = profileData;
       notifyListeners();
       return true;
@@ -175,14 +200,14 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         password: password,
         data: {
-          'full_name': fullName, 
+          'full_name': fullName,
           'role': 'student',
         },
       );
 
       if (response.user != null) {
         _user = response.user;
-        
+
         final profileData = {
           'id': response.user!.id,
           'full_name': fullName,
@@ -194,6 +219,7 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
 
         await _supabase.from('profiles').upsert(profileData);
+        await _checkTourStatus();
         return true;
       }
       return false;
@@ -213,11 +239,12 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         password: password,
       );
-      
+
       if (response.user != null) {
         _user = response.user;
-        _initializeProfileFromMetadata(); 
-        await _loadProfile(); 
+        _initializeProfileFromMetadata();
+        await _loadProfile();
+        await _checkTourStatus();
         return true;
       }
       return false;
@@ -233,6 +260,7 @@ class AuthProvider extends ChangeNotifier {
     await _supabase.auth.signOut();
     _user = null;
     _profile = null;
+    _hasSeenTour = false;
     notifyListeners();
   }
 }

@@ -262,14 +262,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_iconly:
-    dependency: "direct main"
-    description:
-      name: flutter_iconly
-      sha256: fabcbd59d93666aed6b0f7b4285776686cf60d07447d4afbffee92635d5ed785
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.2"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -742,7 +734,7 @@ packages:
     source: hosted
     version: "0.3.2"
   shared_preferences:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: shared_preferences
       sha256: c3025c5534b01739267eb7d76959bbc25a6d10f6988e1c2a3036940133dd10bf
@@ -802,6 +794,14 @@ packages:
     description:
       name: shimmer
       sha256: "5f88c883a22e9f9f299e5ba0e4f7e6054857224976a5d9f839d4ebdc94a14ac9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.0"
+  showcaseview:
+    dependency: "direct main"
+    description:
+      name: showcaseview
+      sha256: f236c1f44b286e1ba888f8701adca067af92c33e29ea937d0fe9b4a29d4cd41e
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"

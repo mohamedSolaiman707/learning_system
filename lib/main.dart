@@ -92,13 +92,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
     super.initState();
     _capturedParams = _extractParams();
 
-    if (_capturedParams!.containsKey('access_token') || 
-        _capturedParams!.containsKey('session_id') || 
-        _capturedParams!.containsKey('sessionId') || 
+    if (_capturedParams!.containsKey('access_token') ||
+        _capturedParams!.containsKey('session_id') ||
+        _capturedParams!.containsKey('sessionId') ||
         _capturedParams!.containsKey('lms_id')) {
       _isRedirecting = true;
     }
-    
+
     // مراقبة حالة المصادقة لمعالجة الرابط فور تسجيل الدخول
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndProcessLink();
@@ -128,10 +128,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   void _checkAndProcessLink() {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
     // إذا تغيرت حالة المستخدم، نحاول معالجة الرابط
     authProvider.addListener(_handleAuthChange);
-    
+
     // محاولة أولية
     _handleIncomingLink();
   }
@@ -211,7 +211,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
         Navigator.of(context).pushNamedAndRemoveUntil(
           AppRoutes.videoRoom,
-          (route) => false,
+              (route) => false,
           arguments: {
             'roomName': roomName ?? 'room_${sessionData['id']}',
             'title': sessionData['subject_name'] ?? sessionData['title'] ?? 'قاعة تعليمية',
@@ -226,7 +226,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     } catch (e) {
       debugPrint("Link Processing Error: $e");
     }
-    
+
     if (mounted) setState(() => _isRedirecting = false);
   }
 

@@ -186,7 +186,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 color: Colors.blue.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: SvgPicture.asset('assets/icons/logo.svg', width: 40, height: 40, 
+              child: SvgPicture.asset('assets/icons/logo.svg', width: 40, height: 40,
                   placeholderBuilder: (_) => const Icon(Icons.school, color: Colors.blue)),
             ),
           ),
@@ -194,7 +194,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const Text("إنشاء حساب جديد", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
           const Text("سجل بياناتك للوصول إلى كافة الدروس والمصادر", style: TextStyle(color: Colors.grey)),
           const SizedBox(height: 32),
-          
+
           CustomTextField(
             controller: _nameController,
             hintText: "الاسم الكامل",
@@ -203,7 +203,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             validator: (v) => (v == null || v.isEmpty) ? "يرجى إدخال اسمك" : null,
           ),
           const SizedBox(height: 16),
-          
+
           CustomTextField(
             controller: _emailController,
             hintText: "البريد الإلكتروني",
@@ -236,7 +236,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
             validator: (v) => (v == null || v.length < 6) ? "يجب أن تكون 6 أحرف على الأقل" : null,
           ),
-          
+
           const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
@@ -247,16 +247,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 elevation: 0,
               ),
-              child: _isLoading 
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text("إنشاء حساب", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              child: _isLoading
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text("إنشاء حساب", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ),
-          
+
           const SizedBox(height: 24),
           OutlinedButton.icon(
             onPressed: () {
-               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("سيتم تفعيل الدخول الموحد عبر Blackboard قريباً")));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("سيتم تفعيل الدخول الموحد عبر Blackboard قريباً")));
             },
             icon: const Icon(Icons.account_balance_rounded, size: 20),
             label: const Text("الدخول عبر حساب الجامعة"),

@@ -105,10 +105,12 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
                }
              }
           }
-          if (mounted) setState(() {
+          if (mounted) {
+            setState(() {
             _pendingAssignmentsCount = pending;
             _completedAssignmentsCount = completed;
           });
+          }
         }
       }
     } catch (e) {
@@ -116,72 +118,87 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
     }
   }
 
-  Future<void> _joinActiveSession(SessionModel session) async {
-    if (_isJoining) return; 
-    
-    setState(() => _isJoining = true);
-    HapticFeedback.mediumImpact();
+  Future<void> _joinActiveSession(SessionModel session) async {    if (_isJoining) return;
 
+  setState(() => _isJoining = true);
+  HapticFeedback.mediumImpact();
+
+  try {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final db = Provider.of<DatabaseService>(context, listen: false);
+
+    // 1. فحص سريع جداً لحالة الطرد (بدون تعطيل الدخول إذا فشل النت)
+    bool isKicked = false;
     try {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      final db = Provider.of<DatabaseService>(context, listen: false);
-      
-      // 1. التحقق من الطرد مع "مهلة زمنية" (Timeout) لضمان عدم تعليق الزر
-      final isKicked = await db.isStudentKicked(session.id, auth.user!.id)
-          .timeout(const Duration(seconds: 5), onTimeout: () => false);
-
-      if (isKicked) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("عذراً، لا يمكنك دخول هذه الحصة بسبب طردك مسبقاً 🚫", style: TextStyle(fontWeight: FontWeight.bold)),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        setState(() => _isJoining = false);
-        return;
-      }
-
-      // 2. تسجيل الانضمام
-      await db.enrollStudentBySessionId(auth.user!.id, session.id)
-          .timeout(const Duration(seconds: 5), onTimeout: () {});
-      
-      if (!mounted) return;
-
-      // 3. التوجيه الفوري
-      if (session.status == 'waiting') {
-        await Navigator.push(context, MaterialPageRoute(
-          builder: (context) => WaitingRoomScreen(
-            session: session,
-            userName: auth.profile?['full_name'] ?? "الطالب",
-            userId: auth.user!.id,
-          ),
-        ));
-      } else {
-        await Navigator.push(context, MaterialPageRoute(
-          builder: (context) => VideoRoomScreen(
-            title: session.subjectName,
-            roomName: "room_${session.id}",
-            userName: auth.profile?['full_name'] ?? "الطالب",
-            userId: auth.user!.id,
-            isTeacher: false,
-            sessionId: session.id,
-          ),
-        ));
-      }
+      // نضع مهلة ثانية واحدة فقط للفحص، إذا لم يرد السيرفر نفترض أنه غير مطرود وندخله
+      isKicked = await db.isStudentKicked(session.id, auth.user!.id)
+          .timeout(const Duration(seconds: 1));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("فشل الاتصال، يرجى المحاولة مرة أخرى"), backgroundColor: Colors.orange),
-        );
-      }
-    } finally {
-      // نضمن دائماً إعادة تفعيل الزر عند العودة أو الفشل
-      if (mounted) setState(() => _isJoining = false);
+      isKicked = false;
+    }
+
+    if (isKicked) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("عذراً، لا يمكنك دخول هذه الحصة بسبب طردك مسبقاً 🚫"),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      setState(() => _isJoining = false);
+      return;
+    }
+
+    // 2. تسجيل الانضمام في قاعدة البيانات (في الخلفية تماماً)
+    // لا نستخدم await هنا لكي لا ينتظر الطالب استجابة قاعدة البيانات
+    db.enrollStudentBySessionId(auth.user!.id, session.id).catchError((e) {
+      debugPrint("Silent enrollment error: $e");
+    });
+
+    if (!mounted) return;
+
+    // 3. الانتقال الفوري للقاعة
+    final String userName = auth.profile?['full_name'] ?? "الطالب";
+    final String userId = auth.user!.id;
+
+    if (session.status == 'waiting') {
+      Navigator.push(context, MaterialPageRoute(
+        builder: (context) => WaitingRoomScreen(
+          session: session,
+          userName: userName,
+          userId: userId,
+        ),
+      ));
+    } else {
+      Navigator.push(context, MaterialPageRoute(
+        builder: (context) => VideoRoomScreen(
+          title: session.subjectName,
+          roomName: "room_${session.id}",
+          userName: userName,
+          userId: userId,
+          isTeacher: false,
+          sessionId: session.id,
+        ),
+      ));
+    }
+  } catch (e) {
+    // في حالة حدوث أي خطأ كلي، نظهر رسالة ولكن نعيد تفعيل الزر
+    debugPrint("Join Error: $e");
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("يرجى التأكد من جودة الإنترنت والمحاولة ثانية")),
+      );
+    }
+  } finally {
+    // التأكد من إزالة حالة التحميل دائماً
+    if (mounted) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _isJoining = false);
+      });
     }
   }
-
+  }
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -242,18 +259,14 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
           
           if (_isJoining)
             Container(
-              color: Colors.black.withOpacity(0.3),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
-                  child: const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(strokeWidth: 3),
-                      SizedBox(height: 16),
-                      Text("جاري الدخول...", style: TextStyle(fontWeight: FontWeight.bold)),
-                    ],
+              color: Colors.black26,
+              child: const Center(
+                child: Card(
+                  elevation: 8,
+                  shape: CircleBorder(),
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: CircularProgressIndicator(),
                   ),
                 ),
               ),

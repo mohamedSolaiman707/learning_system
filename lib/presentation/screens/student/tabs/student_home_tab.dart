@@ -70,46 +70,52 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
         final activeResponse = await db.getActiveSessions();
 
         if (mounted) {
-          setState(() {
-            final now = DateTime.now();
-            _enrolledSessions = enrolledResponse
+          final now = DateTime.now();
+          final List<SessionModel> tempEnrolled = enrolledResponse
                 .map((e) => SessionModel.fromMap(e['sessions']))
                 .where((s) => s.endTime.isAfter(now)) 
                 .toList();
             
-            _enrolledSessions.sort((a, b) => a.startTime.compareTo(b.startTime));
-            _allActiveSessions = activeResponse.map((e) => SessionModel.fromMap(e)).toList();
+          tempEnrolled.sort((a, b) => a.startTime.compareTo(b.startTime));
+          final List<SessionModel> tempActive = activeResponse.map((e) => SessionModel.fromMap(e)).toList();
 
-            try {
-              _nextSession = _enrolledSessions.firstWhere(
-                (s) => (s.isLive || s.isActive) && s.endTime.isAfter(now),
-                orElse: () => _enrolledSessions.firstWhere((s) => s.endTime.isAfter(now)),
-              );
-            } catch (_) {
-              _nextSession = null;
-            }
-            
-            if (initial) _isLoading = false;
-          });
+          SessionModel? tempNext;
+          try {
+            tempNext = tempEnrolled.firstWhere(
+              (s) => (s.isLive || s.isActive) && s.endTime.isAfter(now),
+              orElse: () => tempEnrolled.firstWhere((s) => s.endTime.isAfter(now)),
+            );
+          } catch (_) {
+            tempNext = null;
+          }
 
           int pending = 0;
           int completed = 0;
-          for (var session in _enrolledSessions) {
-             final assignments = await assignService.getAssignments(session.id);
-             for (var assignment in assignments) {
-               final submission = await assignService.getStudentSubmission(assignment.id, auth.user!.id);
-               if (submission == null) {
-                 pending++;
-               } else {
-                 completed++;
+          
+          // تحديث الواجهة بالبيانات الأساسية أولاً لسرعة الـ UX
+          setState(() {
+            _enrolledSessions = tempEnrolled;
+            _allActiveSessions = tempActive;
+            _nextSession = tempNext;
+            if (initial) _isLoading = false;
+          });
+
+          // حساب الواجبات بشكل منفصل لكي لا تعطل الصفحة
+          for (var session in tempEnrolled.take(3)) {
+             try {
+               final assignments = await assignService.getAssignments(session.id).timeout(const Duration(seconds: 3));
+               for (var assignment in assignments) {
+                 final submission = await assignService.getStudentSubmission(assignment.id, auth.user!.id).timeout(const Duration(seconds: 2));
+                 if (submission == null) pending++; else completed++;
                }
-             }
+             } catch (_) {}
           }
+          
           if (mounted) {
             setState(() {
-            _pendingAssignmentsCount = pending;
-            _completedAssignmentsCount = completed;
-          });
+              _pendingAssignmentsCount = pending;
+              _completedAssignmentsCount = completed;
+            });
           }
         }
       }
@@ -118,87 +124,79 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
     }
   }
 
-  Future<void> _joinActiveSession(SessionModel session) async {    if (_isJoining) return;
+  Future<void> _joinActiveSession(SessionModel session) async {
+    if (_isJoining) return;
+    
+    setState(() => _isJoining = true);
+    HapticFeedback.mediumImpact();
 
-  setState(() => _isJoining = true);
-  HapticFeedback.mediumImpact();
-
-  try {
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    final db = Provider.of<DatabaseService>(context, listen: false);
-
-    // 1. فحص سريع جداً لحالة الطرد (بدون تعطيل الدخول إذا فشل النت)
-    bool isKicked = false;
     try {
-      // نضع مهلة ثانية واحدة فقط للفحص، إذا لم يرد السيرفر نفترض أنه غير مطرود وندخله
-      isKicked = await db.isStudentKicked(session.id, auth.user!.id)
-          .timeout(const Duration(seconds: 1));
-    } catch (e) {
-      isKicked = false;
-    }
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final db = Provider.of<DatabaseService>(context, listen: false);
+      
+      // 1. فحص الطرد بمهلة زمنية قصيرة جداً (ثانية واحدة)
+      bool isKicked = false;
+      try {
+        isKicked = await db.isStudentKicked(session.id, auth.user!.id)
+            .timeout(const Duration(seconds: 1));
+      } catch (e) {
+        isKicked = false; // إذا تأخر الرد، نفترض أنه غير مطرود لكي لا نعطله
+      }
 
-    if (isKicked) {
+      if (isKicked) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("عذراً، لا يمكنك دخول هذه الحصة بسبب طردك مسبقاً 🚫"),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => _isJoining = false);
+        return;
+      }
+
+      // 2. تسجيل الانضمام في الخلفية (بدون await لسرعة الدخول)
+      db.enrollStudentBySessionId(auth.user!.id, session.id).catchError((e) => debugPrint("Silent error: $e"));
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("عذراً، لا يمكنك دخول هذه الحصة بسبب طردك مسبقاً 🚫"),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      setState(() => _isJoining = false);
-      return;
-    }
 
-    // 2. تسجيل الانضمام في قاعدة البيانات (في الخلفية تماماً)
-    // لا نستخدم await هنا لكي لا ينتظر الطالب استجابة قاعدة البيانات
-    db.enrollStudentBySessionId(auth.user!.id, session.id).catchError((e) {
-      debugPrint("Silent enrollment error: $e");
-    });
+      // 3. التوجيه الفوري
+      final String userName = auth.profile?['full_name'] ?? "الطالب";
+      final String userId = auth.user!.id;
 
-    if (!mounted) return;
-
-    // 3. الانتقال الفوري للقاعة
-    final String userName = auth.profile?['full_name'] ?? "الطالب";
-    final String userId = auth.user!.id;
-
-    if (session.status == 'waiting') {
-      Navigator.push(context, MaterialPageRoute(
-        builder: (context) => WaitingRoomScreen(
-          session: session,
-          userName: userName,
-          userId: userId,
-        ),
-      ));
-    } else {
-      Navigator.push(context, MaterialPageRoute(
-        builder: (context) => VideoRoomScreen(
-          title: session.subjectName,
-          roomName: "room_${session.id}",
-          userName: userName,
-          userId: userId,
-          isTeacher: false,
-          sessionId: session.id,
-        ),
-      ));
-    }
-  } catch (e) {
-    // في حالة حدوث أي خطأ كلي، نظهر رسالة ولكن نعيد تفعيل الزر
-    debugPrint("Join Error: $e");
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("يرجى التأكد من جودة الإنترنت والمحاولة ثانية")),
-      );
-    }
-  } finally {
-    // التأكد من إزالة حالة التحميل دائماً
-    if (mounted) {
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) setState(() => _isJoining = false);
-      });
+      if (session.status == 'waiting') {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (context) => WaitingRoomScreen(session: session, userName: userName, userId: userId),
+        ));
+      } else {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (context) => VideoRoomScreen(
+            title: session.subjectName,
+            roomName: "room_${session.id}",
+            userName: userName,
+            userId: userId,
+            isTeacher: false,
+            sessionId: session.id,
+          ),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("يرجى المحاولة مرة أخرى"), backgroundColor: Colors.orange),
+        );
+      }
+    } finally {
+      if (mounted) {
+        // تأخير بسيط لإخفاء اللودر لضمان سلاسة الانتقال
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) setState(() => _isJoining = false);
+        });
+      }
     }
   }
-  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -259,7 +257,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
           
           if (_isJoining)
             Container(
-              color: Colors.black26,
+              color: Colors.black12,
               child: const Center(
                 child: Card(
                   elevation: 8,

@@ -258,7 +258,6 @@ class DatabaseService {
     }
   }
 
-  // الميثود اللي كانت بتسبب المشكلة - خليناها ترجع List
   Stream<List<Map<String, dynamic>>> watchSessionStatus(String sessionId) {
     return _supabase.from('sessions').stream(primaryKey: ['id']).eq('id', sessionId);
   }
@@ -275,9 +274,40 @@ class DatabaseService {
     }
   }
 
-  // --- Attendance Features ---
+  // --- Attendance & Kick Features ---
+  
+  Future<bool> isStudentKicked(String sessionId, String studentId) async {
+    try {
+      final res = await _supabase
+          .from('attendance')
+          .select('status')
+          .eq('session_id', sessionId)
+          .eq('student_id', studentId)
+          .maybeSingle();
+      return res != null && res['status'] == 'kicked';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> markStudentAsKicked(String sessionId, String studentId) async {
+    try {
+      await _supabase.from('attendance').upsert({
+        'session_id': sessionId,
+        'student_id': studentId,
+        'status': 'kicked',
+        'left_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'session_id, student_id');
+    } catch (e) {
+      debugPrint("Error marking student as kicked: $e");
+    }
+  }
+
   Future<void> logStudentEntry(String sessionId, String studentId) async {
     try {
+      // نتحقق أولاً هل هو مطرود؟ إذا نعم لا نسجل دخول جديد
+      if (await isStudentKicked(sessionId, studentId)) return;
+
       await _supabase.from('attendance').upsert({
         'session_id': sessionId,
         'student_id': studentId,
@@ -291,6 +321,9 @@ class DatabaseService {
 
   Future<void> logStudentExit(String sessionId, String studentId) async {
     try {
+      // لا نحدث الحالة إذا كان مطروداً (نريد الحفاظ على حالة kicked)
+      if (await isStudentKicked(sessionId, studentId)) return;
+
       final record = await _supabase.from('attendance')
           .select('joined_at')
           .eq('session_id', sessionId)
@@ -305,6 +338,7 @@ class DatabaseService {
         await _supabase.from('attendance').update({
           'left_at': exitTime.toIso8601String(),
           'total_duration_minutes': duration,
+          'status': 'away' // تغيير الحالة إلى غادر (وليس مطرود)
         }).eq('session_id', sessionId).eq('student_id', studentId);
       }
     } catch (e) {

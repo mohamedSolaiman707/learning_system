@@ -787,9 +787,22 @@ class VideoRoomController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void kickParticipant(String targetUserId) {
+  void kickParticipant(String targetUserId) async {
     if (!isTeacher || !_isConnected) return;
+    
+    // 1. إرسال إشارة الطرد عبر LiveKit
     sendData({'type': 'kick_participant', 'target': targetUserId});
+    
+    // 2. تسجيل الطرد في قاعدة البيانات لمنع إعادة الدخول
+    if (sessionId != null) {
+      // استخراج الـ base userId من الـ identity (التي قد تحتوي على suffix)
+      String baseId = targetUserId;
+      if (targetUserId.contains('_')) {
+        baseId = targetUserId.split('_').first;
+      }
+      await DatabaseService().markStudentAsKicked(sessionId!, baseId);
+    }
+    
     onNotification?.call("تم استبعاد المشارك من القاعة", Colors.blueGrey);
   }
 

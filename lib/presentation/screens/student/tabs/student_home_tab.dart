@@ -120,6 +120,27 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final db = Provider.of<DatabaseService>(context, listen: false);
     
+    // 1. التحقق مما إذا كان الطالب مطروداً مسبقاً
+    final isKicked = await db.isStudentKicked(session.id, auth.user!.id);
+    if (isKicked) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.white),
+              SizedBox(width: 12),
+              Text("غير مسموح لك بدخول البث بسبب طردك مسبقاً", style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        ),
+      );
+      return;
+    }
+
     await db.enrollStudentBySessionId(auth.user!.id, session.id);
     
     if (!mounted) return;
@@ -220,7 +241,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
           child: Hero(
             tag: 'profile_pic',
             child: CircleAvatar(
-              backgroundColor: Colors.blue.shade50,
+              backgroundColor: Colors.blue.withOpacity(0.1),
               child: Text(name.isNotEmpty ? name[0].toUpperCase() : "U", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
             ),
           ),

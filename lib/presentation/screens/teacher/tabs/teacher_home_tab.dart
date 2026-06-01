@@ -83,6 +83,59 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
+  // ميزة جديدة: بدء بث مباشر فوري
+  Future<void> _createInstantLive() async {
+    HapticFeedback.heavyImpact();
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    
+    // إظهار واجهة تحميل بسيطة
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+    );
+
+    try {
+      final now = DateTime.now().toUtc();
+      final String teacherName = auth.profile?['full_name'] ?? "المدرس";
+      
+      final sessionData = {
+        'subject_name': "بث مباشر سريع - ${intl.DateFormat('jm').format(DateTime.now())}",
+        'teacher_id': auth.user!.id,
+        'start_time': now.toIso8601String(),
+        'end_time': now.add(const Duration(hours: 1)).toIso8601String(),
+        'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString(),
+        'status': 'active',
+        'is_recording_enabled': true,
+      };
+
+      final newSessionMap = await db.saveSession(sessionData);
+      
+      if (newSessionMap != null) {
+        final newSession = SessionModel.fromMap(newSessionMap);
+        await db.toggleRoomStatus(newSession.id, true);
+        
+        if (!mounted) return;
+        Navigator.pop(context); // إغلاق الـ Loader
+        
+        Navigator.push(context, MaterialPageRoute(
+          builder: (context) => VideoRoomScreen(
+            title: newSession.subjectName,
+            roomName: "room_${newSession.id}",
+            userName: "أ. $teacherName",
+            userId: auth.user!.id,
+            isTeacher: true,
+            sessionId: newSession.id,
+          )
+        ));
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل بدء البث السريع")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -147,6 +200,18 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         ),
       ),
       actions: [
+        // أيقونة البث المباشر الفوري
+        Tooltip(
+          message: "بدء بث مباشر الآن",
+          child: IconButton(
+            onPressed: _createInstantLive,
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
+              child: const Icon(Icons.bolt_rounded, color: Colors.red, size: 22),
+            ),
+          ),
+        ),
         IconButton(
           onPressed: _showAddSessionDialog,
           icon: Container(

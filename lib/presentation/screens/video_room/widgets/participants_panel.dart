@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:provider/provider.dart';
 import '../video_room_controller.dart';
 
 class ParticipantsPanel extends StatelessWidget {
-  final VideoRoomController controller;
-
-  const ParticipantsPanel({super.key, required this.controller});
+  const ParticipantsPanel({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Explicitly typing the list as List<Participant> to avoid incorrect type inference
+    final controller = context.watch<VideoRoomController>();
+    
+    // تحديد النوع صراحة كـ List<Participant> لإصلاح خطأ DisposableChangeNotifier
     final List<Participant> participants = [
       if (controller.room?.localParticipant != null)
         controller.room!.localParticipant!,
@@ -17,10 +18,10 @@ class ParticipantsPanel extends StatelessWidget {
     ];
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.horizontal(left: Radius.circular(30)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,6 +56,21 @@ class ParticipantsPanel extends StatelessWidget {
             _TeacherControls(controller: controller),
             const Divider(height: 30),
           ],
+          
+          if (controller.isTeacher && controller.isBreakoutActive) ...[
+            const Text(
+              "المجموعات النشطة",
+              style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.blue),
+            ),
+            const SizedBox(height: 10),
+            ...controller.breakoutGroups.entries.map((entry) => _BreakoutGroupTile(
+              groupNum: entry.key,
+              students: entry.value,
+              controller: controller,
+            )),
+            const Divider(height: 30),
+          ],
+
           Expanded(
             child: ListView.separated(
               itemCount: participants.length,
@@ -114,12 +130,19 @@ class _TeacherControls extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _ActionButton(
-                label: "غرف التقسيم",
-                icon: Icons.groups_outlined,
-                color: const Color(0xFF102A43),
-                onTap: () => _showBreakoutDialog(context),
-              ),
+              child: controller.isBreakoutActive 
+                ? _ActionButton(
+                    label: "إنهاء المجموعات",
+                    icon: Icons.stop_circle_outlined,
+                    color: Colors.orange.shade800,
+                    onTap: () => controller.endBreakoutRooms(),
+                  )
+                : _ActionButton(
+                    label: "غرف التقسيم",
+                    icon: Icons.groups_outlined,
+                    color: const Color(0xFF102A43),
+                    onTap: () => _showBreakoutDialog(context),
+                  ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -127,7 +150,8 @@ class _TeacherControls extends StatelessWidget {
                 label: "تنزيل الغياب",
                 icon: Icons.picture_as_pdf_outlined,
                 color: Colors.red.shade700,
-                onTap: () {}, // This would trigger PDF generation
+                isLoading: controller.isProcessing,
+                onTap: () => controller.downloadAttendanceReport(),
               ),
             ),
           ],
@@ -256,6 +280,64 @@ class _TeacherControls extends StatelessWidget {
   }
 }
 
+class _BreakoutGroupTile extends StatelessWidget {
+  final int groupNum;
+  final List<String> students;
+  final VideoRoomController controller;
+
+  const _BreakoutGroupTile({
+    required this.groupNum,
+    required this.students,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "مجموعة $groupNum",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+              ),
+              Text(
+                "${students.length} طلاب",
+                style: const TextStyle(fontSize: 12, color: Colors.blueGrey, fontFamily: 'Cairo'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            students.join("، "),
+            style: const TextStyle(fontSize: 11, color: Colors.black54, fontFamily: 'Cairo'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () => controller.joinBreakoutRoom(groupNum),
+            child: const Text(
+              "انضمام للمتابعة",
+              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'Cairo'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ParticipantTile extends StatelessWidget {
   final Participant participant;
   final VideoRoomController controller;
@@ -267,7 +349,6 @@ class _ParticipantTile extends StatelessWidget {
         controller.remoteHandStates[participant.identity] ?? false;
     final bool isSpotlight = controller.spotlightUserId == participant.identity;
 
-    // Fixed: In LiveKit 2.x, name is non-nullable.
     final String displayName = participant.name.isNotEmpty ? participant.name : participant.identity;
     final String initial = displayName.isNotEmpty ? displayName[0] : "?";
 
@@ -417,7 +498,7 @@ class _ParticipantTile extends StatelessWidget {
                     children: [
                       const Icon(Icons.gavel, size: 18, color: Colors.red),
                       const SizedBox(width: 8),
-                      Text(
+                      const Text(
                         "طرد من القاعة",
                         style: TextStyle(
                           color: Colors.red,
@@ -503,18 +584,24 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
-  final bool isFullWidth;
+  final bool isLoading;
   const _ActionButton({
     required this.label,
     required this.icon,
     required this.color,
     required this.onTap,
-    this.isFullWidth = false,
+    this.isLoading = false,
   });
   @override
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
-      icon: Icon(icon, size: 18),
+      icon: isLoading 
+          ? const SizedBox(
+              width: 18, 
+              height: 18, 
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+            )
+          : Icon(icon, size: 18),
       label: Text(
         label,
         style: const TextStyle(
@@ -522,7 +609,7 @@ class _ActionButton extends StatelessWidget {
           fontFamily: 'Cairo',
         ),
       ),
-      onPressed: onTap,
+      onPressed: isLoading ? null : onTap,
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
         foregroundColor: Colors.white,

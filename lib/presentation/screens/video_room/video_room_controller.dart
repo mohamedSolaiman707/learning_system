@@ -327,6 +327,18 @@ class VideoRoomController extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
+      // التحقق من الطرد قبل محاولة الاتصال
+      if (!isTeacher && sessionId != null) {
+        final isKicked = await DatabaseService().isStudentKicked(sessionId!, userId);
+        if (isKicked) {
+          _errorMessage = "تم استبعادك من هذه القاعة ولا يمكنك الدخول.";
+          _isLoading = false;
+          notifyListeners();
+          onSessionEnded?.call("تم استبعادك من القاعة.");
+          return;
+        }
+      }
+
       final suffix = DateTime.now().millisecondsSinceEpoch.toString().substring(
         10,
       );
@@ -736,17 +748,19 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void _handleMicControl(Map<String, dynamic> data) {
-    if (!isTeacher && _isMe(data['target'])) {
+    if (!isTeacher && (data['target'] == null || _isMe(data['target']))) {
       _isMicEnabled = data['value'];
       _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled);
+      _isMicLocked = data['lock'] ?? false;
       notifyListeners();
     }
   }
 
   void _handleCamControl(Map<String, dynamic> data) {
-    if (!isTeacher && _isMe(data['target'])) {
+    if (!isTeacher && (data['target'] == null || _isMe(data['target']))) {
       _isCamEnabled = data['value'];
       _room?.localParticipant?.setCameraEnabled(_isCamEnabled);
+      _isCamLocked = data['lock'] ?? false;
       notifyListeners();
     }
   }
@@ -969,6 +983,28 @@ class VideoRoomController extends ChangeNotifier {
       // ملحوظة: يمكنك جعل الزر يفتح خيارات (إيقاف نهائي / إيقاف مؤقت)
     } else {
       await startRecording();
+    }
+  }
+
+  Future<void> downloadAttendanceReport() async {
+    if (sessionId == null || _isProcessing) return;
+    _isProcessing = true;
+    notifyListeners();
+    try {
+      final attendanceData = await DatabaseService().getSessionAttendance(
+        sessionId!,
+      );
+      await AttendancePdfService().generateReport(
+        subjectName: title,
+        teacherName: userName,
+        studentsData: attendanceData,
+      );
+      onNotification?.call("تم استخراج تقرير الحضور ✅", Colors.green);
+    } catch (e) {
+      onNotification?.call("فشل استخراج التقرير", Colors.red);
+    } finally {
+      _isProcessing = false;
+      notifyListeners();
     }
   }
 

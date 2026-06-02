@@ -251,7 +251,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
 
         if (controller.isChatOpen) _buildFeaturePanel(const ChatPanel(), isMobile, size),
         if (controller.isQAOpen) _buildFeaturePanel(const QAPanel(), isMobile, size),
-        if (controller.isParticipantsOpen) _buildFeaturePanel( ParticipantsPanel(controller: controller ,), isMobile, size),
+        if (controller.isParticipantsOpen) _buildFeaturePanel( const ParticipantsPanel(), isMobile, size),
 
         if (controller.isProcessing)
           Container(

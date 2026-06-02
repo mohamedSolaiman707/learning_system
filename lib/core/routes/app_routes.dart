@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../presentation/screens/auth/login_screen.dart';
 import '../../presentation/screens/auth/register_screen.dart';
 import '../../presentation/screens/splash/splash_screen.dart';
@@ -6,6 +7,7 @@ import '../../presentation/screens/student/student_main_layout.dart';
 import '../../presentation/screens/teacher/teacher_main_layout.dart';
 import '../../presentation/screens/admin/admin_dashboard.dart';
 import '../../presentation/screens/video_room/video_room_screen.dart';
+import '../../presentation/screens/video_room/video_room_controller.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -23,20 +25,36 @@ class AppRoutes {
     studentHome: (context) => const StudentMainLayout(),
     teacherHome: (context) => const TeacherMainLayout(),
     adminHome: (context) => const AdminDashboard(),
-    // ملاحظة: VideoRoom تحتاج لبارامترات، سنعالجها عبر onGenerateRoute أو تمرير Arguments
   };
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     if (settings.name == videoRoom) {
       final args = settings.arguments as Map<String, dynamic>?;
+      final String roomName = args?['roomName'] ?? '';
+      final String userName = args?['userName'] ?? '';
+      final String userId = args?['userId'] ?? '';
+      final bool isTeacher = args?['isTeacher'] ?? false;
+      final String? sessionId = args?['sessionId'];
+      final String title = args?['title'] ?? 'غرفة الفيديو';
+
       return MaterialPageRoute(
-        builder: (context) => VideoRoomScreen(
-          roomName: args?['roomName'] ?? '',
-          userName: args?['userName'] ?? '', // تأكد من الاسم
-          userId: args?['userId'] ?? '',     // تمرير الـ ID
-          isTeacher: args?['isTeacher'] ?? false,
-          sessionId: args?['sessionId'] ?? '',
-          title: args?['title'] ?? '',
+        builder: (context) => ChangeNotifierProvider(
+          create: (_) => VideoRoomController(
+            title: title,
+            roomName: roomName,
+            userName: userName,
+            userId: userId,
+            isTeacher: isTeacher,
+            sessionId: sessionId,
+          ),
+          child: VideoRoomScreen(
+            title: title,
+            roomName: roomName,
+            userName: userName,
+            userId: userId,
+            isTeacher: isTeacher,
+            sessionId: sessionId,
+          ),
         ),
       );
     }

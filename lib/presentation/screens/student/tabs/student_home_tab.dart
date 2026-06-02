@@ -12,6 +12,7 @@ import '../../../../core/models/session_model.dart';
 import '../widgets/next_class_card.dart';
 import '../widgets/upcoming_class_item.dart';
 import '../../video_room/video_room_screen.dart';
+import '../../video_room/video_room_controller.dart';
 import '../../video_room/waiting_room_screen.dart';
 import '../assignments/student_assignments_screen.dart';
 import '../resources/student_resources_screen.dart';
@@ -166,13 +167,23 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
         ));
       } else {
         Navigator.push(context, MaterialPageRoute(
-          builder: (context) => VideoRoomScreen(
-            title: session.subjectName,
-            roomName: "room_${session.id}",
-            userName: userName,
-            userId: userId,
-            isTeacher: false,
-            sessionId: session.id,
+          builder: (context) => ChangeNotifierProvider(
+            create: (_) => VideoRoomController(
+              title: session.subjectName,
+              roomName: "room_${session.id}",
+              userName: userName,
+              userId: userId,
+              isTeacher: false,
+              sessionId: session.id,
+            ),
+            child: VideoRoomScreen(
+              title: session.subjectName,
+              roomName: "room_${session.id}",
+              userName: userName,
+              userId: userId,
+              isTeacher: false,
+              sessionId: session.id,
+            ),
           ),
         ));
       }

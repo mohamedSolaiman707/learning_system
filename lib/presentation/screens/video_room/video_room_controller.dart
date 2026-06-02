@@ -217,10 +217,24 @@ class VideoRoomController extends ChangeNotifier {
     }
 
     if (sessionId != null && sessionId!.isNotEmpty) {
-      final isValid = await _checkAndMonitorSession();
-      if (!isValid) return;
+      try {
+        final isValid = await _checkAndMonitorSession();
+        if (!isValid) {
+          _isLoading = false;
+          notifyListeners();
+          return;
+        }
+      } catch (e) {
+        debugPrint("Session monitor error: $e");
+      }
     }
-    await _loadChatHistory();
+    
+    try {
+      await _loadChatHistory();
+    } catch (e) {
+      debugPrint("Load chat history error: $e");
+    }
+    
     await connectToRoom(roomName);
   }
 
@@ -230,7 +244,7 @@ class VideoRoomController extends ChangeNotifier {
       _messages = List<Map<String, dynamic>>.from(data);
       notifyListeners();
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("Error loading chat history: $e");
     }
   }
 
@@ -265,7 +279,10 @@ class VideoRoomController extends ChangeNotifier {
       });
       _expiryTimer = Timer(endTime.difference(DateTime.now()), () => onSessionEnded?.call("انتهى وقت الحصة."));
       return true;
-    } catch (e) { return true; }
+    } catch (e) { 
+      debugPrint("Check monitor session error: $e");
+      return true; 
+    }
   }
 
   Future<void> connectToRoom(String targetRoomName) async {
@@ -275,34 +292,51 @@ class VideoRoomController extends ChangeNotifier {
     notifyListeners();
     try {
       if (!isTeacher && sessionId != null) {
-        final isKicked = await DatabaseService().isStudentKicked(sessionId!, userId);
-        if (isKicked) {
-          _errorMessage = "تم استبعادك من هذه القاعة ولا يمكنك الدخول.";
-          _isLoading = false;
-          notifyListeners();
-          onSessionEnded?.call("تم استبعادك من القاعة.");
-          return;
+        try {
+          final isKicked = await DatabaseService().isStudentKicked(sessionId!, userId);
+          if (isKicked) {
+            _errorMessage = "تم استبعادك من هذه القاعة ولا يمكنك الدخول.";
+            _isLoading = false;
+            notifyListeners();
+            onSessionEnded?.call("تم استبعادك من القاعة.");
+            return;
+          }
+        } catch (e) {
+          debugPrint("Check kicked status error: $e");
         }
       }
       final suffix = DateTime.now().millisecondsSinceEpoch.toString().substring(10);
       final effectiveUserId = isTeacher ? "teacher_$userId" : "${userId}_$suffix";
+      
       final token = await LiveKitService().getRoomToken(roomName: targetRoomName, userId: effectiveUserId, userName: userName);
       if (token == null) throw Exception("Failed to get token");
+      
       if (_room != null) {
         await _listener?.dispose();
         await _room!.disconnect();
         await Future.delayed(const Duration(milliseconds: 500));
       }
+      
       _room = Room(roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true));
       _listener = _room!.createListener();
       _setupEventListeners();
+      
       await _room!.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
-      if (!isTeacher && sessionId != null) await DatabaseService().logStudentEntry(sessionId!, userId);
+      
+      if (!isTeacher && sessionId != null) {
+        try {
+          await DatabaseService().logStudentEntry(sessionId!, userId);
+        } catch (e) {
+          debugPrint("Log student entry error (ignoring to allow live access): $e");
+        }
+      }
+      
       _currentRoomName = targetRoomName;
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _errorMessage = "فشل الاتصال بالقاعة.";
+      debugPrint("Connect to room error: $e");
+      _errorMessage = "فشل الاتصال بالقاعة. تأكد من إعدادات السيرفر.";
       _isLoading = false;
       notifyListeners();
     }
@@ -314,8 +348,12 @@ class VideoRoomController extends ChangeNotifier {
   void _setupEventListeners() {
     _listener!
       ..on<DataReceivedEvent>((event) {
-        final data = jsonDecode(utf8.decode(event.data));
-        _handleIncomingData(data, event.participant);
+        try {
+          final data = jsonDecode(utf8.decode(event.data));
+          _handleIncomingData(data, event.participant);
+        } catch (e) {
+          debugPrint("Error handling incoming data: $e");
+        }
       })
       ..on<ParticipantConnectedEvent>((event) { notifyListeners(); })
       ..on<ParticipantDisconnectedEvent>((event) {
@@ -499,7 +537,7 @@ class VideoRoomController extends ChangeNotifier {
   void toggleWhiteboardLock() { _isWhiteboardLocked = !_isWhiteboardLocked; sendData({'type': 'control_whiteboard', 'value': _isWhiteboardLocked}); notifyListeners(); }
   void toggleScreenShareLock() { _isScreenShareLocked = !_isScreenShareLocked; sendData({'type': 'control_screenshare', 'value': _isScreenShareLocked}); notifyListeners(); }
   void setSpotlight(String? id) { _spotlightUserId = id; sendData({'type': 'spotlight', 'value': id}); notifyListeners(); }
-  void kickParticipant(String tId) async { if (!isTeacher) return; sendData({'type': 'kick_participant', 'target': tId}); if (sessionId != null) await DatabaseService().markStudentAsKicked(sessionId!, tId.split('_').first); notifyListeners(); }
+  void kickParticipant(String tId) async { if (!isTeacher) return; sendData({'type': 'kick_participant', 'target': tId}); if (sessionId != null) try { await DatabaseService().markStudentAsKicked(sessionId!, tId.split('_').first); } catch (_) {} notifyListeners(); }
 
   void _handleMicControl(Map<String, dynamic> data) {
     if (!isTeacher && (data['target'] == null || _isMe(data['target']))) { _isMicEnabled = data['value']; _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled); _isMicLocked = data['lock'] ?? false; notifyListeners(); }
@@ -574,7 +612,7 @@ class VideoRoomController extends ChangeNotifier {
     if (sessionId == null || _isRecording) return;
     try {
       final success = await LiveKitService().startRecording(roomName, sessionId!);
-      if (success) { await DatabaseService().saveSession({'is_recording': true, 'is_recording_paused': false}, id: sessionId!); _isRecording = true; _isRecordingPaused = false; notifyListeners(); }
+      if (success) { try { await DatabaseService().saveSession({'is_recording': true, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} _isRecording = true; _isRecordingPaused = false; notifyListeners(); }
     } catch (e) { onNotification?.call("فشل بدء التسجيل", Colors.red); }
   }
 
@@ -582,7 +620,7 @@ class VideoRoomController extends ChangeNotifier {
     if (sessionId == null || !_isRecording) return;
     try {
       final success = await LiveKitService().stopRecording(roomName, sessionId!);
-      if (success) { await DatabaseService().saveSession({'is_recording': false, 'is_recording_paused': false}, id: sessionId!); _isRecording = false; _isRecordingPaused = false; notifyListeners(); }
+      if (success) { try { await DatabaseService().saveSession({'is_recording': false, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} _isRecording = false; _isRecordingPaused = false; notifyListeners(); }
     } catch (e) { onNotification?.call("فشل إيقاف التسجيل", Colors.red); }
   }
 
@@ -590,7 +628,7 @@ class VideoRoomController extends ChangeNotifier {
     if (sessionId == null || !_isRecording || _isRecordingPaused) return;
     try {
       final success = await LiveKitService().pauseRecording(roomName, sessionId!);
-      if (success) { await DatabaseService().saveSession({'is_recording_paused': true}, id: sessionId!); _isRecordingPaused = true; notifyListeners(); }
+      if (success) { try { await DatabaseService().saveSession({'is_recording_paused': true}, id: sessionId!); } catch (_) {} _isRecordingPaused = true; notifyListeners(); }
     } catch (e) { onNotification?.call("فشل إيقاف التسجيل مؤقتاً", Colors.red); }
   }
 
@@ -598,15 +636,13 @@ class VideoRoomController extends ChangeNotifier {
     if (sessionId == null || !_isRecording || !_isRecordingPaused) return;
     try {
       final success = await LiveKitService().resumeRecording(roomName, sessionId!);
-      if (success) { await DatabaseService().saveSession({'is_recording_paused': false}, id: sessionId!); _isRecordingPaused = false; notifyListeners(); }
+      if (success) { try { await DatabaseService().saveSession({'is_recording_paused': false}, id: sessionId!); } catch (_) {} _isRecordingPaused = false; notifyListeners(); }
     } catch (e) { onNotification?.call("فشل استئناف التسجيل", Colors.red); }
   }
 
   Future<void> toggleRecording() async {
     if (!isTeacher) return; _triggerHaptic(heavy: true);
-    if (_isRecording) { if (_isRecordingPaused) await resumeRecording(); else await stopRecording(); } else {
-      await startRecording();
-    }
+    if (_isRecording) { if (_isRecordingPaused) await resumeRecording(); else await stopRecording(); } else await startRecording();
   }
 
   Future<void> downloadAttendanceReport() async {
@@ -623,19 +659,23 @@ class VideoRoomController extends ChangeNotifier {
     if (!isTeacher || sessionId == null) return;
     _isProcessing = true; notifyListeners();
     try {
-      if (_isRecording) await stopRecording();
+      if (_isRecording) try { await stopRecording(); } catch (_) {}
       sendData({'type': 'session_ended'});
-      await DatabaseService().toggleRoomStatus(sessionId!, false);
-      await DatabaseService().updateSessionStatus(sessionId!, 'archived');
-      final attendanceData = await DatabaseService().getSessionAttendance(sessionId!);
-      await AttendancePdfService().generateReport(subjectName: title, teacherName: userName, studentsData: attendanceData);
+      try {
+        await DatabaseService().toggleRoomStatus(sessionId!, false);
+        await DatabaseService().updateSessionStatus(sessionId!, 'archived');
+      } catch (_) {}
+      try {
+        final attendanceData = await DatabaseService().getSessionAttendance(sessionId!);
+        await AttendancePdfService().generateReport(subjectName: title, teacherName: userName, studentsData: attendanceData);
+      } catch (_) {}
       _room?.disconnect(); onSessionEnded?.call("تم إنهاء الحصة وأرشفتها بنجاح ✅");
     } catch (e) { onNotification?.call("حدث خطأ أثناء إنهاء الجلسة", Colors.red); } finally { _isProcessing = false; notifyListeners(); }
   }
 
   @override
   void dispose() {
-    if (sessionId != null) DatabaseService().logStudentExit(sessionId!, userId);
+    if (sessionId != null) try { DatabaseService().logStudentExit(sessionId!, userId); } catch (_) {}
     _connectivitySubscription?.cancel(); _statusSubscription?.cancel(); _expiryTimer?.cancel(); _quizTimer?.cancel(); _breakoutTimer?.cancel(); _room?.disconnect();
     super.dispose();
   }

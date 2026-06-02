@@ -8,6 +8,7 @@ import '../../../../core/services/database_service.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/models/session_model.dart';
 import '../../video_room/video_room_screen.dart';
+import '../../video_room/video_room_controller.dart';
 
 class StudentScheduleTab extends StatefulWidget {
   const StudentScheduleTab({super.key});
@@ -289,13 +290,23 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
               ? ElevatedButton(
                   onPressed: () {
                     Navigator.push(context, MaterialPageRoute(
-                      builder: (context) => VideoRoomScreen(
-                        title: session.subjectName,
-                        roomName: "room_${session.id}",
-                        userName: userName,
-                        userId: userId, // تمرير الـ UUID الجديد
-                        isTeacher: false,
-                        sessionId: session.id,
+                      builder: (context) => ChangeNotifierProvider(
+                        create: (_) => VideoRoomController(
+                          title: session.subjectName,
+                          roomName: "room_${session.id}",
+                          userName: userName,
+                          userId: userId,
+                          isTeacher: false,
+                          sessionId: session.id,
+                        ),
+                        child: VideoRoomScreen(
+                          title: session.subjectName,
+                          roomName: "room_${session.id}",
+                          userName: userName,
+                          userId: userId,
+                          isTeacher: false,
+                          sessionId: session.id,
+                        ),
                       ),
                     ));
                   },

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/models/session_model.dart';
 import '../../../core/services/database_service.dart';
 import 'video_room_screen.dart';
+import 'video_room_controller.dart';
 
 class WaitingRoomScreen extends StatefulWidget {
   final SessionModel session;
@@ -38,13 +39,9 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     // تسجيل الدخول لغرفة الانتظار
     db.joinWaitingRoom(widget.session.id, widget.userId);
 
-// داخل initState في ملف waiting_room_screen.dart
-
     _statusSubscription = db.watchSessionStatus(widget.session.id).listen((data) {
-      // إذا تم حذف الحصة (data.isEmpty) أو انتهت (status == ended)
       if (data.isEmpty || data.first['status'] == 'ended') {
         if (mounted) {
-          // إظهار سناك بار احترافي يتماشى مع هوية الجامعة
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text("🔴 تم إنهاء الحصة المباشرة من قبل المعلم، شكراً لكم."),
@@ -54,7 +51,6 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
             ),
           );
 
-          // تأخير بسيط 3 ثوانٍ لكي يقرأ الطالب الرسالة
           Future.delayed(const Duration(seconds: 3), () {
             if (mounted) Navigator.pop(context);
           });
@@ -65,7 +61,6 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
       final String status = data.first['status'];
 
       if (status == 'active') {
-        // التحويل التلقائي للقاعة بمجرد بدء المعلم
         _navigateToRoom();
       }
     });
@@ -93,13 +88,23 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => VideoRoomScreen(
-          title: widget.session.subjectName,
-          roomName: "room_${widget.session.id}",
-          userName: widget.userName,
-          userId: widget.userId,
-          isTeacher: false,
-          sessionId: widget.session.id,
+        builder: (context) => ChangeNotifierProvider(
+          create: (_) => VideoRoomController(
+            title: widget.session.subjectName,
+            roomName: "room_${widget.session.id}",
+            userName: widget.userName,
+            userId: widget.userId,
+            isTeacher: false,
+            sessionId: widget.session.id,
+          ),
+          child: VideoRoomScreen(
+            title: widget.session.subjectName,
+            roomName: "room_${widget.session.id}",
+            userName: widget.userName,
+            userId: widget.userId,
+            isTeacher: false,
+            sessionId: widget.session.id,
+          ),
         ),
       ),
     );
@@ -109,7 +114,6 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   void dispose() {
     _timer.cancel();
     _statusSubscription?.cancel();
-    // الخروج من غرفة الانتظار بشكل آمن
     final db = Provider.of<DatabaseService>(context, listen: false);
     db.leaveWaitingRoom(widget.session.id, widget.userId);
     super.dispose();

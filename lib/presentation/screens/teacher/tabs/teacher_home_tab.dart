@@ -11,6 +11,7 @@ import '../attendance/attendance_screen.dart';
 import '../resources/teacher_resources_screen.dart';
 import '../reports/teacher_reports_screen.dart';
 import '../../video_room/video_room_screen.dart';
+import '../../video_room/video_room_controller.dart';
 import '../widgets/teacher_stat_card.dart';
 
 class TeacherHomeTab extends StatefulWidget {
@@ -83,13 +84,11 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
-  // ميزة جديدة: بدء بث مباشر فوري
   Future<void> _createInstantLive() async {
     HapticFeedback.heavyImpact();
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final db = Provider.of<DatabaseService>(context, listen: false);
     
-    // إظهار واجهة تحميل بسيطة
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -117,16 +116,26 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         await db.toggleRoomStatus(newSession.id, true);
         
         if (!mounted) return;
-        Navigator.pop(context); // إغلاق الـ Loader
+        Navigator.pop(context); 
         
         Navigator.push(context, MaterialPageRoute(
-          builder: (context) => VideoRoomScreen(
-            title: newSession.subjectName,
-            roomName: "room_${newSession.id}",
-            userName: "أ. $teacherName",
-            userId: auth.user!.id,
-            isTeacher: true,
-            sessionId: newSession.id,
+          builder: (context) => ChangeNotifierProvider(
+            create: (_) => VideoRoomController(
+              title: newSession.subjectName,
+              roomName: "room_${newSession.id}",
+              userName: "أ. $teacherName",
+              userId: auth.user!.id,
+              isTeacher: true,
+              sessionId: newSession.id,
+            ),
+            child: VideoRoomScreen(
+              title: newSession.subjectName,
+              roomName: "room_${newSession.id}",
+              userName: "أ. $teacherName",
+              userId: auth.user!.id,
+              isTeacher: true,
+              sessionId: newSession.id,
+            ),
           )
         ));
       }
@@ -200,7 +209,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         ),
       ),
       actions: [
-        // أيقونة البث المباشر الفوري
         Tooltip(
           message: "بدء بث مباشر الآن",
           child: IconButton(
@@ -433,13 +441,23 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       if (!mounted) return;
 
       Navigator.push(context, MaterialPageRoute(
-          builder: (context) => VideoRoomScreen(
-            title: session.subjectName,
-            roomName: "room_${session.id}",
-            userName: "أ. $teacherName",
-            userId: auth.user!.id,
-            isTeacher: true,
-            sessionId: session.id,
+          builder: (context) => ChangeNotifierProvider(
+            create: (_) => VideoRoomController(
+              title: session.subjectName,
+              roomName: "room_${session.id}",
+              userName: "أ. $teacherName",
+              userId: auth.user!.id,
+              isTeacher: true,
+              sessionId: session.id,
+            ),
+            child: VideoRoomScreen(
+              title: session.subjectName,
+              roomName: "room_${session.id}",
+              userName: "أ. $teacherName",
+              userId: auth.user!.id,
+              isTeacher: true,
+              sessionId: session.id,
+            ),
           )
       ));
     } catch (e) {

@@ -9,503 +9,107 @@ class ParticipantsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<VideoRoomController>();
-    
-    // تحديد النوع صراحة كـ List<Participant> لإصلاح خطأ DisposableChangeNotifier
-    final List<Participant> participants = [
-      if (controller.room?.localParticipant != null)
-        controller.room!.localParticipant!,
-      ...controller.room?.remoteParticipants.values ?? [],
-    ];
+    final participants = controller.room?.remoteParticipants.values.toList() ?? [];
+    final localParticipant = controller.room?.localParticipant;
+
+    // --- لوجيك "التقريب الذكي" (Proximity Sorting) ---
+    // نقوم بترتيب المشاركين بحيث يظهر الأهم للمدرس في الأعلى:
+    // 1. من يرفع يده حالياً.
+    // 2. من لديه سؤال لم يُجب عليه.
+    // 3. الترتيب الأبجدي.
+    if (participants.isNotEmpty) {
+      participants.sort((a, b) {
+        bool handA = controller.remoteHandStates[a.identity] ?? false;
+        bool handB = controller.remoteHandStates[b.identity] ?? false;
+        if (handA && !handB) return -1;
+        if (!handA && handB) return 1;
+
+        bool hasQuestionA = controller.questions.any((q) => q['senderId'] == a.identity && !(q['is_answered'] ?? false));
+        bool hasQuestionB = controller.questions.any((q) => q['senderId'] == b.identity && !(q['is_answered'] ?? false));
+        if (hasQuestionA && !hasQuestionB) return -1;
+        if (!hasQuestionA && hasQuestionB) return 1;
+
+        return (a.name ?? "").compareTo(b.name ?? "");
+      });
+    }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                "المشاركين",
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => controller.toggleParticipants(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            "${participants.length} مشارك في القاعة",
-            style: const TextStyle(
-              color: Colors.grey,
-              fontFamily: 'Cairo',
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (controller.isTeacher) ...[
-            _TeacherControls(controller: controller),
-            const Divider(height: 30),
-          ],
-          
-          if (controller.isTeacher && controller.isBreakoutActive) ...[
-            const Text(
-              "المجموعات النشطة",
-              style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Colors.blue),
-            ),
-            const SizedBox(height: 10),
-            ...controller.breakoutGroups.entries.map((entry) => _BreakoutGroupTile(
-              groupNum: entry.key,
-              students: entry.value,
-              controller: controller,
-            )),
-            const Divider(height: 30),
-          ],
-
+          _buildHeader(controller, participants.length + (localParticipant != null ? 1 : 0)),
           Expanded(
-            child: ListView.separated(
-              itemCount: participants.length,
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                return _ParticipantTile(
-                  participant: participants[index],
-                  controller: controller,
-                );
-              },
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                if (localParticipant != null)
+                  _ParticipantTile(participant: localParticipant, controller: controller, isMe: true),
+                const Divider(height: 32),
+                ...participants.map((p) => _ParticipantTile(participant: p, controller: controller)),
+              ],
             ),
           ),
+          if (controller.isTeacher) _buildTeacherActions(context, controller),
         ],
       ),
     );
   }
-}
 
-class _TeacherControls extends StatelessWidget {
-  final VideoRoomController controller;
-  const _TeacherControls({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _PermissionToggle(
-              icon: controller.isAllMuted ? Icons.mic_off : Icons.mic,
-              label: "كتم الجميع",
-              isLocked: controller.isAllMuted,
-              onTap: () => controller.muteAllParticipants(!controller.isAllMuted),
-            ),
-            _PermissionToggle(
-              icon: controller.isCamLocked ? Icons.videocam_off : Icons.videocam,
-              label: "كاميرا الجميع",
-              isLocked: controller.isCamLocked,
-              onTap: () => controller.disableAllCameras(!controller.isCamLocked),
-            ),
-            _PermissionToggle(
-              icon: controller.isChatLocked ? Icons.chat_bubble_outline : Icons.chat,
-              label: "قفل الشات",
-              isLocked: controller.isChatLocked,
-              onTap: () => controller.toggleChatLock(),
-            ),
-            _PermissionToggle(
-              icon: controller.isWhiteboardLocked ? Icons.draw_outlined : Icons.draw,
-              label: "قفل السبورة",
-              isLocked: controller.isWhiteboardLocked,
-              onTap: () => controller.toggleWhiteboardLock(),
-            ),
-          ],
-        ),
-        const SizedBox(height: 15),
-        Row(
-          children: [
-            Expanded(
-              child: controller.isBreakoutActive 
-                ? _ActionButton(
-                    label: "إنهاء المجموعات",
-                    icon: Icons.stop_circle_outlined,
-                    color: Colors.orange.shade800,
-                    onTap: () => controller.endBreakoutRooms(),
-                  )
-                : _ActionButton(
-                    label: "غرف التقسيم",
-                    icon: Icons.groups_outlined,
-                    color: const Color(0xFF102A43),
-                    onTap: () => _showBreakoutDialog(context),
-                  ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _ActionButton(
-                label: "تنزيل الغياب",
-                icon: Icons.picture_as_pdf_outlined,
-                color: Colors.red.shade700,
-                isLoading: controller.isProcessing,
-                onTap: () => controller.downloadAttendanceReport(),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  void _showBreakoutDialog(BuildContext context) {
-    int groupCount = 2;
-    double duration = 10;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDS) => Container(
-          padding: const EdgeInsets.all(30),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
+  Widget _buildHeader(VideoRoomController controller, int count) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
+            child: Icon(Icons.people_outline, color: Colors.blue.shade700),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          const SizedBox(width: 15),
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "إعدادات غرف التقسيم",
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF102A43),
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                "عدد المجموعات",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    onPressed: () =>
-                        groupCount > 2 ? setDS(() => groupCount--) : null,
-                    icon: const Icon(Icons.remove_circle_outline),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 30),
-                    child: Text(
-                      "$groupCount",
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () =>
-                        groupCount < 8 ? setDS(() => groupCount++) : null,
-                    icon: const Icon(Icons.add_circle_outline),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    "المدة (دقيقة)",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
-                  Text(
-                    "${duration.toInt()} د",
-                    style: const TextStyle(
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
-                ],
-              ),
-              Slider(
-                value: duration,
-                min: 5,
-                max: 30,
-                divisions: 5,
-                activeColor: const Color(0xFF102A43),
-                onChanged: (v) => setDS(() => duration = v),
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF102A43),
-                  minimumSize: const Size(double.infinity, 60),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                ),
-                onPressed: () {
-                  controller.startBreakoutRooms(groupCount, duration.toInt());
-                  Navigator.pop(context);
-                },
-                child: const Text(
-                  "بدء التقسيم الآن",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Cairo',
-                  ),
-                ),
-              ),
+              const Text("الحضور", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo')),
+              Text("$count مشارك نشط الآن", style: const TextStyle(color: Colors.grey, fontSize: 12, fontFamily: 'Cairo')),
             ],
           ),
-        ),
+          const Spacer(),
+          IconButton(onPressed: controller.toggleParticipants, icon: const Icon(Icons.close_rounded, color: Colors.grey)),
+        ],
       ),
     );
   }
-}
 
-class _BreakoutGroupTile extends StatelessWidget {
-  final int groupNum;
-  final List<String> students;
-  final VideoRoomController controller;
-
-  const _BreakoutGroupTile({
-    required this.groupNum,
-    required this.students,
-    required this.controller,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildTeacherActions(BuildContext context, VideoRoomController controller) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade100),
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
+      decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey.shade100))),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "مجموعة $groupNum",
-                style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-              ),
-              Text(
-                "${students.length} طلاب",
-                style: const TextStyle(fontSize: 12, color: Colors.blueGrey, fontFamily: 'Cairo'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            students.join("، "),
-            style: const TextStyle(fontSize: 11, color: Colors.black54, fontFamily: 'Cairo'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 8),
-          InkWell(
-            onTap: () => controller.joinBreakoutRoom(groupNum),
-            child: const Text(
-              "انضمام للمتابعة",
-              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'Cairo'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ParticipantTile extends StatelessWidget {
-  final Participant participant;
-  final VideoRoomController controller;
-  const _ParticipantTile({required this.participant, required this.controller});
-  @override
-  Widget build(BuildContext context) {
-    final bool isMe = participant is LocalParticipant;
-    final bool handRaised =
-        controller.remoteHandStates[participant.identity] ?? false;
-    final bool isSpotlight = controller.spotlightUserId == participant.identity;
-
-    final String displayName = participant.name.isNotEmpty ? participant.name : participant.identity;
-    final String initial = displayName.isNotEmpty ? displayName[0] : "?";
-
-    return ListTile(
-      leading: Stack(
-        children: [
-          CircleAvatar(
-            backgroundColor: isMe
-                ? const Color(0xFF102A43)
-                : Colors.grey.shade200,
-            child: Text(
-              initial,
-              style: TextStyle(color: isMe ? Colors.white : Colors.black),
-            ),
-          ),
-          if (isSpotlight)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(
-                  color: Colors.amber,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.star, size: 10, color: Colors.white),
-              ),
-            ),
-        ],
-      ),
-      title: Text(
-        displayName,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Cairo',
-          fontSize: 14,
-        ),
-      ),
-      subtitle: isMe
-          ? const Text(
-              "أنت",
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey,
-                fontFamily: 'Cairo',
-              ),
-            )
-          : null,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (handRaised)
-            const Icon(Icons.front_hand, color: Colors.orange, size: 18),
-          const SizedBox(width: 8),
-          Icon(
-            participant.isMicrophoneEnabled() ? Icons.mic : Icons.mic_off,
-            color: participant.isMicrophoneEnabled()
-                ? Colors.green
-                : Colors.red,
-            size: 18,
-          ),
-
-          if (controller.isTeacher && !isMe)
-            PopupMenuButton<String>(
-              onSelected: (val) {
-                if (val == 'mute') {
-                  controller.muteParticipant(
-                    participant.identity,
-                    participant.isMicrophoneEnabled(),
-                  );
-                }
-                if (val == 'camera') {
-                  controller.disableParticipantCamera(
-                    participant.identity,
-                    participant.isCameraEnabled(),
-                  );
-                }
-                if (val == 'spotlight') {
-                  controller.setSpotlight(
-                    isSpotlight ? null : participant.identity,
-                  );
-                }
-                if (val == 'kick') _showKickConfirm(context);
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'mute',
-                  child: Row(
-                    children: [
-                      Icon(
-                        participant.isMicrophoneEnabled()
-                            ? Icons.mic_off
-                            : Icons.mic,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        participant.isMicrophoneEnabled()
-                            ? "كتم الصوت"
-                            : "تفعيل الصوت",
-                        style: const TextStyle(fontFamily: 'Cairo'),
-                      ),
-                    ],
+          if (controller.isBreakoutActive)
+            _BreakoutStatus(controller: controller)
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: _ActionButton(
+                    label: "غرف التقسيم",
+                    icon: Icons.grid_view_rounded,
+                    color: Colors.blue,
+                    onTap: () => _showBreakoutDialog(context, controller),
                   ),
                 ),
-                PopupMenuItem(
-                  value: 'camera',
-                  child: Row(
-                    children: [
-                      Icon(
-                        participant.isCameraEnabled()
-                            ? Icons.videocam_off
-                            : Icons.videocam,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        participant.isCameraEnabled()
-                            ? "إيقاف الكاميرا"
-                            : "تفعيل الكاميرا",
-                        style: const TextStyle(fontFamily: 'Cairo'),
-                      ),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'spotlight',
-                  child: Row(
-                    children: [
-                      Icon(
-                        isSpotlight ? Icons.star_border : Icons.star,
-                        size: 18,
-                        color: Colors.amber,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        isSpotlight ? "إلغاء التمييز" : "تمييز المشارك",
-                        style: const TextStyle(fontFamily: 'Cairo'),
-                      ),
-                    ],
-                  ),
-                ),
-                const PopupMenuDivider(),
-                PopupMenuItem(
-                  value: 'kick',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.gavel, size: 18, color: Colors.red),
-                      const SizedBox(width: 8),
-                      const Text(
-                        "طرد من القاعة",
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontFamily: 'Cairo',
-                        ),
-                      ),
-                    ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _ActionButton(
+                    label: "تقرير الغياب",
+                    icon: Icons.picture_as_pdf_rounded,
+                    color: Colors.red.shade600,
+                    isLoading: controller.isProcessing,
+                    onTap: () => controller.downloadAttendanceReport(),
                   ),
                 ),
               ],
@@ -515,65 +119,139 @@ class _ParticipantTile extends StatelessWidget {
     );
   }
 
-  void _showKickConfirm(BuildContext context) {
-    final String displayName = participant.name.isNotEmpty ? participant.name : participant.identity;
-    showDialog(
+  void _showBreakoutDialog(BuildContext context, VideoRoomController controller) {
+    int groupCount = 2;
+    double duration = 10;
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("تأكيد الطرد", style: TextStyle(fontFamily: 'Cairo')),
-        content: Text(
-          "هل أنت متأكد من طرد $displayName؟",
-          style: const TextStyle(fontFamily: 'Cairo'),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDS) => Container(
+          padding: const EdgeInsets.all(30),
+          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(35))),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("إعداد مجموعات العمل", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, fontFamily: 'Cairo')),
+              const SizedBox(height: 20),
+              _buildSettingRow("عدد المجموعات", "$groupCount", () => groupCount > 2 ? setDS(() => groupCount--) : null, () => groupCount < 8 ? setDS(() => groupCount++) : null),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("المدة الزمنية", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                  Text("${duration.toInt()} دقيقة", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                ],
+              ),
+              Slider(value: duration, min: 5, max: 30, divisions: 5, activeColor: Colors.blue, onChanged: (v) => setDS(() => duration = v)),
+              const SizedBox(height: 30),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                onPressed: () { controller.startBreakoutRooms(groupCount, duration.toInt()); Navigator.pop(context); },
+                child: const Text("بدء الجلسات الآن", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo')),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              controller.kickParticipant(participant.identity);
-              Navigator.pop(ctx);
-            },
-            child: const Text(
-              "طرد",
-              style: TextStyle(color: Colors.white, fontFamily: 'Cairo'),
-            ),
-          ),
-        ],
       ),
+    );
+  }
+
+  Widget _buildSettingRow(String title, String val, VoidCallback onRemove, VoidCallback onAdd) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+        Row(children: [
+          IconButton(onPressed: onRemove, icon: const Icon(Icons.remove_circle_outline, color: Colors.blue)),
+          Text(val, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          IconButton(onPressed: onAdd, icon: const Icon(Icons.add_circle_outline, color: Colors.blue)),
+        ]),
+      ],
     );
   }
 }
 
-class _PermissionToggle extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isLocked;
-  final VoidCallback onTap;
-  const _PermissionToggle({
-    required this.icon,
-    required this.label,
-    required this.isLocked,
-    required this.onTap,
-  });
+class _ParticipantTile extends StatelessWidget {
+  final Participant participant;
+  final VideoRoomController controller;
+  final bool isMe;
+
+  const _ParticipantTile({required this.participant, required this.controller, this.isMe = false});
+
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        IconButton(
-          icon: Icon(icon, color: isLocked ? Colors.red : Colors.green),
-          onPressed: onTap,
+    final bool handRaised = controller.remoteHandStates[participant.identity] ?? false;
+    final bool isSpotlight = controller.spotlightUserId == participant.identity;
+    final bool hasPendingQuestion = controller.questions.any((q) => q['senderId'] == participant.identity && !(q['is_answered'] ?? false));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isMe ? Colors.blue.withOpacity(0.05) : (handRaised ? Colors.orange.withOpacity(0.03) : Colors.transparent),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: isMe ? Colors.blue.shade100 : (handRaised ? Colors.orange.shade100 : Colors.transparent)),
+      ),
+      child: ListTile(
+        leading: Stack(
+          children: [
+            CircleAvatar(
+              backgroundColor: isMe ? Colors.blue : Colors.grey.shade100,
+              child: Text((participant.name.isNotEmpty ? participant.name[0] : "?").toUpperCase(), 
+                   style: TextStyle(color: isMe ? Colors.white : Colors.blue.shade900, fontWeight: FontWeight.bold)),
+            ),
+            if (isSpotlight)
+              Positioned(right: 0, bottom: 0, child: Icon(Icons.star, size: 14, color: Colors.amber.shade700)),
+          ],
         ),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'Cairo',
-          ),
+        title: Text(
+          isMe ? "أنت (أنا)" : (participant.name.isNotEmpty ? participant.name : "طالب"),
+          style: TextStyle(fontWeight: isMe || handRaised ? FontWeight.bold : FontWeight.normal, fontFamily: 'Cairo', fontSize: 14),
         ),
+        subtitle: Row(
+          children: [
+            if (handRaised) _buildMiniBadge("يرفع يده ✋", Colors.orange),
+            if (hasPendingQuestion) ...[
+              if (handRaised) const SizedBox(width: 4),
+              _buildMiniBadge("لديه سؤال ❓", Colors.blue),
+            ]
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(participant.isMicrophoneEnabled() ? Icons.mic : Icons.mic_off, 
+                 color: participant.isMicrophoneEnabled() ? Colors.green : Colors.red, size: 18),
+            if (controller.isTeacher && !isMe) _buildTeacherMenu(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+      child: Text(text, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+    );
+  }
+
+  Widget _buildTeacherMenu(BuildContext context) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, color: Colors.grey),
+      onSelected: (val) {
+        if (val == 'mute') controller.muteParticipant(participant.identity, participant.isMicrophoneEnabled());
+        if (val == 'kick') controller.kickParticipant(participant.identity);
+        if (val == 'spotlight') controller.setSpotlight(controller.spotlightUserId == participant.identity ? null : participant.identity);
+      },
+      itemBuilder: (ctx) => [
+        PopupMenuItem(value: 'mute', child: Text(participant.isMicrophoneEnabled() ? "كتم الصوت" : "تفعيل الصوت", style: const TextStyle(fontFamily: 'Cairo'))),
+        PopupMenuItem(value: 'spotlight', child: Text(controller.spotlightUserId == participant.identity ? "إلغاء التمييز" : "تمييز المشارك", style: const TextStyle(fontFamily: 'Cairo'))),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'kick', child: Text("استبعاد", style: TextStyle(color: Colors.red, fontFamily: 'Cairo'))),
       ],
     );
   }
@@ -583,40 +261,45 @@ class _ActionButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
-  final VoidCallback onTap;
   final bool isLoading;
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-    this.isLoading = false,
-  });
+  final VoidCallback onTap;
+  const _ActionButton({required this.label, required this.icon, required this.color, this.isLoading = false, required this.onTap});
+
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton.icon(
-      icon: isLoading 
-          ? const SizedBox(
-              width: 18, 
-              height: 18, 
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-            )
-          : Icon(icon, size: 18),
-      label: Text(
-        label,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Cairo',
+    return InkWell(
+      onTap: isLoading ? null : onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.2))),
+        child: Column(
+          children: [
+            if (isLoading) const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            else Icon(icon, color: color, size: 20),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          ],
         ),
       ),
-      onPressed: isLoading ? null : onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+    );
+  }
+}
+
+class _BreakoutStatus extends StatelessWidget {
+  final VideoRoomController controller;
+  const _BreakoutStatus({required this.controller});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.orange.shade100)),
+      child: Row(
+        children: [
+          const Icon(Icons.timer_outlined, color: Colors.orange),
+          const SizedBox(width: 10),
+          Expanded(child: Text("غرف التقسيم مفعلة (${controller.breakoutTimeLeft ~/ 60} د)", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))),
+          TextButton(onPressed: controller.endBreakoutRooms, child: const Text("إنهاء", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
+        ],
       ),
     );
   }

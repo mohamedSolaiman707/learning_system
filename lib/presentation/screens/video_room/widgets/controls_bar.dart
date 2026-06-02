@@ -154,6 +154,7 @@ class ControlsBar extends StatelessWidget {
                         activeColor: Colors.orange,
                         onPressed: controller.toggleQA,
                         tooltip: "الأسئلة",
+                        badgeCount: controller.unreadQuestionsCount,
                       ),
                     ),
                     _buildShowcase(
@@ -220,6 +221,7 @@ class _AnimatedControlButton extends StatelessWidget {
   final Color activeColor;
   final VoidCallback onPressed;
   final String tooltip;
+  final int badgeCount;
 
   const _AnimatedControlButton({
     required this.icon,
@@ -228,6 +230,7 @@ class _AnimatedControlButton extends StatelessWidget {
     required this.activeColor,
     required this.onPressed,
     required this.tooltip,
+    this.badgeCount = 0,
   });
 
   @override
@@ -239,18 +242,48 @@ class _AnimatedControlButton extends StatelessWidget {
         child: InkWell(
           onTap: onPressed,
           borderRadius: BorderRadius.circular(20),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isActive ? activeColor.withOpacity(0.2) : Colors.white.withOpacity(0.05),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isActive ? activeColor : Colors.transparent,
-                width: 1.5,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isActive ? activeColor.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isActive ? activeColor : Colors.transparent,
+                    width: 1.5,
+                  ),
+                ),
+                child: Icon(icon, color: isActive ? activeColor : color, size: 24),
               ),
-            ),
-            child: Icon(icon, color: isActive ? activeColor : color, size: 24),
+              if (badgeCount > 0)
+                Positioned(
+                  right: -2,
+                  top: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
+                    child: Text(
+                      badgeCount > 9 ? '+9' : '$badgeCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

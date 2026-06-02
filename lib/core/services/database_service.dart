@@ -315,14 +315,22 @@ class DatabaseService {
 
   Future<void> logStudentEntry(String sessionId, String studentId) async {
     try {
+      // 1. التحقق من الطرد أولاً
       final isKicked = await isStudentKicked(sessionId, studentId);
       if (isKicked) return;
 
+      // 2. التسجيل التلقائي في الحصة لو مش متسجل (Auto-Enroll)
+      await _supabase.from('enrollments').upsert({
+        'session_id': sessionId,
+        'student_id': studentId,
+      }, onConflict: 'session_id, student_id');
+
+      // 3. تسجيل الدخول في جدول الحضور
       await _supabase.from('attendance').upsert({
         'session_id': sessionId,
         'student_id': studentId,
         'status': 'present',
-        'joined_at': DateTime.now().toIso8601String(),
+        'joined_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'session_id, student_id');
     } catch (e) {
       debugPrint("Error logging entry: $e");
@@ -335,13 +343,13 @@ class DatabaseService {
           .select('status, joined_at')
           .eq('session_id', sessionId)
           .eq('student_id', studentId)
-          .limit(1);
+          .maybeSingle();
 
-      if (record.isNotEmpty) {
-        if (record[0]['status'] == 'kicked') return;
+      if (record != null) {
+        if (record['status'] == 'kicked') return;
 
-        final joinTime = record[0]['joined_at'] != null ? DateTime.parse(record[0]['joined_at']) : DateTime.now();
-        final exitTime = DateTime.now();
+        final joinTime = record['joined_at'] != null ? DateTime.parse(record['joined_at']) : DateTime.now().toUtc();
+        final exitTime = DateTime.now().toUtc();
         final duration = exitTime.difference(joinTime).inMinutes;
 
         await _supabase.from('attendance').update({
@@ -368,41 +376,70 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getSessionAttendance(String sessionId) async {
     try {
-      // 1. جلب كافة الطلاب المسجلين رسمياً في الحصة
-      final enrollments = await _supabase
+      // 1. جلب سجلات الحضور الفعلي مع أسماء الطلاب من جدول profiles
+      final attendanceResponse = await _supabase
+          .from('attendance')
+          .select('*, profiles:student_id(full_name)')
+          .eq('session_id', sessionId);
+      
+      final List<Map<String, dynamic>> attendanceData = List<Map<String, dynamic>>.from(attendanceResponse);
+
+      // 2. جلب المسجلين في الحصة لمقارنتهم (لمعرفة الغائبين)
+      final enrollmentsResponse = await _supabase
           .from('enrollments')
           .select('student_id, profiles:student_id(full_name)')
           .eq('session_id', sessionId);
       
-      // 2. جلب سجلات الحضور الفعلي
-      final attendance = await _supabase
-          .from('attendance')
-          .select('*')
-          .eq('session_id', sessionId);
-      
-      final attendanceList = List<Map<String, dynamic>>.from(attendance);
+      final List<Map<String, dynamic>> enrollmentsData = List<Map<String, dynamic>>.from(enrollmentsResponse);
 
-      return (enrollments as List).map((en) {
-        final studentId = en['student_id'];
-        final profile = en['profiles'] as Map<String, dynamic>?;
+      // دمج البيانات: الحاضرين أولاً ثم الغائبين
+      final List<Map<String, dynamic>> report = [];
+      final Set<String> processedIds = {};
+
+      // إضافة من حضروا فعلاً (سواء متسجلين أصلاً أو دخلوا برابط)
+      for (var record in attendanceData) {
+        final studentId = record['student_id'];
+        processedIds.add(studentId);
         
-        // البحث هل الطالب لديه سجل حضور فعلي؟
-        final record = attendanceList.firstWhere(
-          (a) => a['student_id'] == studentId,
-          orElse: () => {},
-        );
-        
-        return {
-          'name': profile?['full_name'] ?? 'طالب غير معروف',
-          'present': record.isNotEmpty, 
-          'joined_at': record['joined_at'] ?? 'لم يحضر',
-          'left_at': record['left_at'] ?? '---',
+        report.add({
+          'name': record['profiles']?['full_name'] ?? 'طالب غير معروف',
+          'present': true,
+          'joined_at': _formatTime(record['joined_at']),
+          'left_at': _formatTime(record['left_at']),
           'duration': record['total_duration_minutes'] ?? 0,
-        };
-      }).toList();
+        });
+      }
+
+      // إضافة الغائبين (الموجودين في enrollments ولم يحضروا فعلياً)
+      for (var enrollment in enrollmentsData) {
+        final studentId = enrollment['student_id'];
+        if (!processedIds.contains(studentId)) {
+          report.add({
+            'name': enrollment['profiles']?['full_name'] ?? 'طالب غير معروف',
+            'present': false,
+            'joined_at': 'لم يحضر',
+            'left_at': '---',
+            'duration': 0,
+          });
+        }
+      }
+
+      return report;
     } catch (e) {
       debugPrint("Error generating attendance report: $e");
       return [];
+    }
+  }
+
+  String _formatTime(String? dateStr) {
+    if (dateStr == null || dateStr == '---') return '---';
+    try {
+      final dt = DateTime.parse(dateStr).toLocal();
+      final hours = dt.hour.toString().padLeft(2, '0');
+      final minutes = dt.minute.toString().padLeft(2, '0');
+      return "$hours:$minutes";
+    } catch (_) {
+      return dateStr;
     }
   }
 

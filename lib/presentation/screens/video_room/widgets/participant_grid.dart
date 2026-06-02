@@ -12,51 +12,42 @@ class ParticipantGrid extends StatelessWidget {
     final controller = context.watch<VideoRoomController>();
     final room = controller.room;
 
-    if (room == null) return const Center(child: CircularProgressIndicator());
+    if (room == null) return const Center(child: CircularProgressIndicator(color: Colors.blue));
 
-    // تجميع كل المشاركين (المحلي والبعيد)
+    // تجميع كل المشاركين بأمان
     final List<Participant> allParticipants = [
       if (room.localParticipant != null) room.localParticipant!,
       ...room.remoteParticipants.values,
     ];
 
-    if (allParticipants.isEmpty) return const SizedBox.shrink();
+    if (allParticipants.isEmpty) {
+      return const Center(
+        child: Text("في انتظار دخول المشاركين...", style: TextStyle(color: Colors.white70, fontFamily: 'Cairo')),
+      );
+    }
 
-    // --- منطق الـ Swap الذكي للمسرح الرئيسي ---
+    // تحديد المشارك الرئيسي (المعلم أو من يشارك الشاشة)
     Participant? mainParticipant;
-    
-    // 1. الأولوية الأولى: أي شخص يشارك شاشته
     try {
       mainParticipant = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
-    } catch (_) {}
-
-    // 2. الأولوية الثانية: المعلم (نبحث عن كلمة teacher في الهوية)
-    if (mainParticipant == null) {
+    } catch (_) {
       try {
         mainParticipant = allParticipants.firstWhere(
           (p) => p.identity.toLowerCase().contains('teacher'),
         );
-      } catch (_) {}
+      } catch (_) {
+        mainParticipant = allParticipants.isNotEmpty ? allParticipants.first : null;
+      }
     }
 
-    // 3. الأولوية الثالثة: Spotlight
-    if (mainParticipant == null && controller.spotlightUserId != null) {
-      try {
-        mainParticipant = allParticipants.firstWhere((p) => p.identity == controller.spotlightUserId);
-      } catch (_) {}
-    }
+    if (mainParticipant == null) return const SizedBox.shrink();
 
-    // 4. الاحتياطي: أول شخص في القائمة
-    mainParticipant ??= allParticipants.first;
-
-    // بقية المشاركين للشريط السفلي
     final otherParticipants = allParticipants.where((p) => p.identity != mainParticipant?.identity).toList();
 
     return Container(
       color: const Color(0xFF0F1014),
       child: Column(
         children: [
-          // المسرح الرئيسي
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -67,8 +58,6 @@ class ParticipantGrid extends StatelessWidget {
               ),
             ),
           ),
-
-          // الشريط السفلي للمشاركين الآخرين
           if (otherParticipants.isNotEmpty)
             Container(
               height: 140,
@@ -109,31 +98,37 @@ class _ParticipantTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<VideoRoomController>();
-    
+    // نستخدم Consumer لضمان تحديث الجزء الخاص بالمشارك فقط عند حدوث تغيير
     return ListenableBuilder(
       listenable: participant,
       builder: (context, _) {
+        final controller = context.read<VideoRoomController>();
         final bool isMe = participant is LocalParticipant;
         final bool isTeacher = participant.identity.toLowerCase().contains('teacher');
         final bool isHandRaised = controller.remoteHandStates[participant.identity] ?? false;
         
-        // تحسين منطق جلب الاسم
         String displayName = participant.name ?? "";
-        if (displayName.isEmpty || displayName.length > 30) {
-          displayName = participant.identity.replaceAll("teacher_", "");
+        if (displayName.isEmpty) {
+          displayName = participant.identity.replaceAll("teacher_", "").split('_').first;
         }
-        if (displayName.isEmpty || displayName.length > 30) displayName = "مشارك";
+        if (displayName.isEmpty) displayName = "مشارك";
 
-        // تحديد التراك النشط
-        final screenPart = participant.videoTrackPublications.where((p) => p.isScreenShare).firstOrNull;
-        final camPart = participant.videoTrackPublications.where((p) => !p.isScreenShare).firstOrNull;
-        final activePub = screenPart ?? camPart;
+        // تحديد الفيديو النشط بأمان
+        VideoTrack? activeVideoTrack;
+        bool isScreen = false;
 
-        final bool hasVideo = activePub != null && 
-                             activePub.subscribed && 
-                             activePub.track != null &&
-                             (activePub.isScreenShare || participant.isCameraEnabled());
+        final screenPub = participant.videoTrackPublications.where((p) => p.isScreenShare).firstOrNull;
+        if (screenPub != null && screenPub.subscribed && screenPub.track != null) {
+          activeVideoTrack = screenPub.track as VideoTrack?;
+          isScreen = true;
+        } else {
+          final camPub = participant.videoTrackPublications.where((p) => !p.isScreenShare).firstOrNull;
+          if (camPub != null && camPub.subscribed && camPub.track != null) {
+            activeVideoTrack = camPub.track as VideoTrack?;
+          }
+        }
+
+        final bool hasVideo = activeVideoTrack != null && (isScreen || participant.isCameraEnabled());
 
         return Container(
           decoration: BoxDecoration(
@@ -147,29 +142,20 @@ class _ParticipantTile extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
-              // 1. الفيديو أو الأفاتار
               Positioned.fill(
                 child: hasVideo
                     ? VideoTrackRenderer(
-                        activePub.track as VideoTrack, 
-                        fit: activePub.isScreenShare ? VideoViewFit.contain : VideoViewFit.cover,
+                        activeVideoTrack!, 
+                        fit: isScreen ? VideoViewFit.contain : VideoViewFit.cover,
                       )
                     : _buildAvatar(displayName, isMainStage),
               ),
-
-              // 2. الاسم (Label)
               Positioned(
-                bottom: 10,
-                left: 10,
-                right: 10,
+                bottom: 10, left: 10, right: 10,
                 child: _buildNameLabel(displayName, isMe, participant.isMicrophoneEnabled()),
               ),
-
-              // 3. الشارات (Teacher, Hand, etc)
               Positioned(
-                top: 10,
-                left: 10,
-                right: 10,
+                top: 10, left: 10, right: 10,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -186,11 +172,11 @@ class _ParticipantTile extends StatelessWidget {
   }
 
   Widget _buildAvatar(String name, bool isMain) {
+    String initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "?";
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
+          begin: Alignment.topRight, end: Alignment.bottomLeft,
           colors: [Color(0xFF25262B), Color(0xFF141519)],
         ),
       ),
@@ -199,12 +185,8 @@ class _ParticipantTile extends StatelessWidget {
           radius: isMain ? 60 : 30,
           backgroundColor: Colors.blueAccent.withOpacity(0.1),
           child: Text(
-            name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "?",
-            style: TextStyle(
-              color: Colors.blueAccent, 
-              fontSize: isMain ? 40 : 22,
-              fontWeight: FontWeight.bold
-            ),
+            initial,
+            style: TextStyle(color: Colors.blueAccent, fontSize: isMain ? 40 : 22, fontWeight: FontWeight.bold),
           ),
         ),
       ),

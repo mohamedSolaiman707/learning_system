@@ -89,7 +89,7 @@ class VideoRoomController extends ChangeNotifier {
   final List<Map<String, dynamic>> _handRaiseQueue = [];
 
   bool _isConnected = true;
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  StreamSubscription? _connectivitySubscription; // جعلناه Dynamic لتجنب أخطاء النوع على الويب
   DateTime? _lastMutedSpeechWarning;
 
   final supabase = Supabase.instance.client;
@@ -194,8 +194,16 @@ class VideoRoomController extends ChangeNotifier {
 
   Future<void> init() async {
     _currentRoomName = roomName;
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
-      final hasInternet = results.any((result) => result != ConnectivityResult.none);
+    
+    // حل مشكلة القائمة (List) والعنصر الواحد في Connectivity للتوافق مع الويب
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((event) {
+      bool hasInternet = true;
+      if (event is List) {
+        hasInternet = event.any((result) => result != ConnectivityResult.none);
+      } else {
+        hasInternet = event != ConnectivityResult.none;
+      }
+
       if (_isConnected && !hasInternet) {
         _isConnected = false;
         onNotification?.call("فقدت الاتصال بالإنترنت ⚠️", Colors.red);

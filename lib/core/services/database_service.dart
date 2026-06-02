@@ -368,11 +368,13 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getSessionAttendance(String sessionId) async {
     try {
+      // 1. جلب كافة الطلاب المسجلين رسمياً في الحصة
       final enrollments = await _supabase
           .from('enrollments')
           .select('student_id, profiles:student_id(full_name)')
           .eq('session_id', sessionId);
       
+      // 2. جلب سجلات الحضور الفعلي
       final attendance = await _supabase
           .from('attendance')
           .select('*')
@@ -384,6 +386,7 @@ class DatabaseService {
         final studentId = en['student_id'];
         final profile = en['profiles'] as Map<String, dynamic>?;
         
+        // البحث هل الطالب لديه سجل حضور فعلي؟
         final record = attendanceList.firstWhere(
           (a) => a['student_id'] == studentId,
           orElse: () => {},

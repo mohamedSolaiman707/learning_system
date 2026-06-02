@@ -36,32 +36,6 @@ class LiveKitService {
     }
   }
 
-  // ميزة جديدة: تسجيل مجموعات العمل في قاعدة البيانات للتقارير
-  Future<bool> logBreakoutSession({
-    required String parentSessionId,
-    required List<Map<String, dynamic>> groups, // قائمة تحتوي على الطلاب في كل مجموعة
-    required int durationMinutes,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$supabaseUrl/functions/v1/manage-breakout'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $supabaseAnonKey',
-        },
-        body: jsonEncode({
-          'action': 'start',
-          'sessionId': parentSessionId,
-          'groups': groups,
-          'duration': durationMinutes,
-        }),
-      );
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
-
   Future<bool> startRecording(String roomName, String sessionId) async {
     try {
       final response = await http.post(
@@ -94,6 +68,71 @@ class LiveKitService {
           'action': 'stop',
           'roomName': roomName,
           'sessionId': sessionId,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> pauseRecording(String roomName, String sessionId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$supabaseUrl/functions/v1/livekit-recording'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $supabaseAnonKey',
+        },
+        body: jsonEncode({
+          'action': 'pause',
+          'roomName': roomName,
+          'sessionId': sessionId,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> resumeRecording(String roomName, String sessionId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$supabaseUrl/functions/v1/livekit-recording'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $supabaseAnonKey',
+        },
+        body: jsonEncode({
+          'action': 'resume',
+          'roomName': roomName,
+          'sessionId': sessionId,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> logBreakoutSession({
+    required String parentSessionId,
+    required List<Map<String, dynamic>> groups,
+    required int durationMinutes,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$supabaseUrl/functions/v1/manage-breakout'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $supabaseAnonKey',
+        },
+        body: jsonEncode({
+          'action': 'start',
+          'sessionId': parentSessionId,
+          'groups': groups,
+          'duration': durationMinutes,
         }),
       );
       return response.statusCode == 200;

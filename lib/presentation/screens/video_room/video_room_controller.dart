@@ -50,9 +50,12 @@ class VideoRoomController extends ChangeNotifier {
   bool _isHandRaised = false;
   bool _isMicLocked = false;
   bool _isCamLocked = false;
-  bool _isRecording = false;
-  bool _isScreenSharing = false;
 
+  // حالات التسجيل المتقدمة
+  bool _isRecording = false;
+  bool _isRecordingPaused = false;
+
+  bool _isScreenSharing = false;
   bool _isChatLocked = false;
   bool _isWhiteboardLocked = false;
   bool _isScreenShareLocked = false;
@@ -86,9 +89,11 @@ class VideoRoomController extends ChangeNotifier {
 
   bool _isConnected = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-
   DateTime? _lastMutedSpeechWarning;
-  DateTime? _lastReactionSent;
+
+  final supabase = Supabase.instance.client;
+  StreamSubscription? _statusSubscription;
+  Timer? _expiryTimer;
 
   Room? get room => _room;
   bool get isLoading => _isLoading;
@@ -98,6 +103,7 @@ class VideoRoomController extends ChangeNotifier {
   bool get isCamEnabled => _isCamEnabled;
   bool get isHandRaised => _isHandRaised;
   bool get isRecording => _isRecording;
+  bool get isRecordingPaused => _isRecordingPaused;
   bool get isScreenSharing => _isScreenSharing;
   bool get isChatOpen => _isChatOpen;
   bool get isWhiteboardOpen => _isWhiteboardOpen;
@@ -133,15 +139,12 @@ class VideoRoomController extends ChangeNotifier {
   Function(String room, String name, int duration)? onBreakoutInvite;
   Function(String emoji)? onReactionReceived;
 
-  final supabase = Supabase.instance.client;
-  StreamSubscription? _statusSubscription;
-  Timer? _expiryTimer;
-
   void _triggerHaptic({bool heavy = false}) {
-    if (heavy)
+    if (heavy) {
       HapticFeedback.mediumImpact();
-    else
+    } else {
       HapticFeedback.lightImpact();
+    }
   }
 
   void toggleChat() {
@@ -205,8 +208,9 @@ class VideoRoomController extends ChangeNotifier {
         _isConnected = true;
         onNotification?.call("تم استعادة الاتصال ✅", Colors.green);
         if (_room == null ||
-            _room!.connectionState == ConnectionState.disconnected)
+            _room!.connectionState == ConnectionState.disconnected) {
           connectToRoom(_currentRoomName ?? roomName);
+        }
       }
       notifyListeners();
     });
@@ -250,33 +254,67 @@ class VideoRoomController extends ChangeNotifier {
           .eq('id', sessionId!)
           .single();
       final DateTime endTime = DateTime.parse(res['end_time']);
+
+      // مزامنة حالة التسجيل عند الدخول
+      _isRecording = res['is_recording'] ?? false;
+      _isRecordingPaused = res['is_recording_paused'] ?? false;
+
       if (res['status'] == 'ended' ||
           res['status'] == 'archived' ||
           DateTime.now().isAfter(endTime)) {
         onSessionEnded?.call("هذه الجلسة انتهت بالفعل.");
         return false;
       }
+
       _statusSubscription = DatabaseService()
           .watchSessionStatus(sessionId!)
           .listen((data) {
-        if (data.isNotEmpty &&
-            (data.first['status'] == 'ended' ||
-                data.first['status'] == 'archived')) {
-          onNotification?.call(
-            "🔴 تم إنهاء البث المباشر.",
-            Colors.redAccent,
-          );
-          Future.delayed(
-            const Duration(seconds: 3),
-                () => onSessionEnded?.call("انتهت الحصة الدراسية."),
-          );
+        if (data.isNotEmpty) {
+          final sessionData = data.first;
+
+          // مزامنة حالة التسجيل (بدء/إيقاف/إيقاف مؤقت) عند الجميع
+          bool dbRecording = sessionData['is_recording'] ?? false;
+          bool dbPaused = sessionData['is_recording_paused'] ?? false;
+
+          if (dbRecording != _isRecording ||
+              dbPaused != _isRecordingPaused) {
+            _isRecording = dbRecording;
+            _isRecordingPaused = dbPaused;
+
+            if (_isRecording) {
+              onNotification?.call(
+                _isRecordingPaused
+                    ? "⏸️ تم إيقاف التسجيل مؤقتاً"
+                    : "🔴 يتم الآن تسجيل الحصة",
+                _isRecordingPaused ? Colors.orange : Colors.red,
+              );
+            } else {
+              onNotification?.call(
+                "⏹️ تم إيقاف التسجيل نهائياً",
+                Colors.blueGrey,
+              );
+            }
+            notifyListeners();
+          }
+
+          if (sessionData['status'] == 'ended' ||
+              sessionData['status'] == 'archived') {
+            onNotification?.call(
+              "🔴 تم إنهاء البث المباشر.",
+              Colors.redAccent,
+            );
+            Future.delayed(
+              const Duration(seconds: 3),
+                  () => onSessionEnded?.call("انتهت الحصة الدراسية."),
+            );
+          }
         }
       });
+
       _expiryTimer = Timer(
         endTime.difference(DateTime.now()),
             () => onSessionEnded?.call("انتهى وقت الحصة."),
       );
-      if (isTeacher && res['is_recording_enabled'] == true) startRecording();
       return true;
     } catch (e) {
       return true;
@@ -316,16 +354,11 @@ class VideoRoomController extends ChangeNotifier {
         token,
       );
 
-      // تسجيل دخول الطالب في جدول الحضور عند نجاح الاتصال
       if (!isTeacher && sessionId != null) {
         await DatabaseService().logStudentEntry(sessionId!, userId);
       }
 
       _currentRoomName = targetRoomName;
-      if (isBreakoutRoom) {
-        _whiteboardStrokes.clear();
-        _redoStack.clear();
-      }
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -448,17 +481,19 @@ class VideoRoomController extends ChangeNotifier {
         if (p != null) {
           _remoteHandStates[p.identity] = data['value'];
           if (data['value'] == true) {
-            if (!_handRaiseQueue.any((i) => i['identity'] == p.identity))
+            if (!_handRaiseQueue.any((i) => i['identity'] == p.identity)) {
               _handRaiseQueue.add({
                 'identity': p.identity,
                 'name': p.name ?? "طالب",
                 'time': DateTime.now(),
               });
-            if (isTeacher)
+            }
+            if (isTeacher) {
               onNotification?.call(
                 "قام ${p.name ?? "مشارك"} برفع يده ✋",
                 Colors.orange,
               );
+            }
           } else {
             _handRaiseQueue.removeWhere((i) => i['identity'] == p.identity);
           }
@@ -495,6 +530,7 @@ class VideoRoomController extends ChangeNotifier {
         break;
       case 'whiteboard_clear':
         _whiteboardStrokes.clear();
+        _redoStack.clear();
         break;
       case 'control_chat':
         _isChatLocked = data['value'];
@@ -590,12 +626,13 @@ class VideoRoomController extends ChangeNotifier {
           targetIdentities: [students[i].identity],
         );
       }
-      if (sessionId != null)
+      if (sessionId != null) {
         await LiveKitService().logBreakoutSession(
           parentSessionId: sessionId!,
           groups: groupingData,
           durationMinutes: duration,
         );
+      }
       _startBreakoutCountdown();
       onNotification?.call("تم بدء المجموعات بنجاح ✅", Colors.green);
     } catch (_) {
@@ -689,11 +726,12 @@ class VideoRoomController extends ChangeNotifier {
   void kickParticipant(String tId) async {
     if (!isTeacher) return;
     sendData({'type': 'kick_participant', 'target': tId});
-    if (sessionId != null)
+    if (sessionId != null) {
       await DatabaseService().markStudentAsKicked(
         sessionId!,
         tId.split('_').first,
       );
+    }
     notifyListeners();
   }
 
@@ -836,11 +874,101 @@ class VideoRoomController extends ChangeNotifier {
     }
   }
 
+  // --- Recording Logic (With Pause/Resume Support) ---
+
   Future<void> startRecording() async {
-    if (sessionId != null &&
-        await LiveKitService().startRecording(roomName, sessionId!)) {
-      _isRecording = true;
-      notifyListeners();
+    if (sessionId == null || _isRecording) return;
+    try {
+      final success = await LiveKitService().startRecording(
+        roomName,
+        sessionId!,
+      );
+      if (success) {
+        await DatabaseService().saveSession({
+          'is_recording': true,
+          'is_recording_paused': false,
+        }, id: sessionId!);
+        _isRecording = true;
+        _isRecordingPaused = false;
+        notifyListeners();
+      }
+    } catch (e) {
+      onNotification?.call("فشل بدء التسجيل", Colors.red);
+    }
+  }
+
+  Future<void> stopRecording() async {
+    if (sessionId == null || !_isRecording) return;
+    try {
+      final success = await LiveKitService().stopRecording(
+        roomName,
+        sessionId!,
+      );
+      if (success) {
+        await DatabaseService().saveSession({
+          'is_recording': false,
+          'is_recording_paused': false,
+        }, id: sessionId!);
+        _isRecording = false;
+        _isRecordingPaused = false;
+        notifyListeners();
+      }
+    } catch (e) {
+      onNotification?.call("فشل إيقاف التسجيل", Colors.red);
+    }
+  }
+
+  Future<void> pauseRecording() async {
+    if (sessionId == null || !_isRecording || _isRecordingPaused) return;
+    try {
+      // لاحظ: سنفترض وجود دالة pauseRecording في LiveKitService
+      final success = await LiveKitService().pauseRecording(
+        roomName,
+        sessionId!,
+      );
+      if (success) {
+        await DatabaseService().saveSession({
+          'is_recording_paused': true,
+        }, id: sessionId!);
+        _isRecordingPaused = true;
+        notifyListeners();
+      }
+    } catch (e) {
+      onNotification?.call("فشل إيقاف التسجيل مؤقتاً", Colors.red);
+    }
+  }
+
+  Future<void> resumeRecording() async {
+    if (sessionId == null || !_isRecording || !_isRecordingPaused) return;
+    try {
+      final success = await LiveKitService().resumeRecording(
+        roomName,
+        sessionId!,
+      );
+      if (success) {
+        await DatabaseService().saveSession({
+          'is_recording_paused': false,
+        }, id: sessionId!);
+        _isRecordingPaused = false;
+        notifyListeners();
+      }
+    } catch (e) {
+      onNotification?.call("فشل استئناف التسجيل", Colors.red);
+    }
+  }
+
+  Future<void> toggleRecording() async {
+    if (!isTeacher) return;
+    _triggerHaptic(heavy: true);
+    if (_isRecording) {
+      if (_isRecordingPaused) {
+        await resumeRecording();
+      } else {
+        await stopRecording();
+      }
+      // ملحوظة: يمكنك جعل الزر يفتح خيارات (إيقاف نهائي / إيقاف مؤقت)
+    } else {
+      await startRecording();
     }
   }
 
@@ -849,30 +977,21 @@ class VideoRoomController extends ChangeNotifier {
     _isProcessing = true;
     notifyListeners();
     try {
-      // 1. إرسال إشارة لجميع المشاركين بإنهاء الجلسة فوراً
+      if (_isRecording) await stopRecording();
       sendData({'type': 'session_ended'});
-
-      // 2. إيقاف تفعيل الغرفة في جدول الـ rooms لضمان عدم ظهورها في الحصص النشطة
       await DatabaseService().toggleRoomStatus(sessionId!, false);
-
-      // 3. تحديث حالة الجلسة في قاعدة البيانات إلى مؤرشفة (أرشفة نهائية)
       await DatabaseService().updateSessionStatus(sessionId!, 'archived');
-
-      // 4. جلب بيانات الحضور النهائية لتوليد التقرير
-      final attendanceData = await DatabaseService().getSessionAttendance(sessionId!);
-      
-      // 5. توليد تقرير PDF وحفظه
+      final attendanceData = await DatabaseService().getSessionAttendance(
+        sessionId!,
+      );
       await AttendancePdfService().generateReport(
         subjectName: title,
         teacherName: userName,
         studentsData: attendanceData,
       );
-
-      // 6. فصل الاتصال
       _room?.disconnect();
-      onSessionEnded?.call("تم إنهاء الحصة وأرشفتها وتوليد التقرير بنجاح ✅");
+      onSessionEnded?.call("تم إنهاء الحصة وأرشفتها بنجاح ✅");
     } catch (e) {
-      debugPrint("Error ending session: $e");
       onNotification?.call("حدث خطأ أثناء إنهاء الجلسة", Colors.red);
     } finally {
       _isProcessing = false;

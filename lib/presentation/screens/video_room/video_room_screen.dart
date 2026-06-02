@@ -67,9 +67,9 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
   final List<Widget> _reactions = [];
   bool _tourStarted = false;
   
-  // مفاتيح الجولة الكاملة
   final GlobalKey _micKey = GlobalKey();
   final GlobalKey _camKey = GlobalKey();
+  final GlobalKey _recordKey = GlobalKey(); 
   final GlobalKey _emojiKey = GlobalKey();
   final GlobalKey _screenShareKey = GlobalKey();
   final GlobalKey _handKey = GlobalKey();
@@ -158,11 +158,12 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
     final controller = context.read<VideoRoomController>();
     final auth = context.read<AuthProvider>();
 
-    if (!controller.isLoading && !auth.isTeacher && !auth.hasSeenVideoTour && !_tourStarted) {
+    if (!controller.isLoading && !auth.hasSeenVideoTour && !_tourStarted) {
       _tourStarted = true;
       ShowCaseWidget.of(context).startShowCase([
         _micKey,
         _camKey,
+        if (auth.isTeacher) _recordKey,
         _emojiKey,
         _screenShareKey,
         _handKey,
@@ -187,10 +188,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
           children: [
             const CircularProgressIndicator(color: Colors.blue, strokeWidth: 3),
             const SizedBox(height: 24),
-            const Text("جاري الاتصال بالقاعة التعليمية...", 
-                style: TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
-            const SizedBox(height: 8),
-            Text(controller.roomName, style: const TextStyle(color: Colors.white38, fontSize: 12, fontFamily: 'Cairo')),
+            const Text("جاري الاتصال للقاعة...", style: TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
           ],
         ),
       );
@@ -205,8 +203,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
             children: [
               const Icon(Icons.wifi_off_rounded, size: 80, color: Colors.redAccent),
               const SizedBox(height: 24),
-              Text(controller.errorMessage!, textAlign: TextAlign.center, 
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
+              Text(controller.errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 onPressed: () => controller.connectToRoom(controller.roomName),
@@ -242,6 +239,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
           child: ControlsBar(
             micKey: _micKey,
             camKey: _camKey,
+            recordKey: _recordKey,
             emojiKey: _emojiKey,
             screenShareKey: _screenShareKey,
             handKey: _handKey,
@@ -278,7 +276,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
           Showcase(
             key: _exitKey,
             title: 'مغادرة الحصة',
-            description: 'عند انتهاء الحصة، يمكنك الخروج من هنا للعودة للرئيسية.',
+            description: 'يمكنك الخروج من هنا للعودة للرئيسية.',
             titleTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF102A43), fontFamily: 'Cairo'),
             descTextStyle: const TextStyle(fontFamily: 'Cairo'),
             child: IconButton(
@@ -298,7 +296,7 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
                 Row(
                   children: [
                     if (controller.isRecording) ...[
-                       _buildStatusBadge("REC", Colors.red),
+                       const _PulsingRecordBadge(),
                        const SizedBox(width: 8),
                     ],
                     _buildStatusBadge("${controller.room?.remoteParticipants.length ?? 0} مشارك", Colors.white24),
@@ -384,12 +382,46 @@ class _VideoRoomContentState extends State<_VideoRoomContent> {
   }
 }
 
+class _PulsingRecordBadge extends StatefulWidget {
+  const _PulsingRecordBadge();
+  @override
+  State<_PulsingRecordBadge> createState() => _PulsingRecordBadgeState();
+}
+
+class _PulsingRecordBadgeState extends State<_PulsingRecordBadge> with SingleTickerProviderStateMixin {
+  late AnimationController _anim;
+  @override
+  void initState() {
+    super.initState();
+    _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))..repeat(reverse: true);
+  }
+  @override
+  void dispose() { _anim.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _anim,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.fiber_manual_record, color: Colors.white, size: 10),
+            SizedBox(width: 4),
+            Text("REC", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _FlyingEmoji extends StatefulWidget {
   final String emoji;
   final int delay;
   final VoidCallback onComplete;
   const _FlyingEmoji({super.key, required this.emoji, required this.onComplete, this.delay = 0});
-
   @override
   State<_FlyingEmoji> createState() => _FlyingEmojiState();
 }

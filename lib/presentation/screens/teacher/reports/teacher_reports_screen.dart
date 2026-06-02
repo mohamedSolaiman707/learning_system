@@ -38,6 +38,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       for (var session in teacherSessions) {
         final sessionId = session['id'];
         
+        // جلب كافة البيانات المرتبطة بالحصة في وقت واحد
         final results = await Future.wait([
           db.getSessionEnrollments(sessionId),
           db.getAttendanceReportData(sessionId),
@@ -48,7 +49,8 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         final attendance = results[1] as List;
         final quizzes = results[2] as List;
 
-        final presentCount = attendance.where((a) => a['status'] == 'present').length;
+        // منطق الحضور الصحيح: أي طالب لديه سجل حضور ولم يتم طرده يعتبر "حضر"
+        final presentCount = attendance.where((a) => a['status'] != 'kicked').length;
         totalAttendance += presentCount;
 
         double avgQuizScore = 0;
@@ -60,7 +62,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         reportsWithStats.add({
           'session': session,
           'presentCount': presentCount,
-          'absentCount': enrollments.length - presentCount,
+          'absentCount': (enrollments.length - presentCount) < 0 ? 0 : (enrollments.length - presentCount),
           'totalEnrolled': enrollments.length,
           'avgQuizScore': avgQuizScore,
           'attendanceData': attendance,
@@ -86,6 +88,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     
     final List<Map<String, dynamic>> fullStudentsReport = [];
     
+    // 1. معالجة الطلاب المسجلين رسمياً في الحصة
     for (var enrollment in enrollments) {
       final studentId = enrollment['student_id'];
       final profile = enrollment['profiles'] as Map<String, dynamic>?;
@@ -97,30 +100,31 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
       fullStudentsReport.add({
         'name': profile?['full_name'] ?? "طالب غير معروف",
-        'present': attRecord != null && attRecord['status'] == 'present',
-        'joined_at': attRecord?['joined_at'],
-        'left_at': attRecord?['left_at'],
-        'duration': attRecord?['total_duration_minutes'],
+        'present': attRecord != null && attRecord['status'] != 'kicked',
+        'joined_at': attRecord?['joined_at'] ?? 'لم يحضر',
+        'left_at': attRecord?['left_at'] ?? '---',
+        'duration': attRecord?['total_duration_minutes'] ?? 0,
       });
     }
 
+    // 2. إضافة أي طالب حضر القاعة ولكنه لم يكن مسجلاً رسمياً (Visitor)
     for (var att in attendanceData) {
       if (!enrollments.any((e) => e['student_id'] == att['student_id'])) {
         final profile = att['profiles'] as Map<String, dynamic>?;
         fullStudentsReport.add({
-          'name': "${profile?['full_name'] ?? 'زائر'} (غير مسجل)",
+          'name': "${profile?['full_name'] ?? 'مشارك'} (خارج القائمة)",
           'present': true,
-          'joined_at': att['joined_at'],
-          'left_at': att['left_at'],
-          'duration': att['total_duration_minutes'],
+          'joined_at': att['joined_at'] ?? '---',
+          'left_at': att['left_at'] ?? '---',
+          'duration': att['total_duration_minutes'] ?? 0,
         });
       }
     }
 
     final pdfService = AttendancePdfService();
     await pdfService.generateReport(
-      subjectName: session['subject_name'],
-      teacherName: Provider.of<AuthProvider>(context, listen: false).profile?['full_name'] ?? "المدرس",
+      subjectName: session['subject_name'] ?? session['title'] ?? 'حصة تعليمية',
+      teacherName: Provider.of<AuthProvider>(context, listen: false).profile?['full_name'] ?? "المعلم",
       studentsData: fullStudentsReport,
     );
   }
@@ -130,7 +134,8 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
-        title: const Text("مركز التقارير والإحصاء", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
+        title: const Text("مركز التقارير والإحصاء", 
+            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo')),
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
@@ -169,7 +174,8 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         ),
         child: Column(
           children: [
-            const Text("الملخص العام للأداء", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+            const Text("الملخص العام للأداء", 
+                style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -208,7 +214,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         ),
         const SizedBox(height: 8),
         Text(value, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'Cairo')),
       ],
     );
   }
@@ -233,17 +239,24 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
               backgroundColor: Colors.blue.shade50,
               child: const Icon(Icons.description, color: Colors.blue, size: 20),
             ),
-            title: Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(DateFormat('EEEE, d MMMM').format(startTime), style: const TextStyle(fontSize: 12)),
+            title: Text(session['subject_name'] ?? session['title'] ?? 'بدون عنوان', 
+                style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+            subtitle: Text(DateFormat('EEEE, d MMMM', 'ar_EG').format(startTime), 
+                style: const TextStyle(fontSize: 12, fontFamily: 'Cairo')),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: session['status'] == 'ended' ? Colors.grey.shade100 : Colors.green.shade50,
+                color: session['status'] == 'archived' || session['status'] == 'ended' ? Colors.grey.shade100 : Colors.green.shade50,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                session['status'] == 'ended' ? "منتهية" : "نشطة",
-                style: TextStyle(color: session['status'] == 'ended' ? Colors.grey : Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
+                session['status'] == 'archived' ? "مؤرشفة" : (session['status'] == 'ended' ? "منتهية" : "نشطة"),
+                style: TextStyle(
+                  color: session['status'] == 'archived' || session['status'] == 'ended' ? Colors.grey : Colors.green, 
+                  fontSize: 10, 
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Cairo'
+                ),
               ),
             ),
           ),
@@ -265,7 +278,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                       child: ElevatedButton.icon(
                         onPressed: () => _downloadPdf(report),
                         icon: const Icon(Icons.picture_as_pdf, size: 18),
-                        label: const Text("تقرير الحضور PDF"),
+                        label: const Text("تقرير الحضور PDF", style: TextStyle(fontFamily: 'Cairo')),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.redAccent.shade400,
                           foregroundColor: Colors.white,
@@ -277,7 +290,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                     ),
                     const SizedBox(width: 12),
                     InkWell(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: session['id'], subjectName: session['subject_name']))),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: session['id'], subjectName: session['subject_name'] ?? 'حصة تعليمية'))),
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
@@ -300,7 +313,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         children: [
           Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 4),
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10, fontFamily: 'Cairo')),
         ],
       ),
     );
@@ -314,8 +327,10 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
           const SizedBox(height: 60),
           Icon(Icons.bar_chart, size: 80, color: Colors.grey.shade200),
           const SizedBox(height: 20),
-          const Text("لا توجد بيانات كافية للتقارير", style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.bold)),
-          const Text("ابدأ حصصك ليتم تجميع البيانات هنا", style: TextStyle(color: Colors.grey, fontSize: 12)),
+          const Text("لا توجد بيانات كافية للتقارير", 
+              style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          const Text("ابدأ حصصك ليتم تجميع البيانات هنا", 
+              style: TextStyle(color: Colors.grey, fontSize: 12, fontFamily: 'Cairo')),
         ],
       ),
     );

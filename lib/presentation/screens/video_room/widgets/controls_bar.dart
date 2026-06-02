@@ -13,6 +13,7 @@ class ControlsBar extends StatelessWidget {
   final GlobalKey? screenShareKey;
   final GlobalKey? qaKey;
   final GlobalKey? whiteboardKey;
+  final GlobalKey? recordKey; // إضافة مفتاح التسجيل
 
   const ControlsBar({
     super.key,
@@ -24,6 +25,7 @@ class ControlsBar extends StatelessWidget {
     this.screenShareKey,
     this.qaKey,
     this.whiteboardKey,
+    this.recordKey,
   });
 
   @override
@@ -76,6 +78,21 @@ class ControlsBar extends StatelessWidget {
                         tooltip: "الكاميرا",
                       ),
                     ),
+
+                    // زر التسجيل (للمدرس فقط)
+                    if (controller.isTeacher)
+                      _buildShowcase(
+                        key: recordKey,
+                        title: 'تسجيل المحاضرة',
+                        description: 'ابدأ تسجيل الحصة ليتمكن الطلاب من مشاهدتها لاحقاً عبر السحابة.',
+                        child: _AnimatedControlButton(
+                          icon: controller.isRecording ? Icons.stop_circle_rounded : Icons.fiber_manual_record_rounded,
+                          isActive: controller.isRecording,
+                          activeColor: Colors.red,
+                          onPressed: controller.toggleRecording,
+                          tooltip: controller.isRecording ? "إيقاف التسجيل" : "بدء التسجيل",
+                        ),
+                      ),
                     
                     const SizedBox(width: 8),
                     _buildShowcase(

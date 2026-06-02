@@ -89,7 +89,7 @@ class VideoRoomController extends ChangeNotifier {
   final List<Map<String, dynamic>> _handRaiseQueue = [];
 
   bool _isConnected = true;
-  StreamSubscription? _connectivitySubscription; // جعلناه Dynamic لتجنب أخطاء النوع على الويب
+  StreamSubscription? _connectivitySubscription;
   DateTime? _lastMutedSpeechWarning;
 
   final supabase = Supabase.instance.client;
@@ -194,8 +194,6 @@ class VideoRoomController extends ChangeNotifier {
 
   Future<void> init() async {
     _currentRoomName = roomName;
-    
-    // حل مشكلة القائمة (List) والعنصر الواحد في Connectivity للتوافق مع الويب
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((event) {
       bool hasInternet = true;
       if (event is List) {
@@ -203,7 +201,6 @@ class VideoRoomController extends ChangeNotifier {
       } else {
         hasInternet = event != ConnectivityResult.none;
       }
-
       if (_isConnected && !hasInternet) {
         _isConnected = false;
         onNotification?.call("فقدت الاتصال بالإنترنت ⚠️", Colors.red);
@@ -300,17 +297,14 @@ class VideoRoomController extends ChangeNotifier {
     notifyListeners();
     try {
       if (!isTeacher && sessionId != null) {
-        try {
-          final isKicked = await DatabaseService().isStudentKicked(sessionId!, userId);
-          if (isKicked) {
-            _errorMessage = "تم استبعادك من هذه القاعة ولا يمكنك الدخول.";
-            _isLoading = false;
-            notifyListeners();
-            onSessionEnded?.call("تم استبعادك من القاعة.");
-            return;
-          }
-        } catch (e) {
-          debugPrint("Check kicked status error: $e");
+        // فحص الطرد بشكل صارم قبل أي اتصال
+        final isKicked = await DatabaseService().isStudentKicked(sessionId!, userId);
+        if (isKicked) {
+          _errorMessage = "عذراً، تم استبعادك من دخول هذه القاعة.";
+          _isLoading = false;
+          notifyListeners();
+          onSessionEnded?.call("تم استبعادك من قبل المعلم.");
+          return;
         }
       }
       final suffix = DateTime.now().millisecondsSinceEpoch.toString().substring(10);
@@ -335,7 +329,7 @@ class VideoRoomController extends ChangeNotifier {
         try {
           await DatabaseService().logStudentEntry(sessionId!, userId);
         } catch (e) {
-          debugPrint("Log student entry error (ignoring to allow live access): $e");
+          debugPrint("Log student entry error: $e");
         }
       }
       
@@ -344,7 +338,7 @@ class VideoRoomController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint("Connect to room error: $e");
-      _errorMessage = "فشل الاتصال بالقاعة. تأكد من إعدادات السيرفر.";
+      _errorMessage = "فشل الاتصال بالقاعة. يرجى المحاولة لاحقاً.";
       _isLoading = false;
       notifyListeners();
     }
@@ -413,7 +407,10 @@ class VideoRoomController extends ChangeNotifier {
         if (isBreakoutRoom) returnToMainRoom();
         break;
       case 'kick_participant':
-        if (_isMe(data['target'])) { _room?.disconnect(); onSessionEnded?.call("تم استبعادك من القاعة."); }
+        if (_isMe(data['target'])) { 
+          _room?.disconnect(); 
+          onSessionEnded?.call("تم استبعادك من القاعة من قبل المعلم."); 
+        }
         break;
       case 'new_question':
         _questions.insert(0, {
@@ -545,7 +542,16 @@ class VideoRoomController extends ChangeNotifier {
   void toggleWhiteboardLock() { _isWhiteboardLocked = !_isWhiteboardLocked; sendData({'type': 'control_whiteboard', 'value': _isWhiteboardLocked}); notifyListeners(); }
   void toggleScreenShareLock() { _isScreenShareLocked = !_isScreenShareLocked; sendData({'type': 'control_screenshare', 'value': _isScreenShareLocked}); notifyListeners(); }
   void setSpotlight(String? id) { _spotlightUserId = id; sendData({'type': 'spotlight', 'value': id}); notifyListeners(); }
-  void kickParticipant(String tId) async { if (!isTeacher) return; sendData({'type': 'kick_participant', 'target': tId}); if (sessionId != null) try { await DatabaseService().markStudentAsKicked(sessionId!, tId.split('_').first); } catch (_) {} notifyListeners(); }
+  void kickParticipant(String tId) async { 
+    if (!isTeacher) return; 
+    sendData({'type': 'kick_participant', 'target': tId}); 
+    if (sessionId != null) {
+      try { 
+        await DatabaseService().markStudentAsKicked(sessionId!, tId.split('_').first); 
+      } catch (_) {} 
+    }
+    notifyListeners(); 
+  }
 
   void _handleMicControl(Map<String, dynamic> data) {
     if (!isTeacher && (data['target'] == null || _isMe(data['target']))) { _isMicEnabled = data['value']; _room?.localParticipant?.setMicrophoneEnabled(_isMicEnabled); _isMicLocked = data['lock'] ?? false; notifyListeners(); }

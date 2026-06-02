@@ -315,34 +315,60 @@ class DatabaseService {
 
   Future<void> logStudentEntry(String sessionId, String studentId) async {
     try {
-      // 1. التحقق من الطرد أولاً
-      final isKicked = await isStudentKicked(sessionId, studentId);
+      final authUser = _supabase.auth.currentUser;
+      if (authUser == null) {
+        debugPrint("logStudentEntry: User not authenticated!");
+        return;
+      }
+
+      // 1. التحقق من الطرد
+      final isKicked = await isStudentKicked(sessionId, authUser.id);
       if (isKicked) return;
 
-      // 2. التسجيل التلقائي في الحصة لو مش متسجل (Auto-Enroll)
-      await _supabase.from('enrollments').upsert({
-        'session_id': sessionId,
-        'student_id': studentId,
-      }, onConflict: 'session_id, student_id');
+      // 2. ضمان وجود سجل في جدول Profiles لتفادي خطأ Foreign Key
+      try {
+        final profile = await _supabase.from('profiles').select('id').eq('id', authUser.id).maybeSingle();
+        if (profile == null) {
+          await _supabase.from('profiles').insert({
+            'id': authUser.id,
+            'role': 'student',
+            'full_name': 'طالب جديد',
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        }
+      } catch (e) { debugPrint("Profile check/insert failed: $e"); }
 
-      // 3. تسجيل الدخول في جدول الحضور
+      // 3. التسجيل في الحصة (Enrollment)
+      try {
+        await _supabase.from('enrollments').upsert({
+          'session_id': sessionId,
+          'student_id': authUser.id,
+        }, onConflict: 'session_id, student_id');
+      } catch (e) { debugPrint("Auto-enrollment failed: $e"); }
+
+      // 4. تسجيل الحضور الفعلي
       await _supabase.from('attendance').upsert({
         'session_id': sessionId,
-        'student_id': studentId,
+        'student_id': authUser.id,
         'status': 'present',
         'joined_at': DateTime.now().toUtc().toIso8601String(),
+        'left_at': null,
+        'total_duration_minutes': 0,
       }, onConflict: 'session_id, student_id');
+      
+      debugPrint("Log student entry SUCCESS for ${authUser.id}");
     } catch (e) {
-      debugPrint("Error logging entry: $e");
+      debugPrint("Log student entry FATAL ERROR: $e");
     }
   }
 
   Future<void> logStudentExit(String sessionId, String studentId) async {
     try {
+      final authId = _supabase.auth.currentUser?.id ?? studentId;
       final record = await _supabase.from('attendance')
           .select('status, joined_at')
           .eq('session_id', sessionId)
-          .eq('student_id', studentId)
+          .eq('student_id', authId)
           .maybeSingle();
 
       if (record != null) {
@@ -356,7 +382,7 @@ class DatabaseService {
           'left_at': exitTime.toIso8601String(),
           'total_duration_minutes': duration,
           'status': 'away' 
-        }).eq('session_id', sessionId).eq('student_id', studentId);
+        }).eq('session_id', sessionId).eq('student_id', authId);
       }
     } catch (e) {
       debugPrint("Error logging exit: $e");
@@ -376,7 +402,6 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getSessionAttendance(String sessionId) async {
     try {
-      // 1. جلب سجلات الحضور الفعلي مع أسماء الطلاب من جدول profiles
       final attendanceResponse = await _supabase
           .from('attendance')
           .select('*, profiles:student_id(full_name)')
@@ -384,7 +409,6 @@ class DatabaseService {
       
       final List<Map<String, dynamic>> attendanceData = List<Map<String, dynamic>>.from(attendanceResponse);
 
-      // 2. جلب المسجلين في الحصة لمقارنتهم (لمعرفة الغائبين)
       final enrollmentsResponse = await _supabase
           .from('enrollments')
           .select('student_id, profiles:student_id(full_name)')
@@ -392,30 +416,27 @@ class DatabaseService {
       
       final List<Map<String, dynamic>> enrollmentsData = List<Map<String, dynamic>>.from(enrollmentsResponse);
 
-      // دمج البيانات: الحاضرين أولاً ثم الغائبين
       final List<Map<String, dynamic>> report = [];
       final Set<String> processedIds = {};
 
-      // إضافة من حضروا فعلاً (سواء متسجلين أصلاً أو دخلوا برابط)
       for (var record in attendanceData) {
         final studentId = record['student_id'];
         processedIds.add(studentId);
         
         report.add({
-          'name': record['profiles']?['full_name'] ?? 'طالب غير معروف',
-          'present': true,
+          'name': (record['profiles'] != null) ? record['profiles']['full_name'] : 'طالب غير مسجل',
+          'present': record['status'] != 'absent',
           'joined_at': _formatTime(record['joined_at']),
           'left_at': _formatTime(record['left_at']),
           'duration': record['total_duration_minutes'] ?? 0,
         });
       }
 
-      // إضافة الغائبين (الموجودين في enrollments ولم يحضروا فعلياً)
       for (var enrollment in enrollmentsData) {
         final studentId = enrollment['student_id'];
         if (!processedIds.contains(studentId)) {
           report.add({
-            'name': enrollment['profiles']?['full_name'] ?? 'طالب غير معروف',
+            'name': (enrollment['profiles'] != null) ? enrollment['profiles']['full_name'] : 'طالب غائب',
             'present': false,
             'joined_at': 'لم يحضر',
             'left_at': '---',

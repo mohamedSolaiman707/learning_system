@@ -139,6 +139,28 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 600;
 
+    // داخل دالة build في VideoRoomScreen
+    if (controller.errorMessage != null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 60),
+              const SizedBox(height: 16),
+              Text(controller.errorMessage!, style: const TextStyle(color: Colors.white, fontFamily: 'Cairo')),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => controller.init(),
+                child: const Text("إعادة المحاولة"),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (controller.isLoading) {
       return Scaffold(
         backgroundColor: Colors.black,

@@ -604,7 +604,9 @@ class VideoRoomController extends ChangeNotifier {
 
   Future<void> toggleRecording() async {
     if (!isTeacher) return; _triggerHaptic(heavy: true);
-    if (_isRecording) { if (_isRecordingPaused) await resumeRecording(); else await stopRecording(); } else await startRecording();
+    if (_isRecording) { if (_isRecordingPaused) await resumeRecording(); else await stopRecording(); } else {
+      await startRecording();
+    }
   }
 
   Future<void> downloadAttendanceReport() async {

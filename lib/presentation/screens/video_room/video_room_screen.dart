@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:showcaseview/showcaseview.dart';
 import 'video_room_controller.dart';
 import 'widgets/participant_grid.dart';
 import 'widgets/controls_bar.dart';
@@ -53,7 +54,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       final controller = context.read<VideoRoomController>();
       controller.init();
 
-      // مستمع لدعوات غرف التقسيم
       controller.onBreakoutInvite = (room, name, duration) {
         _showBreakoutInvite(room, name, duration, controller);
       };
@@ -139,7 +139,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 600;
 
-    // داخل دالة build في VideoRoomScreen
     if (controller.errorMessage != null) {
       return Scaffold(
         backgroundColor: Colors.black,
@@ -177,48 +176,50 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 80),
-              child: const ParticipantGrid(),
+    return ShowCaseWidget(
+      builder: (context) => Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 80),
+                child: const ParticipantGrid(),
+              ),
             ),
-          ),
 
-          Positioned(top: 0, left: 0, right: 0, child: _buildHeader(context, controller)),
+            Positioned(top: 0, left: 0, right: 0, child: _buildHeader(context, controller)),
 
-          if (controller.isWhiteboardOpen) const WhiteboardPanel(),
-          
-          if (controller.spotlightedQuestionId != null && !controller.isQAOpen)
-            _buildSpotlightOverlay(controller, isMobile, size),
+            if (controller.isWhiteboardOpen) const WhiteboardPanel(),
+            
+            if (controller.spotlightedQuestionId != null && !controller.isQAOpen)
+              _buildSpotlightOverlay(controller, isMobile, size),
 
-          ..._reactions,
+            ..._reactions,
 
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: ControlsBar(
-              micKey: _micKey, camKey: _camKey, recordKey: _recordKey,
-              emojiKey: _emojiKey, screenShareKey: _screenShareKey,
-              handKey: _handKey, chatKey: _chatKey, qaKey: _qaKey,
-              whiteboardKey: _whiteboardKey,
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: ControlsBar(
+                micKey: _micKey, camKey: _camKey, recordKey: _recordKey,
+                emojiKey: _emojiKey, screenShareKey: _screenShareKey,
+                handKey: _handKey, chatKey: _chatKey, qaKey: _qaKey,
+                whiteboardKey: _whiteboardKey,
+              ),
             ),
-          ),
 
-          if (controller.isChatOpen) _buildFeaturePanel(const ChatPanel(), isMobile, size),
-          if (controller.isQAOpen) _buildFeaturePanel(const QAPanel(), isMobile, size),
-          if (controller.isParticipantsOpen) _buildFeaturePanel(const ParticipantsPanel(), isMobile, size),
-          if (controller.isPollsOpen) _buildFeaturePanel(const PollPanel(), isMobile, size),
-          if (controller.isQuizOpen) _buildFeaturePanel(const QuizPanel(), isMobile, size),
+            if (controller.isChatOpen) _buildFeaturePanel(const ChatPanel(), isMobile, size),
+            if (controller.isQAOpen) _buildFeaturePanel(const QAPanel(), isMobile, size),
+            if (controller.isParticipantsOpen) _buildFeaturePanel(const ParticipantsPanel(), isMobile, size),
+            if (controller.isPollsOpen) _buildFeaturePanel(const PollPanel(), isMobile, size),
+            if (controller.isQuizOpen) _buildFeaturePanel(const QuizPanel(), isMobile, size),
 
-          if (controller.isProcessing)
-            Container(
-              color: Colors.black45,
-              child: const Center(child: CircularProgressIndicator(color: Colors.white)),
-            ),
-        ],
+            if (controller.isProcessing)
+              Container(
+                color: Colors.black45,
+                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+              ),
+          ],
+        ),
       ),
     );
   }

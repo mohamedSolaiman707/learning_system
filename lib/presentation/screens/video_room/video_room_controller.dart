@@ -327,7 +327,7 @@ class VideoRoomController extends ChangeNotifier {
       
       if (!isTeacher && sessionId != null) {
         try {
-          await DatabaseService().logStudentEntry(sessionId!, userId);
+          await DatabaseService().logStudentEntry(sessionId!, userId, userName);
         } catch (e) {
           debugPrint("Log student entry error: $e");
         }

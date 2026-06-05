@@ -267,7 +267,8 @@ class _ReactionButton extends StatelessWidget {
     return PopupMenuButton<String>(
       offset: const Offset(0, -70),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-      color: Colors.black.withOpacity(0.9),
+      color: Colors.black.withOpacity(0.95),
+      elevation: 8,
       padding: EdgeInsets.zero,
       icon: Container(
         padding: const EdgeInsets.all(10),
@@ -277,23 +278,31 @@ class _ReactionButton extends StatelessWidget {
       itemBuilder: (context) => [
         PopupMenuItem<String>(
           enabled: false,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: ['👏', '👍', '❤️', '😂', '🎉'].map((emoji) {
-              return InkWell(
-                onTap: () {
-                  controller.sendReaction(emoji);
-                  Navigator.pop(context);
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  child: Text(
-                    emoji,
-                    style: const TextStyle(fontSize: 26),
-                  ),
-                ),
-              );
-            }).toList(),
+          padding: EdgeInsets.zero,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: IntrinsicWidth(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: ['👏', '👍', '❤️', '😂', '🎉'].map((emoji) {
+                  return InkWell(
+                    onTap: () {
+                      controller.sendReaction(emoji);
+                      Navigator.pop(context);
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      child: Text(
+                        emoji,
+                        style: const TextStyle(fontSize: 26),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           ),
         ),
       ],

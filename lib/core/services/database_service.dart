@@ -345,7 +345,7 @@ class DatabaseService {
         'session_id': sessionId,
         'student_id': studentId,
         'status': 'kicked',
-        'left_at': DateTime.now().toIso8601String(),
+        'left_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'session_id, student_id');
     } catch (e) {
       debugPrint("Error marking student as kicked: $e");
@@ -369,7 +369,7 @@ class DatabaseService {
             'id': studentId,
             'role': 'student',
             'full_name': studentName,
-            'created_at': DateTime.now().toIso8601String(),
+            'created_at': DateTime.now().toUtc().toIso8601String(),
           });
         } catch (e) {
           debugPrint("Profile auto-creation failed: $e");
@@ -390,13 +390,19 @@ class DatabaseService {
       }
 
       // 4. تسجيل الحضور (Attendance)
+      final existing = await _supabase.from('attendance')
+          .select('total_duration_minutes')
+          .eq('session_id', sessionId)
+          .eq('student_id', studentId)
+          .maybeSingle();
+
       await _supabase.from('attendance').upsert({
         'session_id': sessionId,
         'student_id': studentId,
         'status': 'present',
         'joined_at': DateTime.now().toUtc().toIso8601String(),
         'left_at': null,
-        'total_duration_minutes': 0,
+        'total_duration_minutes': existing?['total_duration_minutes'] ?? 0,
       }, onConflict: 'session_id, student_id');
 
       debugPrint("Student entry logged successfully.");
@@ -408,26 +414,54 @@ class DatabaseService {
   Future<void> logStudentExit(String sessionId, String studentId) async {
     try {
       final record = await _supabase.from('attendance')
-          .select('status, joined_at')
+          .select('status, joined_at, left_at, total_duration_minutes')
           .eq('session_id', sessionId)
           .eq('student_id', studentId)
           .maybeSingle();
 
       if (record != null) {
         if (record['status'] == 'kicked') return;
+        if (record['left_at'] != null) return; // تم تسجيل الخروج مسبقاً
 
         final joinTime = record['joined_at'] != null ? DateTime.parse(record['joined_at']) : DateTime.now().toUtc();
         final exitTime = DateTime.now().toUtc();
-        final duration = exitTime.difference(joinTime).inMinutes;
+        final sessionDuration = exitTime.difference(joinTime).inMinutes;
+        final totalDuration = (record['total_duration_minutes'] ?? 0) + sessionDuration;
 
         await _supabase.from('attendance').update({
           'left_at': exitTime.toIso8601String(),
-          'total_duration_minutes': duration,
+          'total_duration_minutes': totalDuration,
           'status': 'away'
         }).eq('session_id', sessionId).eq('student_id', studentId);
       }
     } catch (e) {
       debugPrint("Error logging exit: $e");
+    }
+  }
+
+  Future<void> finalizeSessionAttendance(String sessionId) async {
+    try {
+      final now = DateTime.now().toUtc();
+      final activeRecords = await _supabase.from('attendance')
+          .select('student_id, joined_at, total_duration_minutes')
+          .eq('session_id', sessionId)
+          .filter('left_at', 'is', null);
+      for (var record in activeRecords) {
+        final joinTimeStr = record['joined_at'];
+        if (joinTimeStr != null) {
+          final joinTime = DateTime.parse(joinTimeStr);
+          final sessionDuration = now.difference(joinTime).inMinutes;
+          final totalDuration = (record['total_duration_minutes'] ?? 0) + sessionDuration;
+
+          await _supabase.from('attendance').update({
+            'left_at': now.toIso8601String(),
+            'total_duration_minutes': totalDuration,
+            'status': 'away'
+          }).eq('session_id', sessionId).eq('student_id', record['student_id']);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error finalizing attendance: $e");
     }
   }
 

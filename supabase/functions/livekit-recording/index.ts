@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { EgressClient, EncodedFileOutput, EncodedFileType, S3Upload } from "https://esm.sh/livekit-server-sdk@1.2.7"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,27 +15,35 @@ serve(async (req) => {
   try {
     const { action, roomName, sessionId } = await req.json()
 
+    // 1. جلب الإعدادات من البيئة
     const apiKey = Deno.env.get('LIVEKIT_API_KEY')
     const apiSecret = Deno.env.get('LIVEKIT_API_SECRET')
     const livekitUrl = Deno.env.get('LIVEKIT_URL')
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-    if (!apiKey || !apiSecret || !livekitUrl) {
-      throw new Error('LiveKit configuration missing')
+    if (!apiKey || !apiSecret || !livekitUrl || !supabaseUrl || !supabaseKey) {
+      throw new Error('Required configuration missing in environment variables')
     }
 
+    const supabase = createClient(supabaseUrl, supabaseKey)
     const egressClient = new EgressClient(livekitUrl, apiKey, apiSecret)
 
     if (action === 'start') {
-      // إعدادات Cloudflare R2 (S3 Compatible)
+      // 2. إعدادات Cloudflare R2
       const s3Upload = new S3Upload({
-        endpoint: Deno.env.get('R2_ENDPOINT'), // مثال: https://<id>.r2.cloudflarestorage.com
-        bucket: Deno.env.get('R2_BUCKET'),
-        accessKey: Deno.env.get('R2_ACCESS_KEY'),
-        secret: Deno.env.get('R2_SECRET_KEY'),
+        endpoint: Deno.env.get('R2_ENDPOINT')!,
+        bucket: Deno.env.get('R2_BUCKET')!,
+        accessKey: Deno.env.get('R2_ACCESS_KEY')!,
+        secret: Deno.env.get('R2_SECRET_KEY')!,
         forcePathStyle: true,
       })
 
-      const filepath = `recordings/${sessionId}/${roomName}_${Date.now()}.mp4`
+      const filename = `${roomName}_${Date.now()}.mp4`
+      const filepath = `recordings/${sessionId}/${filename}`
+      
+      // الرابط العام للفيديو (بعد ربط Domain بـ R2)
+      const publicUrl = `${Deno.env.get('R2_PUBLIC_DOMAIN')}/${filepath}`
 
       const fileOutput = new EncodedFileOutput({
         fileType: EncodedFileType.MP4,
@@ -42,24 +51,33 @@ serve(async (req) => {
         s3: s3Upload,
       })
 
-      // بدء تسجيل القاعة بالكامل (Composite Recording)
+      // 3. بدء تسجيل الغرفة
       const info = await egressClient.startRoomCompositeEgress(roomName, {
         file: fileOutput,
       })
 
-      return new Response(JSON.stringify({ egressId: info.egressId, filepath }), {
+      // 4. حفظ بيانات التسجيل في قاعدة البيانات
+      await supabase.from('recordings').insert({
+        session_id: sessionId,
+        egress_id: info.egressId,
+        file_path: filepath,
+        video_url: publicUrl,
+        status: 'recording',
+        room_name: roomName
+      })
+
+      return new Response(JSON.stringify({ egressId: info.egressId, filepath, publicUrl }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })
     }
 
     if (action === 'stop') {
-      // نحتاج لإرسال الـ egressId لإيقافه، أو البحث عنه باسم الغرفة
-      // في هذا المثال البسيط سنقوم بجلب قائمة الـ Egress النشطة للغرفة
+      // البحث عن التسجيل النشط
       const activeEgresses = await egressClient.listEgress({ roomName, active: true })
       
       if (activeEgresses.length === 0) {
-        return new Response(JSON.stringify({ message: 'No active recording found' }), {
+        return new Response(JSON.stringify({ error: 'No active recording found' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 404,
         })
@@ -68,17 +86,12 @@ serve(async (req) => {
       const egressId = activeEgresses[0].egressId
       await egressClient.stopEgress(egressId)
 
-      return new Response(JSON.stringify({ message: 'Recording stopped', egressId }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      })
-    }
+      // 5. تحديث حالة السجل في الداتابيز
+      await supabase.from('recordings')
+        .update({ status: 'completed' })
+        .eq('egress_id', egressId)
 
-    // منطق الـ Pause والـ Resume
-    // ملاحظة: LiveKit Egress لا يدعم "الإيقاف المؤقت" داخل نفس الملف بشكل مباشر حالياً
-    // البديل الاحترافي هو التحكم في الـ Layout أو استخدام منطق الـ Webhook
-    if (action === 'pause' || action === 'resume') {
-      return new Response(JSON.stringify({ message: 'Action supported via UI state only for now' }), {
+      return new Response(JSON.stringify({ message: 'Recording stopped', egressId }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })

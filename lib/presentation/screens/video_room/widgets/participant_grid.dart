@@ -9,79 +9,84 @@ class ParticipantGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<VideoRoomController>();
-    final room = controller.room;
+    return Selector<VideoRoomController, Room?>(
+      selector: (_, c) => c.room,
+      builder: (context, room, _) {
+        if (room == null) return const Center(child: CircularProgressIndicator(color: Colors.blue));
 
-    if (room == null) return const Center(child: CircularProgressIndicator(color: Colors.blue));
+        return ListenableBuilder(
+          listenable: room,
+          builder: (context, _) {
+            final List<Participant> allParticipants = [
+              if (room.localParticipant != null) room.localParticipant!,
+              ...room.remoteParticipants.values,
+            ];
 
-    // تجميع كل المشاركين بأمان
-    final List<Participant> allParticipants = [
-      if (room.localParticipant != null) room.localParticipant!,
-      ...room.remoteParticipants.values,
-    ];
+            if (allParticipants.isEmpty) {
+              return const Center(
+                child: Text("في انتظار دخول المشاركين...", style: TextStyle(color: Colors.white70, fontFamily: 'Cairo')),
+              );
+            }
 
-    if (allParticipants.isEmpty) {
-      return const Center(
-        child: Text("في انتظار دخول المشاركين...", style: TextStyle(color: Colors.white70, fontFamily: 'Cairo')),
-      );
-    }
+            Participant? mainParticipant;
+            try {
+              mainParticipant = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
+            } catch (_) {
+              try {
+                mainParticipant = allParticipants.firstWhere(
+                  (p) => p.identity.toLowerCase().contains('teacher'),
+                );
+              } catch (_) {
+                mainParticipant = allParticipants.isNotEmpty ? allParticipants.first : null;
+              }
+            }
 
-    // تحديد المشارك الرئيسي (المعلم أو من يشارك الشاشة)
-    Participant? mainParticipant;
-    try {
-      mainParticipant = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
-    } catch (_) {
-      try {
-        mainParticipant = allParticipants.firstWhere(
-          (p) => p.identity.toLowerCase().contains('teacher'),
-        );
-      } catch (_) {
-        mainParticipant = allParticipants.isNotEmpty ? allParticipants.first : null;
-      }
-    }
+            if (mainParticipant == null) return const SizedBox.shrink();
 
-    if (mainParticipant == null) return const SizedBox.shrink();
+            final otherParticipants = allParticipants.where((p) => p.identity != mainParticipant?.identity).toList();
 
-    final otherParticipants = allParticipants.where((p) => p.identity != mainParticipant?.identity).toList();
-
-    return Container(
-      color: const Color(0xFF0F1014),
-      child: Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: _ParticipantTile(
-                key: ValueKey("main_${mainParticipant.identity}"),
-                participant: mainParticipant,
-                isMainStage: true,
-              ),
-            ),
-          ),
-          if (otherParticipants.isNotEmpty)
-            Container(
-              height: 140,
-              padding: const EdgeInsets.only(bottom: 12),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: otherParticipants.length,
-                itemBuilder: (context, index) {
-                  final p = otherParticipants[index];
-                  return Container(
-                    width: 180,
-                    margin: const EdgeInsets.only(right: 12),
-                    child: _ParticipantTile(
-                      key: ValueKey("mini_${p.identity}"),
-                      participant: p,
-                      isMainStage: false,
+            return Container(
+              color: const Color(0xFF0F1014),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: _ParticipantTile(
+                        key: ValueKey("main_${mainParticipant.identity}"),
+                        participant: mainParticipant,
+                        isMainStage: true,
+                      ),
                     ),
-                  );
-                },
+                  ),
+                  if (otherParticipants.isNotEmpty)
+                    Container(
+                      height: 140,
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        itemCount: otherParticipants.length,
+                        itemBuilder: (context, index) {
+                          final p = otherParticipants[index];
+                          return Container(
+                            width: 180,
+                            margin: const EdgeInsets.only(right: 12),
+                            child: _ParticipantTile(
+                              key: ValueKey("mini_${p.identity}"),
+                              participant: p,
+                              isMainStage: false,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
               ),
-            ),
-        ],
-      ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -98,14 +103,15 @@ class _ParticipantTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // نستخدم Consumer لضمان تحديث الجزء الخاص بالمشارك فقط عند حدوث تغيير
+    final bool isHandRaised = context.select<VideoRoomController, bool>(
+      (c) => c.remoteHandStates[participant.identity] ?? false
+    );
+
     return ListenableBuilder(
       listenable: participant,
       builder: (context, _) {
-        final controller = context.read<VideoRoomController>();
         final bool isMe = participant is LocalParticipant;
         final bool isTeacher = participant.identity.toLowerCase().contains('teacher');
-        final bool isHandRaised = controller.remoteHandStates[participant.identity] ?? false;
         
         String displayName = participant.name ?? "";
         if (displayName.isEmpty) {
@@ -113,7 +119,6 @@ class _ParticipantTile extends StatelessWidget {
         }
         if (displayName.isEmpty) displayName = "مشارك";
 
-        // تحديد الفيديو النشط بأمان
         VideoTrack? activeVideoTrack;
         bool isScreen = false;
 
@@ -146,7 +151,8 @@ class _ParticipantTile extends StatelessWidget {
                 child: hasVideo
                     ? VideoTrackRenderer(
                         activeVideoTrack!, 
-                        fit: isScreen ? VideoViewFit.contain : VideoViewFit.cover,
+                        // تم التعديل هنا: نستخدم contain للمسرح الرئيسي لضمان ظهور كامل الصورة
+                        fit: (isScreen || isMainStage) ? VideoViewFit.contain : VideoViewFit.cover,
                       )
                     : _buildAvatar(displayName, isMainStage),
               ),

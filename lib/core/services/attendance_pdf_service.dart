@@ -70,26 +70,27 @@ class AttendancePdfService {
   }
 
   pw.Widget _buildTable(List<Map<String, dynamic>> students) {
-    final headers = ['اسم الطالب', 'الحالة', 'وقت الانضمام', 'وقت المغادرة', 'المدة'];
+    // Reversed the order: 'اسم الطالب' and 'الحالة' on the right side
+    final headers = ['المدة', 'وقت المغادرة', 'وقت الانضمام', 'الحالة', 'اسم الطالب'];
 
     return pw.TableHelper.fromTextArray(
       headers: headers,
       data: students.map((s) => [
-        s['name'] ?? 'غير معروف',
-        s['present'] ? 'حاضر' : 'غائب',
-        s['joined_at'] ?? '---',
-        s['left_at'] ?? '---',
         '${s['duration'] ?? 0} د',
+        s['left_at'] ?? '---',
+        s['joined_at'] ?? '---',
+        s['present'] ? 'حاضر' : 'غائب',
+        s['name'] ?? 'غير معروف',
       ]).toList(),
       headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
       headerDecoration: const pw.BoxDecoration(color: PdfColors.blue800),
       cellHeight: 30,
       cellAlignments: {
-        0: pw.Alignment.centerRight,
+        0: pw.Alignment.center,
         1: pw.Alignment.center,
         2: pw.Alignment.center,
         3: pw.Alignment.center,
-        4: pw.Alignment.center,
+        4: pw.Alignment.centerRight,
       },
     );
   }

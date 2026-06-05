@@ -21,7 +21,7 @@ class AuthProvider extends ChangeNotifier {
   String get role => _profile?['role'] ?? _user?.userMetadata?['role'] ?? 'student';
   bool get isTeacher => role == 'teacher'; // الخاصية المفقودة التي أضفتها الآن
   bool get isAdmin => role == 'admin';
-  
+
   String? get externalId => _profile?['external_id'];
 
   AuthProvider() {

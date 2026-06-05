@@ -6,9 +6,7 @@ import '../../../../core/models/session_model.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/services/database_service.dart';
 import '../../../../core/utils/responsive.dart';
-import '../assignments/teacher_assignments_screen.dart';
 import '../attendance/attendance_screen.dart';
-import '../resources/teacher_resources_screen.dart';
 import '../reports/teacher_reports_screen.dart';
 import '../../video_room/video_room_screen.dart';
 import '../../video_room/video_room_controller.dart';
@@ -307,9 +305,8 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _buildActionButton("التحضير", Icons.how_to_reg_outlined, Colors.blue, 'attendance'),
-          _buildActionButton("الواجبات", Icons.assignment_outlined, Colors.orange, 'assignment'),
-          _buildActionButton("المكتبة", Icons.folder_copy_outlined, Colors.purple, 'resources'),
           _buildActionButton("التقارير", Icons.bar_chart_rounded, Colors.green, 'reports'),
+          _buildActionButton("الجدول", Icons.calendar_today_rounded, Colors.purple, 'schedule'),
         ],
       ),
     );
@@ -369,6 +366,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       Navigator.push(context, MaterialPageRoute(builder: (context) => const TeacherReportsScreen()));
       return;
     }
+    if (type == 'schedule') {
+      // Logic for schedule if needed
+      return;
+    }
     if (_sessions.isEmpty) {
       _showNoSessionAlert();
       return;
@@ -425,10 +426,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   void _navigateToActionScreen(String type, SessionModel session) {
     if (type == 'attendance') {
       Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: session.id, subjectName: session.subjectName)));
-    } else if (type == 'assignment') {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => TeacherAssignmentsScreen(sessionId: session.id, subjectName: session.subjectName)));
-    } else if (type == 'resources') {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => TeacherResourcesScreen(sessionId: session.id, subjectName: session.subjectName)));
     }
   }
 

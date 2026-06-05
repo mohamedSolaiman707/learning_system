@@ -10,7 +10,6 @@ import 'widgets/qa_panel.dart';
 import 'widgets/whiteboard_panel.dart';
 import 'widgets/participants_panel.dart';
 import 'widgets/poll_panel.dart';
-import 'widgets/quiz_panel.dart';
 
 class VideoRoomScreen extends StatefulWidget {
   final String title;
@@ -135,91 +134,87 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<VideoRoomController>();
     final size = MediaQuery.of(context).size;
     final bool isMobile = size.width < 600;
 
-    if (controller.errorMessage != null) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 60),
-              const SizedBox(height: 16),
-              Text(controller.errorMessage!, style: const TextStyle(color: Colors.white, fontFamily: 'Cairo')),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => controller.init(),
-                child: const Text("إعادة المحاولة"),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Consumer<VideoRoomController>(
+        builder: (context, controller, child) {
+          if (controller.errorMessage != null) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 60),
+                  const SizedBox(height: 16),
+                  Text(controller.errorMessage!, style: const TextStyle(color: Colors.white, fontFamily: 'Cairo')),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => controller.init(),
+                    child: const Text("إعادة المحاولة"),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      );
-    }
+            );
+          }
 
-    if (controller.isLoading) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(color: Colors.blue, strokeWidth: 3),
-              const SizedBox(height: 24),
-              const Text("جاري دخول القاعة...", style: TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return ShowCaseWidget(
-      builder: (context) => Scaffold(
-        backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 80),
-                child: const ParticipantGrid(),
+          if (controller.isLoading) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(color: Colors.blue, strokeWidth: 3),
+                  const SizedBox(height: 24),
+                  const Text("جاري دخول القاعة...", style: TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
+                ],
               ),
+            );
+          }
+
+          return ShowCaseWidget(
+            builder: (context) => Stack(
+              children: [
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    child: const ParticipantGrid(),
+                  ),
+                ),
+
+                Positioned(top: 0, left: 0, right: 0, child: _buildHeader(context, controller)),
+
+                if (controller.isWhiteboardOpen) const WhiteboardPanel(),
+                
+                if (controller.spotlightedQuestionId != null && !controller.isQAOpen)
+                  _buildSpotlightOverlay(controller, isMobile, size),
+
+                ..._reactions,
+
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ControlsBar(
+                    micKey: _micKey, camKey: _camKey, recordKey: _recordKey,
+                    emojiKey: _emojiKey, screenShareKey: _screenShareKey,
+                    handKey: _handKey, chatKey: _chatKey, qaKey: _qaKey,
+                    whiteboardKey: _whiteboardKey,
+                  ),
+                ),
+
+                if (controller.isChatOpen) _buildFeaturePanel(const ChatPanel(), isMobile, size),
+                if (controller.isQAOpen) _buildFeaturePanel(const QAPanel(), isMobile, size),
+                if (controller.isParticipantsOpen) _buildFeaturePanel(const ParticipantsPanel(), isMobile, size),
+                if (controller.isPollsOpen) _buildFeaturePanel(const PollPanel(), isMobile, size),
+
+                if (controller.isProcessing)
+                  Container(
+                    color: Colors.black45,
+                    child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+                  ),
+              ],
             ),
-
-            Positioned(top: 0, left: 0, right: 0, child: _buildHeader(context, controller)),
-
-            if (controller.isWhiteboardOpen) const WhiteboardPanel(),
-            
-            if (controller.spotlightedQuestionId != null && !controller.isQAOpen)
-              _buildSpotlightOverlay(controller, isMobile, size),
-
-            ..._reactions,
-
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: ControlsBar(
-                micKey: _micKey, camKey: _camKey, recordKey: _recordKey,
-                emojiKey: _emojiKey, screenShareKey: _screenShareKey,
-                handKey: _handKey, chatKey: _chatKey, qaKey: _qaKey,
-                whiteboardKey: _whiteboardKey,
-              ),
-            ),
-
-            if (controller.isChatOpen) _buildFeaturePanel(const ChatPanel(), isMobile, size),
-            if (controller.isQAOpen) _buildFeaturePanel(const QAPanel(), isMobile, size),
-            if (controller.isParticipantsOpen) _buildFeaturePanel(const ParticipantsPanel(), isMobile, size),
-            if (controller.isPollsOpen) _buildFeaturePanel(const PollPanel(), isMobile, size),
-            if (controller.isQuizOpen) _buildFeaturePanel(const QuizPanel(), isMobile, size),
-
-            if (controller.isProcessing)
-              Container(
-                color: Colors.black45,
-                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
-              ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -333,9 +328,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     return Align(
       alignment: isMobile ? Alignment.bottomCenter : Alignment.centerRight,
       child: Container(
-        width: isMobile ? size.width : 380,
+        width: isMobile ? size.width * 0.92 : 380, // تعديل العرض ليصبح 92% من الشاشة في الموبايل
         height: isMobile ? size.height * 0.75 : size.height * 0.85,
-        margin: isMobile ? const EdgeInsets.only(bottom: 95) : const EdgeInsets.all(20),
+        margin: isMobile ? const EdgeInsets.only(bottom: 95, left: 16, right: 16) : const EdgeInsets.all(20), // إضافة margin جانبي في الموبايل
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(30),

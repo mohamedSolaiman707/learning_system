@@ -8,7 +8,6 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/services/livekit_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/attendance_pdf_service.dart';
-import '../../../core/models/quiz_model.dart';
 
 class Stroke {
   final List<Offset> points;
@@ -66,7 +65,6 @@ class VideoRoomController extends ChangeNotifier {
   bool _isChatOpen = false;
   bool _isWhiteboardOpen = false;
   bool _isPollsOpen = false;
-  bool _isQuizOpen = false;
   bool _isQAOpen = false;
   bool _isParticipantsOpen = false;
 
@@ -77,10 +75,6 @@ class VideoRoomController extends ChangeNotifier {
 
   Map<String, dynamic>? _activePoll;
   Map<String, int> _pollResults = {};
-  QuizModel? _activeQuiz;
-  int _quizTimeLeft = 0;
-  Timer? _quizTimer;
-  bool _quizSubmitted = false;
   List<Map<String, dynamic>> _messages = [];
   final List<Map<String, dynamic>> _questions = [];
   int _unreadQuestionsCount = 0;
@@ -109,15 +103,11 @@ class VideoRoomController extends ChangeNotifier {
   bool get isChatOpen => _isChatOpen;
   bool get isWhiteboardOpen => _isWhiteboardOpen;
   bool get isPollsOpen => _isPollsOpen;
-  bool get isQuizOpen => _isQuizOpen;
   bool get isQAOpen => _isQAOpen;
   bool get isParticipantsOpen => _isParticipantsOpen;
   List<Stroke> get whiteboardStrokes => _whiteboardStrokes;
   Map<String, dynamic>? get activePoll => _activePoll;
   Map<String, int> get pollResults => _pollResults;
-  QuizModel? get activeQuiz => _activeQuiz;
-  int get quizTimeLeft => _quizTimeLeft;
-  bool get quizSubmitted => _quizSubmitted;
   List<Map<String, dynamic>> get messages => _messages;
   List<Map<String, dynamic>> get questions => _questions;
   int get unreadQuestionsCount => _unreadQuestionsCount;
@@ -151,6 +141,7 @@ class VideoRoomController extends ChangeNotifier {
     _isWhiteboardOpen = false;
     _isQAOpen = false;
     _isParticipantsOpen = false;
+    _isPollsOpen = false;
     notifyListeners();
   }
 
@@ -160,6 +151,7 @@ class VideoRoomController extends ChangeNotifier {
     _isChatOpen = false;
     _isQAOpen = false;
     _isParticipantsOpen = false;
+    _isPollsOpen = false;
     notifyListeners();
   }
 
@@ -170,6 +162,7 @@ class VideoRoomController extends ChangeNotifier {
     _isChatOpen = false;
     _isWhiteboardOpen = false;
     _isParticipantsOpen = false;
+    _isPollsOpen = false;
     notifyListeners();
   }
 
@@ -179,6 +172,17 @@ class VideoRoomController extends ChangeNotifier {
     _isChatOpen = false;
     _isWhiteboardOpen = false;
     _isQAOpen = false;
+    _isPollsOpen = false;
+    notifyListeners();
+  }
+
+  void togglePolls() {
+    _triggerHaptic();
+    _isPollsOpen = !_isPollsOpen;
+    _isChatOpen = false;
+    _isWhiteboardOpen = false;
+    _isQAOpen = false;
+    _isParticipantsOpen = false;
     notifyListeners();
   }
 
@@ -233,13 +237,13 @@ class VideoRoomController extends ChangeNotifier {
         debugPrint("Session monitor error: $e");
       }
     }
-    
+
     try {
       await _loadChatHistory();
     } catch (e) {
       debugPrint("Load chat history error: $e");
     }
-    
+
     await connectToRoom(roomName);
   }
 
@@ -284,9 +288,9 @@ class VideoRoomController extends ChangeNotifier {
       });
       _expiryTimer = Timer(endTime.difference(DateTime.now()), () => onSessionEnded?.call("انتهى وقت الحصة."));
       return true;
-    } catch (e) { 
+    } catch (e) {
       debugPrint("Check monitor session error: $e");
-      return true; 
+      return true;
     }
   }
 
@@ -297,7 +301,6 @@ class VideoRoomController extends ChangeNotifier {
     notifyListeners();
     try {
       if (!isTeacher && sessionId != null) {
-        // فحص الطرد بشكل صارم قبل أي اتصال
         final isKicked = await DatabaseService().isStudentKicked(sessionId!, userId);
         if (isKicked) {
           _errorMessage = "عذراً، تم استبعادك من دخول هذه القاعة.";
@@ -309,22 +312,22 @@ class VideoRoomController extends ChangeNotifier {
       }
       final suffix = DateTime.now().millisecondsSinceEpoch.toString().substring(10);
       final effectiveUserId = isTeacher ? "teacher_$userId" : "${userId}_$suffix";
-      
+
       final token = await LiveKitService().getRoomToken(roomName: targetRoomName, userId: effectiveUserId, userName: userName);
       if (token == null) throw Exception("Failed to get token");
-      
+
       if (_room != null) {
         await _listener?.dispose();
         await _room!.disconnect();
         await Future.delayed(const Duration(milliseconds: 500));
       }
-      
+
       _room = Room(roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true));
       _listener = _room!.createListener();
       _setupEventListeners();
-      
+
       await _room!.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
-      
+
       if (!isTeacher && sessionId != null) {
         try {
           await DatabaseService().logStudentEntry(sessionId!, userId, userName);
@@ -332,7 +335,7 @@ class VideoRoomController extends ChangeNotifier {
           debugPrint("Log student entry error: $e");
         }
       }
-      
+
       _currentRoomName = targetRoomName;
       _isLoading = false;
       notifyListeners();
@@ -407,9 +410,9 @@ class VideoRoomController extends ChangeNotifier {
         if (isBreakoutRoom) returnToMainRoom();
         break;
       case 'kick_participant':
-        if (_isMe(data['target'])) { 
-          _room?.disconnect(); 
-          onSessionEnded?.call("تم استبعادك من القاعة من قبل المعلم."); 
+        if (_isMe(data['target'])) {
+          _room?.disconnect();
+          onSessionEnded?.call("تم استبعادك من القاعة من قبل المعلم.");
         }
         break;
       case 'new_question':
@@ -466,6 +469,8 @@ class VideoRoomController extends ChangeNotifier {
       case 'control_whiteboard': _isWhiteboardLocked = data['value']; break;
       case 'control_screenshare': _isScreenShareLocked = data['value']; break;
       case 'spotlight': _spotlightUserId = data['value']; break;
+      case 'new_poll': _activePoll = data['poll']; _pollResults = {}; if (!isTeacher) onNotification?.call("استطلاع جديد متاح 📊", Colors.blue); break;
+      case 'poll_vote': if (isTeacher) { _pollResults[data['option']] = (_pollResults[data['option']] ?? 0) + 1; notifyListeners(); } break;
     }
     notifyListeners();
   }
@@ -489,23 +494,6 @@ class VideoRoomController extends ChangeNotifier {
     _breakoutTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (_breakoutTimeLeft > 0) { _breakoutTimeLeft--; notifyListeners(); } else { t.cancel(); if (isBreakoutRoom) returnToMainRoom(); }
     });
-  }
-
-  void _handleQuiz(Map<String, dynamic> quizData) {
-    _activeQuiz = QuizModel.fromMap(quizData);
-    _quizTimeLeft = _activeQuiz!.timeLimitSeconds;
-    _isQuizOpen = true;
-    _quizTimer?.cancel();
-    _quizTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (_quizTimeLeft > 0) { _quizTimeLeft--; notifyListeners(); } else { t.cancel(); _isQuizOpen = false; notifyListeners(); }
-    });
-  }
-
-  void submitQuiz(int selectedIndex) async {
-    if (_activeQuiz == null) return;
-    _quizSubmitted = true;
-    try { await supabase.from('quiz_results').insert({'quiz_id': _activeQuiz!.id, 'student_id': userId, 'student_name': userName, 'selected_option_index': selectedIndex, 'is_correct': selectedIndex == _activeQuiz!.correctOptionIndex}); } catch (_) {}
-    notifyListeners();
   }
 
   void startBreakoutRooms(int count, int duration) async {
@@ -542,15 +530,29 @@ class VideoRoomController extends ChangeNotifier {
   void toggleWhiteboardLock() { _isWhiteboardLocked = !_isWhiteboardLocked; sendData({'type': 'control_whiteboard', 'value': _isWhiteboardLocked}); notifyListeners(); }
   void toggleScreenShareLock() { _isScreenShareLocked = !_isScreenShareLocked; sendData({'type': 'control_screenshare', 'value': _isScreenShareLocked}); notifyListeners(); }
   void setSpotlight(String? id) { _spotlightUserId = id; sendData({'type': 'spotlight', 'value': id}); notifyListeners(); }
-  void kickParticipant(String tId) async { 
-    if (!isTeacher) return; 
-    sendData({'type': 'kick_participant', 'target': tId}); 
+  void kickParticipant(String tId) async {
+    if (!isTeacher) return;
+    sendData({'type': 'kick_participant', 'target': tId});
     if (sessionId != null) {
-      try { 
-        await DatabaseService().markStudentAsKicked(sessionId!, tId.split('_').first); 
-      } catch (_) {} 
+      try {
+        await DatabaseService().markStudentAsKicked(sessionId!, tId.split('_').first);
+      } catch (_) {}
     }
-    notifyListeners(); 
+    notifyListeners();
+  }
+
+  void createPoll(String question, List<String> options) {
+    _activePoll = {'question': question, 'options': options};
+    _pollResults = {for (var opt in options) opt: 0};
+    sendData({'type': 'new_poll', 'poll': _activePoll});
+    notifyListeners();
+  }
+
+  void votePoll(String option) {
+    if (_activePoll == null) return;
+    sendData({'type': 'poll_vote', 'option': option});
+    _activePoll = null; // إخفاء الاستطلاع بعد التصويت للطالب
+    notifyListeners();
   }
 
   void _handleMicControl(Map<String, dynamic> data) {
@@ -690,7 +692,7 @@ class VideoRoomController extends ChangeNotifier {
   @override
   void dispose() {
     if (sessionId != null) try { DatabaseService().logStudentExit(sessionId!, userId); } catch (_) {}
-    _connectivitySubscription?.cancel(); _statusSubscription?.cancel(); _expiryTimer?.cancel(); _quizTimer?.cancel(); _breakoutTimer?.cancel(); _room?.disconnect();
+    _connectivitySubscription?.cancel(); _statusSubscription?.cancel(); _expiryTimer?.cancel(); _breakoutTimer?.cancel(); _room?.disconnect();
     super.dispose();
   }
 }

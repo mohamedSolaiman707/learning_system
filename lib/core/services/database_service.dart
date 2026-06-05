@@ -167,9 +167,9 @@ class DatabaseService {
           .from('enrollments')
           .select('student_id, sessions!inner(teacher_id)')
           .eq('sessions.teacher_id', teacherId);
-      
+
       final uniqueStudents = (response as List).map((e) => e['student_id']).toSet().length;
-      
+
       return {
         'totalStudents': uniqueStudents,
         'rating': '5.0',
@@ -185,7 +185,7 @@ class DatabaseService {
     final now = DateTime.now();
     final startOfToday = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
     final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59).toUtc().toIso8601String();
-    
+
     final res = await _supabase.from('sessions')
         .select()
         .eq('teacher_id', teacherId)
@@ -204,7 +204,7 @@ class DatabaseService {
       } else {
         await _supabase.from('rooms').update({'is_active': isActive}).eq('id', existing['id']);
       }
-      
+
       await updateSessionStatus(sessionId, isActive ? 'active' : 'ended');
     } catch (e) {
       rethrow;
@@ -283,7 +283,7 @@ class DatabaseService {
   }
 
   // --- Attendance Features ---
-  
+
   Future<bool> isStudentKicked(String sessionId, String studentId) async {
     try {
       final res = await _supabase
@@ -291,8 +291,8 @@ class DatabaseService {
           .select('status')
           .eq('session_id', sessionId)
           .eq('student_id', studentId)
-          .limit(1); 
-      
+          .limit(1);
+
       if (res.isEmpty) return false;
       return res[0]['status'] == 'kicked';
     } catch (e) {
@@ -316,7 +316,7 @@ class DatabaseService {
   Future<void> logStudentEntry(String sessionId, String studentId, String studentName) async {
     try {
       debugPrint("Logging entry for: $studentId");
-      
+
       // 1. التحقق من الطرد أولاً
       final isKicked = await isStudentKicked(sessionId, studentId);
       if (isKicked) return;
@@ -359,7 +359,7 @@ class DatabaseService {
         'left_at': null,
         'total_duration_minutes': 0,
       }, onConflict: 'session_id, student_id');
-      
+
       debugPrint("Student entry logged successfully.");
     } catch (e) {
       debugPrint("Fatal error in logStudentEntry: $e");
@@ -384,7 +384,7 @@ class DatabaseService {
         await _supabase.from('attendance').update({
           'left_at': exitTime.toIso8601String(),
           'total_duration_minutes': duration,
-          'status': 'away' 
+          'status': 'away'
         }).eq('session_id', sessionId).eq('student_id', studentId);
       }
     } catch (e) {
@@ -410,7 +410,7 @@ class DatabaseService {
           .from('attendance')
           .select('*, profiles:student_id(full_name)')
           .eq('session_id', sessionId);
-      
+
       final List<Map<String, dynamic>> attendanceData = List<Map<String, dynamic>>.from(attendanceResponse);
 
       // جلب المسجلين
@@ -418,7 +418,7 @@ class DatabaseService {
           .from('enrollments')
           .select('student_id, profiles:student_id(full_name)')
           .eq('session_id', sessionId);
-      
+
       final List<Map<String, dynamic>> enrollmentsData = List<Map<String, dynamic>>.from(enrollmentsResponse);
 
       final List<Map<String, dynamic>> report = [];
@@ -427,7 +427,7 @@ class DatabaseService {
       for (var record in attendanceData) {
         final studentId = record['student_id'];
         processedIds.add(studentId);
-        
+
         report.add({
           'name': record['profiles'] != null ? record['profiles']['full_name'] : 'طالب غير مسجل',
           'present': record['status'] != 'absent',

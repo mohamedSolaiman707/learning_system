@@ -22,30 +22,34 @@ class ParticipantsPanel extends StatelessWidget {
       });
     }
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-      ),
-      child: Column(
-        children: [
-          _buildHeader(controller, participants.length + (localParticipant != null ? 1 : 0)),
-          
-          if (controller.isTeacher) _buildGlobalControls(controller),
+    // تغليف اللوحة بالكامل لتدعم الاتجاه من اليمين لليسار
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: Column(
+          children: [
+            _buildHeader(controller, participants.length + (localParticipant != null ? 1 : 0)),
+            
+            if (controller.isTeacher) _buildGlobalControls(controller),
 
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                if (localParticipant != null)
-                  _ParticipantTile(participant: localParticipant, controller: controller, isMe: true),
-                const Divider(height: 32),
-                ...participants.map((p) => _ParticipantTile(participant: p, controller: controller)),
-              ],
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  if (localParticipant != null)
+                    _ParticipantTile(participant: localParticipant, controller: controller, isMe: true),
+                  const Divider(height: 32),
+                  ...participants.map((p) => _ParticipantTile(participant: p, controller: controller)),
+                ],
+              ),
             ),
-          ),
-          if (controller.isTeacher) _buildTeacherActions(context, controller),
-        ],
+            if (controller.isTeacher) _buildTeacherActions(context, controller),
+          ],
+        ),
       ),
     );
   }
@@ -55,14 +59,23 @@ class ParticipantsPanel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
       child: Row(
         children: [
-          IconButton(onPressed: controller.toggleParticipants, icon: const Icon(Icons.close_rounded, color: Colors.black)),
-          const Spacer(),
+          // العنوان في اليمين (بسبب RTL Directionality)
           Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("المشاركين", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, fontFamily: 'Cairo')),
+              const Text("المشاركين", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, fontFamily: 'Cairo', color: Colors.black)),
               Text("$count مشارك في القاعة", style: const TextStyle(color: Colors.grey, fontSize: 13, fontFamily: 'Cairo')),
             ],
+          ),
+          const Spacer(),
+          // زر الإغلاق في اليسار
+          IconButton(
+            onPressed: controller.toggleParticipants, 
+            icon: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
+              child: const Icon(Icons.close_rounded, color: Colors.black, size: 20)
+            )
           ),
         ],
       ),
@@ -171,33 +184,36 @@ class ParticipantsPanel extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDS) => Container(
-          padding: const EdgeInsets.all(30),
-          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(35))),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("إعداد مجموعات العمل", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, fontFamily: 'Cairo')),
-              const SizedBox(height: 20),
-              _buildSettingRow("عدد المجموعات", "$groupCount", () => groupCount > 2 ? setDS(() => groupCount--) : null, () => groupCount < 8 ? setDS(() => groupCount++) : null),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text("المدة الزمنية", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-                  Text("${duration.toInt()} دقيقة", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-                ],
-              ),
-              Slider(value: duration, min: 5, max: 30, divisions: 5, activeColor: Colors.blue, onChanged: (v) => setDS(() => duration = v)),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF102A43), minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
-                onPressed: () { controller.startBreakoutRooms(groupCount, duration.toInt()); Navigator.pop(context); },
-                child: const Text("بدء الجلسات الآن", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-              ),
-            ],
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: StatefulBuilder(
+          builder: (ctx, setDS) => Container(
+            padding: const EdgeInsets.all(30),
+            decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(35))),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("إعداد مجموعات العمل", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, fontFamily: 'Cairo')),
+                const SizedBox(height: 20),
+                _buildSettingRow("عدد المجموعات", "$groupCount", () => groupCount > 2 ? setDS(() => groupCount--) : null, () => groupCount < 8 ? setDS(() => groupCount++) : null),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("المدة الزمنية", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                    Text("${duration.toInt()} دقيقة", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                  ],
+                ),
+                Slider(value: duration, min: 5, max: 30, divisions: 5, activeColor: Colors.blue, onChanged: (v) => setDS(() => duration = v)),
+                const SizedBox(height: 30),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF102A43), minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                  onPressed: () { controller.startBreakoutRooms(groupCount, duration.toInt()); Navigator.pop(context); },
+                  child: const Text("بدء الجلسات الآن", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -232,25 +248,10 @@ class _ParticipantTile extends StatelessWidget {
     final bool isSpotlight = controller.spotlightUserId == participant.identity;
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
-          if (controller.isTeacher && !isMe) _buildTeacherMenu(context),
-          if (participant.isMicrophoneEnabled() == false) 
-             const Icon(Icons.mic_off, color: Colors.red, size: 16),
-          const Spacer(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                isMe ? "أ. ${controller.userName}" : (participant.name.isNotEmpty ? participant.name : "طالب"),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16),
-              ),
-              if (isMe) const Text("أنت", style: TextStyle(color: Colors.grey, fontSize: 10, fontFamily: 'Cairo')),
-              if (handRaised) const Text("يرفع يده ✋", style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-            ],
-          ),
-          const SizedBox(width: 15),
+          // الصورة في اليمين
           Stack(
             children: [
               CircleAvatar(
@@ -262,9 +263,28 @@ class _ParticipantTile extends StatelessWidget {
                 ),
               ),
               if (isSpotlight)
-                Positioned(right: 0, bottom: 0, child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: Icon(Icons.star, size: 14, color: Colors.amber.shade700))),
+                Positioned(left: 0, bottom: 0, child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: Icon(Icons.star, size: 14, color: Colors.amber.shade700))),
             ],
           ),
+          const SizedBox(width: 15),
+          // الاسم والحالة في المنتصف (محاذاة لليمين)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isMe ? "أ. ${controller.userName} (أنت)" : (participant.name.isNotEmpty ? participant.name : "طالب"),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16),
+                ),
+                if (handRaised) 
+                  const Text("يرفع يده ✋", style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                if (participant.isMicrophoneEnabled() == false)
+                  const Text("الميكروفون مغلق", style: TextStyle(color: Colors.red, fontSize: 11, fontFamily: 'Cairo')),
+              ],
+            ),
+          ),
+          // قائمة التحكم في أقصى اليسار
+          if (controller.isTeacher && !isMe) _buildTeacherMenu(context),
         ],
       ),
     );
@@ -272,7 +292,7 @@ class _ParticipantTile extends StatelessWidget {
 
   Widget _buildTeacherMenu(BuildContext context) {
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, color: Colors.grey),
+      icon: const Icon(Icons.more_horiz, color: Colors.grey),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       onSelected: (val) {
         if (val == 'mute') controller.muteParticipant(participant.identity, participant.isMicrophoneEnabled());
@@ -284,45 +304,41 @@ class _ParticipantTile extends StatelessWidget {
         PopupMenuItem(
           value: 'mute', 
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              const Icon(Icons.mic_none_rounded, size: 20),
+              const SizedBox(width: 12),
               Text(participant.isMicrophoneEnabled() ? "كتم الصوت" : "تفعيل الصوت", style: const TextStyle(fontFamily: 'Cairo')),
-              const SizedBox(width: 10),
-              const Icon(Icons.mic, size: 18),
             ],
           )
         ),
         PopupMenuItem(
           value: 'cam', 
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              const Icon(Icons.videocam_outlined, size: 20),
+              const SizedBox(width: 12),
               Text(participant.isCameraEnabled() ? "تعطيل الكاميرا" : "تفعيل الكاميرا", style: const TextStyle(fontFamily: 'Cairo')),
-              const SizedBox(width: 10),
-              const Icon(Icons.videocam, size: 18),
             ],
           )
         ),
         PopupMenuItem(
           value: 'spotlight', 
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              const Icon(Icons.star_outline_rounded, size: 20),
+              const SizedBox(width: 12),
               Text(controller.spotlightUserId == participant.identity ? "إلغاء التمييز" : "تمييز المشارك", style: const TextStyle(fontFamily: 'Cairo')),
-              const SizedBox(width: 10),
-              const Icon(Icons.star_outline, size: 18),
             ],
           )
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'kick', 
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          child: const Row(
             children: [
-              const Text("طرد من القاعة", style: TextStyle(color: Colors.red, fontFamily: 'Cairo')),
-              const SizedBox(width: 10),
-              const Icon(Icons.gavel_rounded, color: Colors.red, size: 18),
+              Icon(Icons.gavel_rounded, color: Colors.red, size: 20),
+              SizedBox(width: 12),
+              Text("طرد من القاعة", style: TextStyle(color: Colors.red, fontFamily: 'Cairo')),
             ],
           )
         ),

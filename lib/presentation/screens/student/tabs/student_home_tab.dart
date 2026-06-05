@@ -7,15 +7,12 @@ import 'package:shimmer/shimmer.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/services/database_service.dart';
-import '../../../../core/services/assignments_service.dart';
 import '../../../../core/models/session_model.dart';
 import '../widgets/next_class_card.dart';
 import '../widgets/upcoming_class_item.dart';
 import '../../video_room/video_room_screen.dart';
 import '../../video_room/video_room_controller.dart';
 import '../../video_room/waiting_room_screen.dart';
-import '../assignments/student_assignments_screen.dart';
-import '../resources/student_resources_screen.dart';
 
 class StudentHomeTab extends StatefulWidget {
   const StudentHomeTab({super.key});
@@ -30,8 +27,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
   List<SessionModel> _enrolledSessions = [];
   List<SessionModel> _allActiveSessions = [];
   SessionModel? _nextSession;
-  int _pendingAssignmentsCount = 0;
-  int _completedAssignmentsCount = 0;
   Timer? _refreshTimer;
   late AnimationController _liveController;
 
@@ -64,7 +59,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
-      final assignService = AssignmentsService();
       
       if (auth.user != null) {
         final enrolledResponse = await db.getStudentSchedule(auth.user!.id);
@@ -90,32 +84,12 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
             tempNext = null;
           }
 
-          int pending = 0;
-          int completed = 0;
-          
           setState(() {
             _enrolledSessions = tempEnrolled;
             _allActiveSessions = tempActive;
             _nextSession = tempNext;
             if (initial) _isLoading = false;
           });
-
-          for (var session in tempEnrolled.take(3)) {
-             try {
-               final assignments = await assignService.getAssignments(session.id).timeout(const Duration(seconds: 3));
-               for (var assignment in assignments) {
-                 final submission = await assignService.getStudentSubmission(assignment.id, auth.user!.id).timeout(const Duration(seconds: 2));
-                 if (submission == null) pending++; else completed++;
-               }
-             } catch (_) {}
-          }
-          
-          if (mounted) {
-            setState(() {
-              _pendingAssignmentsCount = pending;
-              _completedAssignmentsCount = completed;
-            });
-          }
         }
       }
     } catch (e) {
@@ -251,11 +225,6 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            _buildSectionHeader("الخطة الدراسية والتقدم"),
-                                            const SizedBox(height: 20),
-                                            _buildProgressOverview(),
-                                            const SizedBox(height: 40),
-
                                             if (_nextSession != null) ...[
                                               _buildSectionHeader("الحصة القادمة"),
                                               const SizedBox(height: 20),
@@ -332,9 +301,9 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
       flexibleSpace: FlexibleSpaceBar(
         centerTitle: false,
         titlePadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        title: Text("لوحة التحكم", 
+        title: const Text("لوحة التحكم", 
           style: TextStyle(
-            color: const Color(0xFF102A43), 
+            color: Color(0xFF102A43), 
             fontWeight: FontWeight.w800, 
             fontSize: 18,
             letterSpacing: -0.5,
@@ -478,65 +447,12 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     elevation: 0,
                   ),
-                  child: const Text("انضمام للجلسة", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                  child: const Text("انضمام للجلسة", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 ),
               ],
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildProgressOverview() {
-    double progress = 0;
-    if ((_pendingAssignmentsCount + _completedAssignmentsCount) > 0) {
-      progress = _completedAssignmentsCount / (_pendingAssignmentsCount + _completedAssignmentsCount);
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 4))],
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      child: Row(
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              SizedBox(
-                height: 80, width: 80,
-                child: CircularProgressIndicator(
-                  value: progress,
-                  strokeWidth: 10,
-                  backgroundColor: const Color(0xFFF0F4F8),
-                  color: const Color(0xFF102A43),
-                  strokeCap: StrokeCap.round,
-                ),
-              ),
-              Text("${(progress * 100).toInt()}%", 
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF102A43))
-              ),
-            ],
-          ),
-          const SizedBox(width: 32),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("إكمال المهام والواجبات", 
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Color(0xFF102A43))
-                ),
-                const SizedBox(height: 8),
-                Text("لقد أنجزت $_completedAssignmentsCount من أصل ${_pendingAssignmentsCount + _completedAssignmentsCount} واجبات متبقية لهذا الأسبوع.",
-                  style: const TextStyle(color: Color(0xFF627D98), fontSize: 14, height: 1.5)),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -550,11 +466,11 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
       ),
       child: Column(
         children: [
-          _buildStatRow(Icons.check_circle_outline, "الواجبات المكتملة", "$_completedAssignmentsCount"),
-          const Divider(color: Colors.white12, height: 32),
-          _buildStatRow(Icons.pending_actions_rounded, "قيد الانتظار", "$_pendingAssignmentsCount"),
-          const Divider(color: Colors.white12, height: 32),
           _buildStatRow(Icons.timer_outlined, "ساعات التعلم", "12.5"),
+          const Divider(color: Colors.white12, height: 32),
+          _buildStatRow(Icons.star_outline_rounded, "النقاط المكتسبة", "150"),
+          const Divider(color: Colors.white12, height: 32),
+          _buildStatRow(Icons.history_rounded, "الحصص المكتملة", "8"),
         ],
       ),
     );
@@ -605,14 +521,13 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
               const SizedBox(height: 8),
               Text("المحاضر: أ. ${session.teacherName}", style: const TextStyle(color: Color(0xFF627D98), fontSize: 16)),
               const SizedBox(height: 40),
-              _buildOptionTile(Icons.assignment_outlined, "الواجبات والمهام", const Color(0xFF1565C0), () {
+              _buildOptionTile(Icons.history_rounded, "تسجيلات الحصة", const Color(0xFF1565C0), () {
                 Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => StudentAssignmentsScreen(sessionId: session.id, subjectName: session.subjectName)));
+                // Future: Navigate to recordings
               }),
               const SizedBox(height: 16),
-              _buildOptionTile(Icons.folder_copy_outlined, "المصادر التعليمية", const Color(0xFF2E7D32), () {
+              _buildOptionTile(Icons.info_outline_rounded, "تفاصيل الحصة", const Color(0xFF2E7D32), () {
                 Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => StudentResourcesScreen(sessionId: session.id, subjectName: session.subjectName)));
               }),
               const SizedBox(height: 20),
             ],

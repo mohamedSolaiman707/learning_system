@@ -30,6 +30,13 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
   Timer? _refreshTimer;
   late AnimationController _liveController;
 
+  // Real Statistics Data
+  Map<String, dynamic> _stats = {
+    'learningHours': '0.0',
+    'points': 0,
+    'completedSessions': 0,
+  };
+
   @override
   void initState() {
     super.initState();
@@ -61,8 +68,10 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
       final db = Provider.of<DatabaseService>(context, listen: false);
       
       if (auth.user != null) {
+        // Fetch real data from DB
         final enrolledResponse = await db.getStudentSchedule(auth.user!.id);
         final activeResponse = await db.getActiveSessions();
+        final statsResponse = await db.getStudentStats(auth.user!.id);
 
         if (mounted) {
           final now = DateTime.now();
@@ -88,6 +97,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
             _enrolledSessions = tempEnrolled;
             _allActiveSessions = tempActive;
             _nextSession = tempNext;
+            _stats = statsResponse; // Update real stats
             if (initial) _isLoading = false;
           });
         }
@@ -466,11 +476,11 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
       ),
       child: Column(
         children: [
-          _buildStatRow(Icons.timer_outlined, "ساعات التعلم", "12.5"),
+          _buildStatRow(Icons.timer_outlined, "ساعات التعلم", _stats['learningHours'].toString()),
           const Divider(color: Colors.white12, height: 32),
-          _buildStatRow(Icons.star_outline_rounded, "النقاط المكتسبة", "150"),
+          _buildStatRow(Icons.star_outline_rounded, "النقاط المكتسبة", _stats['points'].toString()),
           const Divider(color: Colors.white12, height: 32),
-          _buildStatRow(Icons.history_rounded, "الحصص المكتملة", "8"),
+          _buildStatRow(Icons.history_rounded, "الحصص المكتملة", _stats['completedSessions'].toString()),
         ],
       ),
     );

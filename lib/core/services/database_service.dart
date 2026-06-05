@@ -181,6 +181,45 @@ class DatabaseService {
     }
   }
 
+  Future<Map<String, dynamic>> getStudentStats(String studentId) async {
+    try {
+      final attendanceRes = await _supabase
+          .from('attendance')
+          .select('total_duration_minutes')
+          .eq('student_id', studentId);
+      
+      double totalMinutes = 0;
+      int completedSessions = 0;
+      if (attendanceRes != null) {
+        for (var row in attendanceRes) {
+          totalMinutes += (row['total_duration_minutes'] ?? 0);
+          completedSessions++;
+        }
+      }
+
+      final quizRes = await _supabase
+          .from('quiz_results')
+          .select('score')
+          .eq('student_id', studentId);
+      
+      int quizPoints = 0;
+      if (quizRes != null) {
+        for (var row in quizRes) {
+          quizPoints += (row['score'] as int? ?? 0);
+        }
+      }
+
+      return {
+        'learningHours': (totalMinutes / 60).toStringAsFixed(1),
+        'points': (completedSessions * 10) + quizPoints,
+        'completedSessions': completedSessions,
+      };
+    } catch (e) {
+      debugPrint("Error getting student stats: $e");
+      return {'learningHours': "0.0", 'points': 0, 'completedSessions': 0};
+    }
+  }
+
   Future<int> _getTodaySessionsCount(String teacherId) async {
     final now = DateTime.now();
     final startOfToday = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();

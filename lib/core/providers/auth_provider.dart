@@ -19,7 +19,7 @@ class AuthProvider extends ChangeNotifier {
   bool get hasSeenVideoTour => _hasSeenVideoTour;
 
   String get role => _profile?['role'] ?? _user?.userMetadata?['role'] ?? 'student';
-  bool get isTeacher => role == 'teacher'; // الخاصية المفقودة التي أضفتها الآن
+  bool get isTeacher => role == 'teacher';
   bool get isAdmin => role == 'admin';
 
   String? get externalId => _profile?['external_id'];
@@ -122,8 +122,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<String?> uploadAvatar(Uint8List bytes, String fileName) async {
     if (_user == null) return null;
-    _isLoading = true;
-    notifyListeners();
+    // تم إزالة _isLoading هنا لعدم تفعيل شاشة التحميل العالمية
     try {
       final fileExt = fileName.split('.').last;
       final path = '${_user!.id}/avatar_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
@@ -141,9 +140,6 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint("Upload Error: $e");
       rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 

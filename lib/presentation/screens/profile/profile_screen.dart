@@ -13,7 +13,8 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  
+  bool _isUploading = false;
+
   Future<void> _pickAndUploadImage(AuthProvider authProvider) async {
     try {
       final result = await FilePicker.pickFiles(
@@ -22,6 +23,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       if (result != null && result.files.first.bytes != null) {
+        setState(() {
+          _isUploading = true;
+        });
+
         final file = result.files.first;
         await authProvider.uploadAvatar(file.bytes!, file.name);
         
@@ -44,6 +49,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
       }
     }
   }
@@ -130,18 +141,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               foregroundColor: Colors.black,
             )
           : null,
-      body: Stack(
-        children: [
-          Responsive(
-            mobile: _buildMobileLayout(profile, authProvider),
-            desktop: _buildDesktopLayout(profile, authProvider),
-          ),
-          if (authProvider.isLoading)
-            Container(
-              color: Colors.black26,
-              child: const Center(child: CircularProgressIndicator()),
-            ),
-        ],
+      body: Responsive(
+        mobile: _buildMobileLayout(profile, authProvider),
+        desktop: _buildDesktopLayout(profile, authProvider),
       ),
     );
   }
@@ -231,9 +233,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Stack(
+            alignment: Alignment.center,
             children: [
               GestureDetector(
-                onTap: () => _pickAndUploadImage(auth),
+                onTap: _isUploading ? null : () => _pickAndUploadImage(auth),
                 child: Container(
                   width: 120,
                   height: 120,
@@ -241,28 +244,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: Colors.blue.withOpacity(0.1),
                     shape: BoxShape.circle,
                     image: avatarUrl != null 
-                        ? DecorationImage(image: NetworkImage(avatarUrl), fit: BoxFit.cover)
+                        ? DecorationImage(
+                            image: NetworkImage(avatarUrl), 
+                            fit: BoxFit.cover,
+                            opacity: _isUploading ? 0.5 : 1.0,
+                          )
                         : null,
                   ),
                   child: avatarUrl == null 
                       ? Center(
                           child: Text(
                             name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "U",
-                            style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.blue),
+                            style: TextStyle(
+                              fontSize: 48, 
+                              fontWeight: FontWeight.bold, 
+                              color: Colors.blue.withOpacity(_isUploading ? 0.3 : 1.0),
+                            ),
                           ),
                         )
                       : null,
                 ),
               ),
+              if (_isUploading)
+                const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                ),
               Positioned(
                 bottom: 5,
                 right: 5,
                 child: GestureDetector(
-                  onTap: () => _pickAndUploadImage(auth),
+                  onTap: _isUploading ? null : () => _pickAndUploadImage(auth),
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.blue,
+                      color: _isUploading ? Colors.grey : Colors.blue,
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 3),
                     ),
@@ -373,26 +390,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
       child: Row(
         children: [
-          if (onEdit != null)
-            IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey),
-              onPressed: onEdit,
-              splashRadius: 24,
-            )
-          else
-            const SizedBox(width: 48),
-          
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 4),
-                Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF1A1C1E))),
-              ],
-            ),
-          ),
-          const SizedBox(width: 15),
+          // 1. الأيقونة الأساسية في اليمين
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -401,6 +399,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             child: Icon(icon, size: 22, color: Colors.blue),
           ),
+          const SizedBox(width: 15),
+          
+          // 2. المحتوى النصي في المنتصف
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, // يبدأ من اليمين في وضع الـ RTL
+              children: [
+                Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 4),
+                Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF1A1C1E))),
+              ],
+            ),
+          ),
+          
+          // 3. زر التعديل في اليسار
+          if (onEdit != null)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey),
+              onPressed: onEdit,
+              splashRadius: 24,
+            )
+          else
+            const SizedBox(width: 48),
         ],
       ),
     );

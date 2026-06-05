@@ -70,7 +70,7 @@ class AttendancePdfService {
   }
 
   pw.Widget _buildTable(List<Map<String, dynamic>> students) {
-    // Reversed the order: 'اسم الطالب' and 'الحالة' on the right side
+    // تم عكس الترتيب: المدة في اليسار واسم الطالب في اليمين
     final headers = ['المدة', 'وقت المغادرة', 'وقت الانضمام', 'الحالة', 'اسم الطالب'];
 
     return pw.TableHelper.fromTextArray(
@@ -90,7 +90,7 @@ class AttendancePdfService {
         1: pw.Alignment.center,
         2: pw.Alignment.center,
         3: pw.Alignment.center,
-        4: pw.Alignment.centerRight,
+        4: pw.Alignment.centerRight, // محاذاة الاسم لليمين
       },
     );
   }

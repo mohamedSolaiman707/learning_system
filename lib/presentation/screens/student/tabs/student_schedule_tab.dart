@@ -129,14 +129,6 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       appBar: AppBar(
         title: const Text("جدول حصصي"),
         elevation: 0,
-        actions: [
-          IconButton(
-            onPressed: _showJoinCodeDialog,
-            icon: const Icon(Icons.add),
-            tooltip: "انضمام بكود",
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: _isLoading 
           ? _buildLoadingSkeleton()
@@ -147,13 +139,13 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                 desktop: _buildDesktopLayout(),
               ),
             ),
-      floatingActionButton: Responsive.isMobile(context) 
-        ? FloatingActionButton.extended(
-            onPressed: _showJoinCodeDialog,
-            icon: const Icon(Icons.add),
-            label: const Text("انضمام بكود"),
-          )
-        : null,
+      // floatingActionButton: Responsive.isMobile(context)
+      //   ? FloatingActionButton.extended(
+      //       onPressed: _showJoinCodeDialog,
+      //       icon: const Icon(Icons.add),
+      //       label: const Text("انضمام بكود"),
+      //     )
+      //   : null,
     );
   }
 

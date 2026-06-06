@@ -636,7 +636,7 @@ class VideoRoomController extends ChangeNotifier {
     if (sessionId == null || !_isRecording) return;
     try {
       final success = await LiveKitService().stopRecording(roomName, sessionId!);
-      if (success) { try { await DatabaseService().saveSession({'is_recording': false, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} _isRecording = false; _isRecordingPaused = false; notifyListeners(); }
+      if (success) { try { await DatabaseService().saveSession({'is_recording': false, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} _isRecording = true; _isRecordingPaused = false; notifyListeners(); }
     } catch (e) { onNotification?.call("فشل إيقاف التسجيل", Colors.red); }
   }
 
@@ -671,22 +671,42 @@ class VideoRoomController extends ChangeNotifier {
     } catch (e) { onNotification?.call("فشل استخراج التقرير", Colors.red); } finally { _isProcessing = false; notifyListeners(); }
   }
 
+  // G:/Development/learning_by_video_call/lib/presentation/screens/video_room/video_room_controller.dart
+
   Future<void> endSessionForAll() async {
     if (!isTeacher || sessionId == null) return;
     _isProcessing = true; notifyListeners();
+
     try {
-      if (_isRecording) try { await stopRecording(); } catch (_) {}
+      // 1. إرسال إشارة خروج للكل
       sendData({'type': 'session_ended'});
-      try {
-        await DatabaseService().toggleRoomStatus(sessionId!, false);
-        await DatabaseService().updateSessionStatus(sessionId!, 'archived');
-      } catch (_) {}
-      try {
-        final attendanceData = await DatabaseService().getSessionAttendance(sessionId!);
-        await AttendancePdfService().generateReport(subjectName: title, teacherName: userName, studentsData: attendanceData);
-      } catch (_) {}
-      _room?.disconnect(); onSessionEnded?.call("تم إنهاء الحصة وأرشفتها بنجاح ✅");
-    } catch (e) { onNotification?.call("حدث خطأ أثناء إنهاء الجلسة", Colors.red); } finally { _isProcessing = false; notifyListeners(); }
+
+      // 2. إغلاق سجلات الحضور يدوياً (تأكيد الخروج للجميع)
+      await DatabaseService().finalizeSessionAttendance(sessionId!);
+
+      // 3. تحديث حالة الحصة
+      await DatabaseService().toggleRoomStatus(sessionId!, false);
+      await DatabaseService().updateSessionStatus(sessionId!, 'archived');
+
+      // 4. !!! هام جداً: انتظار ثانية لضمان أن السيرفر قام بحساب المدة وحفظ وقت المغادرة
+      await Future.delayed(const Duration(milliseconds: 1500));
+
+      // 5. جلب البيانات النهائية للتقرير
+      final attendanceData = await DatabaseService().getSessionAttendance(sessionId!);
+
+      await AttendancePdfService().generateReport(
+        subjectName: title,
+        teacherName: userName,
+        studentsData: attendanceData,
+      );
+
+      _room?.disconnect();
+      onSessionEnded?.call("تم إنهاء الحصة وأرشفة التقرير بنجاح ✅");
+    } catch (e) {
+      debugPrint("Error ending session: $e");
+    } finally {
+      _isProcessing = false; notifyListeners();
+    }
   }
 
   @override

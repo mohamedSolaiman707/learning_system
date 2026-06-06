@@ -352,69 +352,65 @@ class DatabaseService {
     }
   }
 
+// G:/Development/learning_by_video_call/lib/core/services/database_service.dart
+
   Future<void> logStudentEntry(String sessionId, String studentId, String studentName) async {
     try {
-      debugPrint("Logging entry for: $studentId");
+      debugPrint("Attempting to log entry: Session($sessionId) Student($studentId)");
 
-      // 1. التحقق من الطرد أولاً
+      // 1. التحقق من الطرد
       final isKicked = await isStudentKicked(sessionId, studentId);
-      if (isKicked) return;
-
-      // 2. فحص وجود البروفايل لمنع خطأ Foreign Key
-      final profileCheck = await _supabase.from('profiles').select('id').eq('id', studentId).maybeSingle();
-      if (profileCheck == null) {
-        debugPrint("Profile missing, creating profile for $studentName...");
-        try {
-          await _supabase.from('profiles').insert({
-            'id': studentId,
-            'role': 'student',
-            'full_name': studentName,
-            'created_at': DateTime.now().toUtc().toIso8601String(),
-          });
-        } catch (e) {
-          debugPrint("Profile auto-creation failed: $e");
-        }
-      } else {
-        // تحديث الاسم لو اختلف (اختياري)
-        await _supabase.from('profiles').update({'full_name': studentName}).eq('id', studentId);
+      if (isKicked) {
+        debugPrint("Student is kicked - entry denied.");
+        return;
       }
 
-      // 3. التسجيل في الحصة (Enrollment)
-      try {
-        await _supabase.from('enrollments').upsert({
+      // 2. ضمان وجود البروفايل (UUID Check)
+      // إذا فشل هذا السطر، فالمشكلة في الـ studentId (ليس UUID)
+      final profile = await _supabase.from('profiles').select('id').eq('id', studentId).maybeSingle();
+      if (profile == null) {
+        await _supabase.from('profiles').insert({'id': studentId, 'full_name': studentName, 'role': 'student'});
+      }
+
+      // 3. التسجيل في الحصة (Enrollment) - فحص يدوي لضمان عدم التكرار
+      final existingEnroll = await _supabase.from('enrollments')
+          .select('id').eq('session_id', sessionId).eq('student_id', studentId).maybeSingle();
+
+      if (existingEnroll == null) {
+        await _supabase.from('enrollments').insert({'session_id': sessionId, 'student_id': studentId});
+      }
+
+      // 4. سجل الحضور (Attendance)
+      final existingAtt = await _supabase.from('attendance')
+          .select('id, total_duration_minutes')
+          .eq('session_id', sessionId).eq('student_id', studentId).maybeSingle();
+
+      if (existingAtt == null) {
+        await _supabase.from('attendance').insert({
           'session_id': sessionId,
           'student_id': studentId,
-        }, onConflict: 'session_id, student_id');
-      } catch (e) {
-        debugPrint("Enrollment upsert failed: $e");
+          'status': 'present',
+          'joined_at': DateTime.now().toUtc().toIso8601String(),
+          'total_duration_minutes': 0,
+        });
+      } else {
+        await _supabase.from('attendance').update({
+          'status': 'present',
+          'joined_at': DateTime.now().toUtc().toIso8601String(),
+          'left_at': null,
+        }).eq('id', existingAtt['id']);
       }
 
-      // 4. تسجيل الحضور (Attendance)
-      final existing = await _supabase.from('attendance')
-          .select('total_duration_minutes')
-          .eq('session_id', sessionId)
-          .eq('student_id', studentId)
-          .maybeSingle();
-
-      await _supabase.from('attendance').upsert({
-        'session_id': sessionId,
-        'student_id': studentId,
-        'status': 'present',
-        'joined_at': DateTime.now().toUtc().toIso8601String(),
-        'left_at': null,
-        'total_duration_minutes': existing?['total_duration_minutes'] ?? 0,
-      }, onConflict: 'session_id, student_id');
-
-      debugPrint("Student entry logged successfully.");
+      debugPrint("✅ Entry logged successfully in all tables.");
     } catch (e) {
-      debugPrint("Fatal error in logStudentEntry: $e");
+      debugPrint("❌ CRITICAL ERROR in logStudentEntry: $e");
+      // إذا ظهر لك هذا الخطأ في الـ Console، انسخه لي لأعرف السبب (غالباً سيكون UUID error)
     }
   }
-
   Future<void> logStudentExit(String sessionId, String studentId) async {
     try {
       final record = await _supabase.from('attendance')
-          .select('status, joined_at, left_at, total_duration_minutes')
+          .select('id, status, joined_at, left_at, total_duration_minutes')
           .eq('session_id', sessionId)
           .eq('student_id', studentId)
           .maybeSingle();
@@ -429,10 +425,10 @@ class DatabaseService {
         final totalDuration = (record['total_duration_minutes'] ?? 0) + sessionDuration;
 
         await _supabase.from('attendance').update({
-          'left_at': exitTime.toIso8601String(),
+          'left_at': exitTime.toUtc().toIso8601String(),
           'total_duration_minutes': totalDuration,
           'status': 'away'
-        }).eq('session_id', sessionId).eq('student_id', studentId);
+        }).eq('id', record['id']);
       }
     } catch (e) {
       debugPrint("Error logging exit: $e");
@@ -443,9 +439,10 @@ class DatabaseService {
     try {
       final now = DateTime.now().toUtc();
       final activeRecords = await _supabase.from('attendance')
-          .select('student_id, joined_at, total_duration_minutes')
+          .select('id, student_id, joined_at, total_duration_minutes')
           .eq('session_id', sessionId)
           .filter('left_at', 'is', null);
+
       for (var record in activeRecords) {
         final joinTimeStr = record['joined_at'];
         if (joinTimeStr != null) {
@@ -454,10 +451,10 @@ class DatabaseService {
           final totalDuration = (record['total_duration_minutes'] ?? 0) + sessionDuration;
 
           await _supabase.from('attendance').update({
-            'left_at': now.toIso8601String(),
+            'left_at': now.toUtc().toIso8601String(),
             'total_duration_minutes': totalDuration,
             'status': 'away'
-          }).eq('session_id', sessionId).eq('student_id', record['student_id']);
+          }).eq('id', record['id']);
         }
       }
     } catch (e) {

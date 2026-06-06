@@ -183,6 +183,7 @@ class DatabaseService {
 
   Future<Map<String, dynamic>> getStudentStats(String studentId) async {
     try {
+      // 1. حساب ساعات التعلم والحصص المكتملة
       final attendanceRes = await _supabase
           .from('attendance')
           .select('total_duration_minutes')
@@ -190,22 +191,21 @@ class DatabaseService {
       
       double totalMinutes = 0;
       int completedSessions = 0;
-      if (attendanceRes != null) {
-        for (var row in attendanceRes) {
-          totalMinutes += (row['total_duration_minutes'] ?? 0);
-          completedSessions++;
-        }
+      for (var row in (attendanceRes as List)) {
+        totalMinutes += (row['total_duration_minutes'] ?? 0);
+        completedSessions++;
       }
 
+      // 2. حساب نقاط الاختبارات
       final quizRes = await _supabase
           .from('quiz_results')
-          .select('score')
+          .select('is_correct')
           .eq('student_id', studentId);
       
       int quizPoints = 0;
-      if (quizRes != null) {
-        for (var row in quizRes) {
-          quizPoints += (row['score'] as int? ?? 0);
+      for (var row in (quizRes as List)) {
+        if (row['is_correct'] == true) {
+          quizPoints += 1; //  نقطة لكل إجابة صحيحة
         }
       }
 
@@ -341,10 +341,11 @@ class DatabaseService {
 
   Future<void> markStudentAsKicked(String sessionId, String studentId) async {
     try {
+      // ملاحظة: قد تحتاج لتحديث الـ SQL Constraint لقبول قيمة 'kicked'
       await _supabase.from('attendance').upsert({
         'session_id': sessionId,
         'student_id': studentId,
-        'status': 'kicked',
+        'status': 'absent', // مؤقتاً حتى يتم تحديث الداتابيز لتقبل 'kicked'
         'left_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'session_id, student_id');
     } catch (e) {
@@ -366,13 +367,12 @@ class DatabaseService {
       }
 
       // 2. ضمان وجود البروفايل (UUID Check)
-      // إذا فشل هذا السطر، فالمشكلة في الـ studentId (ليس UUID)
       final profile = await _supabase.from('profiles').select('id').eq('id', studentId).maybeSingle();
       if (profile == null) {
         await _supabase.from('profiles').insert({'id': studentId, 'full_name': studentName, 'role': 'student'});
       }
 
-      // 3. التسجيل في الحصة (Enrollment) - فحص يدوي لضمان عدم التكرار
+      // 3. التسجيل في الحصة (Enrollment)
       final existingEnroll = await _supabase.from('enrollments')
           .select('id').eq('session_id', sessionId).eq('student_id', studentId).maybeSingle();
 
@@ -404,7 +404,6 @@ class DatabaseService {
       debugPrint("✅ Entry logged successfully in all tables.");
     } catch (e) {
       debugPrint("❌ CRITICAL ERROR in logStudentEntry: $e");
-      // إذا ظهر لك هذا الخطأ في الـ Console، انسخه لي لأعرف السبب (غالباً سيكون UUID error)
     }
   }
   Future<void> logStudentExit(String sessionId, String studentId) async {
@@ -417,7 +416,7 @@ class DatabaseService {
 
       if (record != null) {
         if (record['status'] == 'kicked') return;
-        if (record['left_at'] != null) return; // تم تسجيل الخروج مسبقاً
+        if (record['left_at'] != null) return; 
 
         final joinTime = record['joined_at'] != null ? DateTime.parse(record['joined_at']) : DateTime.now().toUtc();
         final exitTime = DateTime.now().toUtc();
@@ -427,7 +426,7 @@ class DatabaseService {
         await _supabase.from('attendance').update({
           'left_at': exitTime.toUtc().toIso8601String(),
           'total_duration_minutes': totalDuration,
-          'status': 'away'
+          'status': 'present' // نستخدم present أو نحدث الـ Constraint في الداتابيز لتقبل 'away'
         }).eq('id', record['id']);
       }
     } catch (e) {
@@ -453,7 +452,7 @@ class DatabaseService {
           await _supabase.from('attendance').update({
             'left_at': now.toUtc().toIso8601String(),
             'total_duration_minutes': totalDuration,
-            'status': 'away'
+            'status': 'present'
           }).eq('id', record['id']);
         }
       }

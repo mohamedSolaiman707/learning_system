@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/utils/responsive.dart';
 import '../video_room_controller.dart';
 
 class ParticipantGrid extends StatelessWidget {
@@ -28,65 +29,93 @@ class ParticipantGrid extends StatelessWidget {
               );
             }
 
-            Participant? mainParticipant;
+            final bool isDesktop = Responsive.isDesktop(context);
+            
+            // البحث عن مشارك يشارك شاشته
+            Participant? screenSharer;
             try {
-              mainParticipant = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
-            } catch (_) {
-              try {
-                mainParticipant = allParticipants.firstWhere(
-                  (p) => p.identity.toLowerCase().contains('teacher'),
-                );
-              } catch (_) {
-                mainParticipant = allParticipants.isNotEmpty ? allParticipants.first : null;
-              }
+              screenSharer = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
+            } catch (_) {}
+
+            if (screenSharer != null) {
+              return _buildSpeakerLayout(context, screenSharer, allParticipants.where((p) => p != screenSharer).toList(), isDesktop);
             }
 
-            if (mainParticipant == null) return const SizedBox.shrink();
-
-            final otherParticipants = allParticipants.where((p) => p.identity != mainParticipant?.identity).toList();
-
-            return Container(
-              color: const Color(0xFF0F1014),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: _ParticipantTile(
-                        key: ValueKey("main_${mainParticipant.identity}"),
-                        participant: mainParticipant,
-                        isMainStage: true,
-                      ),
-                    ),
-                  ),
-                  if (otherParticipants.isNotEmpty)
-                    Container(
-                      height: 140,
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        itemCount: otherParticipants.length,
-                        itemBuilder: (context, index) {
-                          final p = otherParticipants[index];
-                          return Container(
-                            width: 180,
-                            margin: const EdgeInsets.only(right: 12),
-                            child: _ParticipantTile(
-                              key: ValueKey("mini_${p.identity}"),
-                              participant: p,
-                              isMainStage: false,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            );
+            return _buildGridLayout(context, allParticipants, isDesktop);
           },
         );
       },
+    );
+  }
+
+  Widget _buildGridLayout(BuildContext context, List<Participant> participants, bool isDesktop) {
+    int crossAxisCount = participants.length <= 1 ? 1 : (participants.length <= 4 ? 2 : 3);
+    if (!isDesktop) crossAxisCount = participants.length <= 1 ? 1 : 2;
+
+    return Container(
+      color: const Color(0xFF0F1014),
+      padding: const EdgeInsets.all(12),
+      child: GridView.builder(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: isDesktop ? 1.7 : 0.85,
+        ),
+        itemCount: participants.length,
+        itemBuilder: (context, index) => _ParticipantTile(
+          key: ValueKey("grid_${participants[index].identity}"),
+          participant: participants[index],
+          isMainStage: participants.length == 1,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpeakerLayout(BuildContext context, Participant main, List<Participant> others, bool isDesktop) {
+    if (!isDesktop) {
+      return Column(
+        children: [
+          Expanded(child: Padding(padding: const EdgeInsets.all(8), child: _ParticipantTile(participant: main, isMainStage: true))),
+          if (others.isNotEmpty)
+            SizedBox(
+              height: 140,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: others.length,
+                itemBuilder: (context, index) => Container(width: 160, margin: const EdgeInsets.only(right: 8), child: _ParticipantTile(participant: others[index], isMainStage: false)),
+              ),
+            ),
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          flex: 4,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: _ParticipantTile(participant: main, isMainStage: true),
+          ),
+        ),
+        if (others.isNotEmpty)
+          Container(
+            width: 280,
+            padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
+            child: ListView.builder(
+              itemCount: others.length,
+              itemBuilder: (context, index) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: _ParticipantTile(participant: others[index], isMainStage: false),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -103,9 +132,7 @@ class _ParticipantTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isHandRaised = context.select<VideoRoomController, bool>(
-      (c) => c.remoteHandStates[participant.identity] ?? false
-    );
+    final bool isHandRaised = context.select<VideoRoomController, bool>((c) => c.remoteHandStates[participant.identity] ?? false);
 
     return ListenableBuilder(
       listenable: participant,
@@ -114,9 +141,7 @@ class _ParticipantTile extends StatelessWidget {
         final bool isTeacher = participant.identity.toLowerCase().contains('teacher');
         
         String displayName = participant.name ?? "";
-        if (displayName.isEmpty) {
-          displayName = participant.identity.replaceAll("teacher_", "").split('_').first;
-        }
+        if (displayName.isEmpty) displayName = participant.identity.replaceAll("teacher_", "").split('_').first;
         if (displayName.isEmpty) displayName = "مشارك";
 
         VideoTrack? activeVideoTrack;
@@ -140,36 +165,63 @@ class _ParticipantTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(isMainStage ? 24 : 16),
             color: const Color(0xFF1A1B1F),
             border: Border.all(
-              color: participant.isSpeaking ? Colors.greenAccent : Colors.white10,
-              width: participant.isSpeaking ? 3 : 1,
+              color: participant.isSpeaking ? Colors.greenAccent : Colors.white.withOpacity(0.08), 
+              width: participant.isSpeaking ? 3 : 1.5
             ),
+            boxShadow: [
+              if (participant.isSpeaking) BoxShadow(color: Colors.greenAccent.withOpacity(0.2), blurRadius: 20),
+              BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))
+            ],
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
+              // طبقة الفيديو الذكية (Professional Video Rendering)
               Positioned.fill(
                 child: hasVideo
-                    ? VideoTrackRenderer(
-                        activeVideoTrack!, 
-                        // تم التعديل هنا: نستخدم contain للمسرح الرئيسي لضمان ظهور كامل الصورة
-                        fit: (isScreen || isMainStage) ? VideoViewFit.contain : VideoViewFit.cover,
-                      )
+                    ? (isScreen 
+                        ? VideoTrackRenderer(activeVideoTrack!, fit: VideoViewFit.contain)
+                        : Stack(
+                            children: [
+                              // 1. الخلفية المضببة (لملء الفراغات السوداء في الفيديو الطولي)
+                              Positioned.fill(
+                                child: ImageFiltered(
+                                  imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                  child: VideoTrackRenderer(activeVideoTrack!, fit: VideoViewFit.cover),
+                                ),
+                              ),
+                              Container(color: Colors.black26), // طبقة تعتيم خفيفة
+                              // 2. الفيديو الأصلي في المنتصف بدون قص
+                              Positioned.fill(
+                                child: VideoTrackRenderer(activeVideoTrack!, fit: VideoViewFit.contain),
+                              ),
+                            ],
+                          ))
                     : _buildAvatar(displayName, isMainStage),
               ),
+              
+              // التسمية
               Positioned(
-                bottom: 10, left: 10, right: 10,
+                bottom: 12, left: 12,
                 child: _buildNameLabel(displayName, isMe, participant.isMicrophoneEnabled()),
               ),
+
+              // الشارات
               Positioned(
-                top: 10, left: 10, right: 10,
+                top: 12, right: 12,
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (isTeacher) _buildBadge("المعلم", Colors.blueAccent, Icons.school),
                     if (isHandRaised) _buildCircleIcon(Icons.front_hand, Colors.orange),
+                    if (isHandRaised) const SizedBox(width: 8),
+                    if (isTeacher) _buildBadge("المعلم", Colors.blueAccent, Icons.school),
                   ],
                 ),
               ),
+
+              // مؤشر الصوت
+              if (participant.isSpeaking)
+                Positioned(top: 0, left: 0, right: 0, child: Container(height: 4, decoration: const BoxDecoration(gradient: LinearGradient(colors: [Colors.greenAccent, Colors.transparent, Colors.greenAccent])))),
             ],
           ),
         );
@@ -181,19 +233,13 @@ class _ParticipantTile extends StatelessWidget {
     String initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "?";
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topRight, end: Alignment.bottomLeft,
-          colors: [Color(0xFF25262B), Color(0xFF141519)],
-        ),
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF2C2D35), Color(0xFF141519)]),
       ),
       child: Center(
         child: CircleAvatar(
           radius: isMain ? 60 : 30,
           backgroundColor: Colors.blueAccent.withOpacity(0.1),
-          child: Text(
-            initial,
-            style: TextStyle(color: Colors.blueAccent, fontSize: isMain ? 40 : 22, fontWeight: FontWeight.bold),
-          ),
+          child: Text(initial, style: TextStyle(color: Colors.blueAccent, fontSize: isMain ? 40 : 20, fontWeight: FontWeight.bold)),
         ),
       ),
     );
@@ -201,24 +247,18 @@ class _ParticipantTile extends StatelessWidget {
 
   Widget _buildNameLabel(String name, bool isMe, bool isMicOn) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           color: Colors.black45,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!isMicOn) const Icon(Icons.mic_off, color: Colors.redAccent, size: 12),
-              if (!isMicOn) const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  isMe ? "$name (أنت)" : name,
-                  style: const TextStyle(color: Colors.white, fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+              Icon(isMicOn ? Icons.mic : Icons.mic_off, color: isMicOn ? Colors.white70 : Colors.redAccent, size: 14),
+              const SizedBox(width: 6),
+              Flexible(child: Text(isMe ? "$name (أنت)" : name, style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
             ],
           ),
         ),
@@ -228,24 +268,20 @@ class _ParticipantTile extends StatelessWidget {
 
   Widget _buildBadge(String label, Color color, IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: color.withOpacity(0.9), borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 5)]),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white, size: 10),
-          const SizedBox(width: 4),
-          Text(label, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+          Icon(icon, color: Colors.white, size: 12),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
         ],
       ),
     );
   }
 
   Widget _buildCircleIcon(IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      child: Icon(icon, color: Colors.white, size: 14),
-    );
+    return Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 5)]), child: Icon(icon, color: Colors.white, size: 14));
   }
 }

@@ -10,6 +10,7 @@ import 'widgets/qa_panel.dart';
 import 'widgets/whiteboard_panel.dart';
 import 'widgets/participants_panel.dart';
 import 'widgets/poll_panel.dart';
+import '../../../core/utils/responsive.dart';
 
 class VideoRoomScreen extends StatefulWidget {
   final String title;
@@ -135,80 +136,89 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final bool isMobile = size.width < 600;
+    final bool isDesktop = Responsive.isDesktop(context);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0F1014),
       body: Consumer<VideoRoomController>(
         builder: (context, controller, child) {
           if (controller.errorMessage != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 60),
-                  const SizedBox(height: 16),
-                  Text(controller.errorMessage!, style: const TextStyle(color: Colors.white, fontFamily: 'Cairo')),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => controller.init(),
-                    child: const Text("إعادة المحاولة"),
-                  ),
-                ],
-              ),
-            );
+            return _buildErrorState(controller);
           }
 
           if (controller.isLoading) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(color: Colors.blue, strokeWidth: 3),
-                  const SizedBox(height: 24),
-                  const Text("جاري دخول القاعة...", style: TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
-                ],
-              ),
-            );
+            return _buildLoadingState();
           }
+
+          // تحديد ما إذا كان الشريط الجانبي مفتوحاً
+          final bool isSidebarOpen = controller.isChatOpen || controller.isQAOpen || controller.isParticipantsOpen || controller.isPollsOpen;
 
           return ShowCaseWidget(
             builder: (context) => Stack(
               children: [
-                Positioned.fill(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 80),
-                    child: const ParticipantGrid(),
-                  ),
+                Row(
+                  children: [
+                    // المنطقة الرئيسية للفيديو
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: AnimatedPadding(
+                              duration: const Duration(milliseconds: 300),
+                              padding: EdgeInsets.only(bottom: isDesktop ? 0 : 80),
+                              child: const ParticipantGrid(),
+                            ),
+                          ),
+
+                          // الهيدر الاحترافي
+                          Positioned(top: 0, left: 0, right: 0, child: _buildHeader(context, controller)),
+
+                          if (controller.isWhiteboardOpen) const WhiteboardPanel(),
+                          
+                          if (controller.spotlightedQuestionId != null && !controller.isQAOpen)
+                            _buildSpotlightOverlay(controller, !isDesktop, size),
+
+                          ..._reactions,
+
+                          // شريط التحكم العائم
+                          Align(
+                            alignment: Alignment.bottomCenter,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 20),
+                              child: ControlsBar(
+                                micKey: _micKey, camKey: _camKey, recordKey: _recordKey,
+                                emojiKey: _emojiKey, screenShareKey: _screenShareKey,
+                                handKey: _handKey, chatKey: _chatKey, qaKey: _qaKey,
+                                whiteboardKey: _whiteboardKey,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // الشريط الجانبي المدمج (للمتصفح والديسكتوب)
+                    if (isDesktop)
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        width: isSidebarOpen ? 380 : 0,
+                        curve: Curves.easeInOut,
+                        child: isSidebarOpen ? _buildSidebar(controller) : const SizedBox(),
+                      ),
+                  ],
                 ),
 
-                Positioned(top: 0, left: 0, right: 0, child: _buildHeader(context, controller)),
-
-                if (controller.isWhiteboardOpen) const WhiteboardPanel(),
-                
-                if (controller.spotlightedQuestionId != null && !controller.isQAOpen)
-                  _buildSpotlightOverlay(controller, isMobile, size),
-
-                ..._reactions,
-
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: ControlsBar(
-                    micKey: _micKey, camKey: _camKey, recordKey: _recordKey,
-                    emojiKey: _emojiKey, screenShareKey: _screenShareKey,
-                    handKey: _handKey, chatKey: _chatKey, qaKey: _qaKey,
-                    whiteboardKey: _whiteboardKey,
-                  ),
-                ),
-
-                if (controller.isChatOpen) _buildFeaturePanel(const ChatPanel(), isMobile, size),
-                if (controller.isQAOpen) _buildFeaturePanel(const QAPanel(), isMobile, size),
-                if (controller.isParticipantsOpen) _buildFeaturePanel(const ParticipantsPanel(), isMobile, size),
-                if (controller.isPollsOpen) _buildFeaturePanel(const PollPanel(), isMobile, size),
+                // Panels للموبايل فقط
+                if (!isDesktop) ...[
+                  if (controller.isChatOpen) _buildFeaturePanel(const ChatPanel(), size),
+                  if (controller.isQAOpen) _buildFeaturePanel(const QAPanel(), size),
+                  if (controller.isParticipantsOpen) _buildFeaturePanel(const ParticipantsPanel(), size),
+                  if (controller.isPollsOpen) _buildFeaturePanel(const PollPanel(), size),
+                ],
 
                 if (controller.isProcessing)
                   Container(
-                    color: Colors.black45,
+                    color: Colors.black54,
                     child: const Center(child: CircularProgressIndicator(color: Colors.white)),
                   ),
               ],
@@ -219,21 +229,69 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
+  Widget _buildSidebar(VideoRoomController controller) {
+    Widget content = const SizedBox();
+    if (controller.isChatOpen) content = const ChatPanel();
+    else if (controller.isQAOpen) content = const QAPanel();
+    else if (controller.isParticipantsOpen) content = const ParticipantsPanel();
+    else if (controller.isPollsOpen) content = const PollPanel();
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(left: BorderSide(color: Colors.white10, width: 0.5)),
+        boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 20, offset: Offset(-5, 0))],
+      ),
+      child: ClipRRect(child: content),
+    );
+  }
+
+  Widget _buildErrorState(VideoRoomController controller) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 60),
+          const SizedBox(height: 16),
+          Text(controller.errorMessage!, style: const TextStyle(color: Colors.white, fontFamily: 'Cairo')),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () => controller.init(),
+            child: const Text("إعادة المحاولة"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(color: Colors.blue, strokeWidth: 3),
+          const SizedBox(height: 24),
+          const Text("جاري دخول القاعة التعليمية...", style: TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSpotlightOverlay(VideoRoomController controller, bool isMobile, Size size) {
     final q = controller.questions.firstWhere((element) => element['id'] == controller.spotlightedQuestionId, orElse: () => {});
     if (q.isEmpty) return const SizedBox();
 
     return Positioned(
-      bottom: 120,
-      left: isMobile ? 20 : size.width * 0.25,
-      right: isMobile ? 20 : size.width * 0.25,
+      bottom: isMobile ? 120 : 110,
+      left: isMobile ? 20 : size.width * 0.2,
+      right: isMobile ? 20 : size.width * 0.2,
       child: FadeInUp(
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [Colors.orange.shade800, Colors.orange.shade600]),
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 20, offset: const Offset(0, 10))],
+            boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 20, offset: const Offset(0, 10))],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -242,16 +300,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 children: [
                   const Icon(Icons.wb_incandescent, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
-                  const Text("نقاش جاري الآن", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'Cairo')),
+                  const Text("سؤال مطروح للنقاش", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Cairo')),
                   const Spacer(),
-                  Text(q['from'], style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'Cairo')),
+                  Text(q['from'], style: const TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'Cairo')),
                 ],
               ),
               const Divider(color: Colors.white24),
               Text(
                 q['text'],
                 maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600, fontFamily: 'Cairo'),
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Cairo'),
               ),
             ],
           ),
@@ -261,24 +319,26 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 
   Widget _buildHeader(BuildContext context, VideoRoomController controller) {
+    final isDesktop = Responsive.isDesktop(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: isDesktop ? 15 : 20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.9), Colors.transparent]),
+        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black87, Colors.transparent]),
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded, color: Colors.white, size: 28),
+          _CircleIconButton(
+            icon: Icons.logout_rounded, 
+            color: Colors.redAccent.withOpacity(0.8),
             onPressed: () => _showExitConfirmation(context, controller),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(controller.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'), overflow: TextOverflow.ellipsis),
+                Text(controller.title, style: TextStyle(color: Colors.white, fontSize: isDesktop ? 22 : 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'), overflow: TextOverflow.ellipsis),
                 Row(
                   children: [
                     if (controller.isRecording) ...[const _PulsingRecordBadge(), const SizedBox(width: 8)],
@@ -288,16 +348,34 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               ],
             ),
           ),
+          if (isDesktop) _buildDesktopClock(),
         ],
       ),
     );
   }
 
+  Widget _buildDesktopClock() {
+     return StreamBuilder(
+       stream: Stream.periodic(const Duration(seconds: 1)),
+       builder: (context, snapshot) {
+         final now = DateTime.now();
+         return Container(
+           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+           decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+           child: Text(
+             "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}",
+             style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
+           ),
+         );
+       }
+     );
+  }
+
   Widget _buildStatusBadge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)),
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
+      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
     );
   }
 
@@ -307,36 +385,57 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("مغادرة القاعة", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-        content: Text(controller.isTeacher ? "هل تريد إنهاء الحصة للجميع أم المغادرة فقط؟" : "هل أنت متأكد من مغادرة الحصة؟", style: const TextStyle(fontFamily: 'Cairo')),
+        content: Text(controller.isTeacher ? "هل تريد إنهاء الحصة للجميع أم المغادرة فقط؟" : "هل أنت متأكد من مغادرة الحصة الدراسية؟", style: const TextStyle(fontFamily: 'Cairo')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo'))),
           if (controller.isTeacher)
             TextButton(
               onPressed: () { controller.endSessionForAll(); Navigator.pop(context); Navigator.pop(context); },
-              child: const Text("إنهاء للكل", style: TextStyle(color: Colors.red, fontFamily: 'Cairo')),
+              child: const Text("إنهاء الحصة للكل", style: TextStyle(color: Colors.red, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
             ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF102A43)),
             onPressed: () { Navigator.pop(context); Navigator.pop(context); },
-            child: const Text("مغادرة", style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text("مغادرة الآن", style: TextStyle(color: Colors.white, fontFamily: 'Cairo')),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFeaturePanel(Widget child, bool isMobile, Size size) {
+  Widget _buildFeaturePanel(Widget child, Size size) {
     return Align(
-      alignment: isMobile ? Alignment.bottomCenter : Alignment.centerRight,
+      alignment: Alignment.bottomCenter,
       child: Container(
-        width: isMobile ? size.width * 0.92 : 380, // تعديل العرض ليصبح 92% من الشاشة في الموبايل
-        height: isMobile ? size.height * 0.75 : size.height * 0.85,
-        margin: isMobile ? const EdgeInsets.only(bottom: 95, left: 16, right: 16) : const EdgeInsets.all(20), // إضافة margin جانبي في الموبايل
+        width: size.width * 0.94,
+        height: size.height * 0.75,
+        margin: const EdgeInsets.only(bottom: 100, left: 16, right: 16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(30),
-          boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 20, spreadRadius: -5)],
+          boxShadow: [BoxShadow(color: Colors.black87, blurRadius: 30, spreadRadius: -5)],
         ),
         child: ClipRRect(borderRadius: BorderRadius.circular(30), child: child),
+      ),
+    );
+  }
+}
+
+class _CircleIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color color;
+  const _CircleIconButton({required this.icon, required this.onPressed, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        child: Icon(icon, color: Colors.white, size: 22),
       ),
     );
   }
@@ -432,11 +531,11 @@ class _PulsingRecordBadgeState extends State<_PulsingRecordBadge> with SingleTic
     return FadeTransition(
       opacity: _anim,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
         child: const Row(
           children: [
-            Icon(Icons.fiber_manual_record, color: Colors.white, size: 10),
+            Icon(Icons.fiber_manual_record, color: Colors.white, size: 12),
             SizedBox(width: 4),
             Text("REC", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
           ],

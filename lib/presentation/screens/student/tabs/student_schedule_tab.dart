@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/services/database_service.dart';
+import '../../../../core/services/cache_service.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/models/session_model.dart';
 import '../../video_room/video_room_screen.dart';
@@ -28,17 +29,46 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
-    _loadSchedule();
+    _loadScheduleWithCache();
   }
 
-  Future<void> _loadSchedule() async {
+  Future<void> _loadScheduleWithCache() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
+
+    final cache = Provider.of<CacheService>(context, listen: false);
+    
+    // 1. Load from Cache first
+    try {
+      final cachedSessions = await cache.getEnrolledSessions();
+      if (mounted && cachedSessions != null) {
+        setState(() {
+          _allSessions = cachedSessions.map((e) => SessionModel.fromMap(e)).toList();
+          _isLoading = false; // Data is ready to be shown
+        });
+      }
+    } catch (e) {
+      debugPrint("Schedule cache error: $e");
+    }
+
+    // 2. Fetch fresh data from Network
+    await _loadSchedule(initial: _isLoading);
+  }
+
+  Future<void> _loadSchedule({bool initial = true}) async {
+    if (!mounted) return;
+    if (initial) setState(() => _isLoading = true);
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
+      final cache = Provider.of<CacheService>(context, listen: false);
+      
       final data = await db.getStudentSchedule(auth.user!.id);
       
+      // Save to cache for offline use
+      final sessionMaps = data.map((e) => e['sessions'] as Map<String, dynamic>).toList();
+      await cache.saveEnrolledSessions(sessionMaps);
+
       if (mounted) {
         setState(() {
           _allSessions = data.map((e) => SessionModel.fromMap(e['sessions'])).toList();
@@ -46,7 +76,8 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint("Schedule network error: $e");
+      if (mounted && initial) setState(() => _isLoading = false);
     }
   }
 
@@ -99,7 +130,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text("تم الانضمام للحصة بنجاح"), backgroundColor: Colors.green)
                     );
-                    _loadSchedule();
+                    _loadSchedule(initial: true);
                   }
                 } catch (e) {
                   setDialogState(() => isSubmitting = false);
@@ -127,25 +158,18 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
-        title: const Text("جدول حصصي"),
+        title: const Text("جدول حصصي", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
         elevation: 0,
       ),
       body: _isLoading 
           ? _buildLoadingSkeleton()
           : RefreshIndicator(
-              onRefresh: _loadSchedule,
+              onRefresh: () => _loadSchedule(initial: true),
               child: Responsive(
                 mobile: _buildMobileLayout(),
                 desktop: _buildDesktopLayout(),
               ),
             ),
-      // floatingActionButton: Responsive.isMobile(context)
-      //   ? FloatingActionButton.extended(
-      //       onPressed: _showJoinCodeDialog,
-      //       icon: const Icon(Icons.add),
-      //       label: const Text("انضمام بكود"),
-      //     )
-      //   : null,
     );
   }
 
@@ -208,7 +232,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
         headerStyle: const HeaderStyle(
           formatButtonVisible: false,
           titleCentered: true,
-          titleTextStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          titleTextStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo'),
         ),
         calendarStyle: const CalendarStyle(
           todayDecoration: BoxDecoration(color: Colors.lightBlueAccent, shape: BoxShape.circle),
@@ -227,12 +251,12 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
           children: [
             Icon(Icons.calendar_today_outlined, size: 60, color: Colors.grey.shade300),
             const SizedBox(height: 16),
-            const Text("لا توجد حصص في هذا اليوم", style: TextStyle(color: Colors.grey)),
+            const Text("لا توجد حصص في هذا اليوم", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo')),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _showJoinCodeDialog,
               style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade50, foregroundColor: Colors.blue, elevation: 0),
-              child: const Text("انضم لحصة الآن"),
+              child: const Text("انضم لحصة الآن", style: TextStyle(fontFamily: 'Cairo')),
             ),
           ],
         ),
@@ -270,12 +294,12 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                 color: isLive ? Colors.red : Colors.blue,
               ),
             ),
-            title: Text(session.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            title: Text(session.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo')),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("مع: ${session.teacherName}"),
-                Text(DateFormat('hh:mm a').format(session.startTime), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Text("مع: ${session.teacherName}", style: const TextStyle(fontFamily: 'Cairo')),
+                Text(DateFormat('hh:mm a').format(session.startTime), style: const TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'Cairo')),
               ],
             ),
             trailing: isLive 
@@ -306,8 +330,9 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                     backgroundColor: Colors.red,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     minimumSize: const Size(80, 40),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text("دخول"),
+                  child: const Text("دخول", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                 )
               : const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
           ),

@@ -7,6 +7,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/services/database_service.dart';
+import '../../../../core/services/cache_service.dart';
 import '../../../../core/models/session_model.dart';
 import '../widgets/next_class_card.dart';
 import '../widgets/upcoming_class_item.dart';
@@ -44,7 +45,7 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
       duration: const Duration(seconds: 1),
     )..repeat(reverse: true);
     
-    _loadStudentData(initial: true);
+    _loadStudentDataWithCache();
     
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       _loadStudentData(initial: false);
@@ -58,6 +59,51 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
     super.dispose();
   }
 
+  Future<void> _loadStudentDataWithCache() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
+    final cache = Provider.of<CacheService>(context, listen: false);
+    
+    // 1. Load from Cache first
+    try {
+      final cachedStats = await cache.getStudentStats();
+      final cachedEnrolled = await cache.getEnrolledSessions();
+      final cachedActive = await cache.getActiveSessions();
+
+      if (mounted && (cachedStats != null || cachedEnrolled != null || cachedActive != null)) {
+        setState(() {
+          if (cachedStats != null) _stats = cachedStats;
+          if (cachedEnrolled != null) {
+            _enrolledSessions = cachedEnrolled.map((e) => SessionModel.fromMap(e)).toList();
+            _updateNextSession();
+          }
+          if (cachedActive != null) {
+            _allActiveSessions = cachedActive.map((e) => SessionModel.fromMap(e)).toList();
+          }
+          _isLoading = false; // Hide loading as we have cached data
+        });
+      }
+    } catch (e) {
+      debugPrint("Cache loading error: $e");
+    }
+
+    // 2. Fetch fresh data from Network
+    await _loadStudentData(initial: _isLoading);
+  }
+
+  void _updateNextSession() {
+    final now = DateTime.now();
+    try {
+      _nextSession = _enrolledSessions.firstWhere(
+        (s) => (s.isLive || s.isActive) && s.endTime.isAfter(now),
+        orElse: () => _enrolledSessions.firstWhere((s) => s.endTime.isAfter(now)),
+      );
+    } catch (_) {
+      _nextSession = null;
+    }
+  }
+
   Future<void> _loadStudentData({bool initial = true}) async {
     if (!mounted) return;
     if (initial) setState(() => _isLoading = true);
@@ -65,41 +111,41 @@ class _StudentHomeTabState extends State<StudentHomeTab> with SingleTickerProvid
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
+      final cache = Provider.of<CacheService>(context, listen: false);
       
       if (auth.user != null) {
-        final enrolledResponse = await db.getStudentSchedule(auth.user!.id);
-        final activeResponse = await db.getActiveSessions();
-        final statsResponse = await db.getStudentStats(auth.user!.id);
+        // Fetch all data in parallel
+        final results = await Future.wait([
+          db.getStudentSchedule(auth.user!.id),
+          db.getActiveSessions(),
+          db.getStudentStats(auth.user!.id),
+        ]);
+
+        final enrolledResponse = results[0] as List<Map<String, dynamic>>;
+        final activeResponse = results[1] as List<Map<String, dynamic>>;
+        final statsResponse = results[2] as Map<String, dynamic>;
+
+        // Save to Cache
+        await cache.saveStudentStats(statsResponse);
+        await cache.saveEnrolledSessions(enrolledResponse.map((e) => e['sessions'] as Map<String, dynamic>).toList());
+        await cache.saveActiveSessions(activeResponse);
 
         if (mounted) {
-          final now = DateTime.now();
-          final List<SessionModel> tempEnrolled = enrolledResponse
+          setState(() {
+            _enrolledSessions = enrolledResponse
                 .map((e) => SessionModel.fromMap(e['sessions']))
                 .toList();
             
-          tempEnrolled.sort((a, b) => a.startTime.compareTo(b.startTime));
-          final List<SessionModel> tempActive = activeResponse.map((e) => SessionModel.fromMap(e)).toList();
-
-          SessionModel? tempNext;
-          try {
-            tempNext = tempEnrolled.firstWhere(
-              (s) => (s.isLive || s.isActive) && s.endTime.isAfter(now),
-              orElse: () => tempEnrolled.firstWhere((s) => s.endTime.isAfter(now)),
-            );
-          } catch (_) {
-            tempNext = null;
-          }
-
-          setState(() {
-            _enrolledSessions = tempEnrolled;
-            _allActiveSessions = tempActive;
-            _nextSession = tempNext;
+            _enrolledSessions.sort((a, b) => a.startTime.compareTo(b.startTime));
+            _allActiveSessions = activeResponse.map((e) => SessionModel.fromMap(e)).toList();
             _stats = statsResponse;
-            if (initial) _isLoading = false;
+            _updateNextSession();
+            _isLoading = false;
           });
         }
       }
     } catch (e) {
+      debugPrint("Network loading error: $e");
       if (mounted && initial) setState(() => _isLoading = false);
     }
   }

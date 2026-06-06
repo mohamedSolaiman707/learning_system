@@ -13,6 +13,7 @@ import 'core/providers/auth_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/providers/locale_provider.dart';
 import 'core/services/database_service.dart';
+import 'core/services/cache_service.dart';
 import 'core/localization/app_localizations.dart';
 
 void main() async {
@@ -37,6 +38,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => LocaleProvider()),
         Provider(create: (_) => DatabaseService()),
+        Provider(create: (_) => CacheService()),
       ],
       child: const MyApp(),
     ),

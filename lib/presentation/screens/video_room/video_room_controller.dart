@@ -37,6 +37,7 @@ class VideoRoomController extends ChangeNotifier {
   EventsListener<RoomEvent>? _listener;
   bool _isLoading = true;
   bool _isProcessing = false;
+  bool _isRecordingLoading = false; // حالة تحميل التسجيل
   String? _errorMessage;
   String? _currentRoomName;
   bool _isBreakoutActive = false;
@@ -93,6 +94,7 @@ class VideoRoomController extends ChangeNotifier {
   Room? get room => _room;
   bool get isLoading => _isLoading;
   bool get isProcessing => _isProcessing;
+  bool get isRecordingLoading => _isRecordingLoading;
   String? get errorMessage => _errorMessage;
   bool get isMicEnabled => _isMicEnabled;
   bool get isCamEnabled => _isCamEnabled;
@@ -626,28 +628,45 @@ class VideoRoomController extends ChangeNotifier {
 
   Future<void> startRecording() async {
     if (sessionId == null || _isRecording) return;
+    _isRecordingLoading = true;
+    notifyListeners();
+    onNotification?.call("جاري تحضير السيرفر للتسجيل... ⏳", Colors.blueGrey);
+    
     try {
       final success = await LiveKitService().startRecording(roomName, sessionId!);
       if (success) { 
         try { await DatabaseService().saveSession({'is_recording': true, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} 
         _isRecording = true; 
-        _isRecordingPaused = false; 
-        notifyListeners(); 
+        _isRecordingPaused = false;
+        _triggerHaptic(heavy: true);
       }
-    } catch (e) { onNotification?.call("فشل بدء التسجيل", Colors.red); }
+    } catch (e) { 
+      onNotification?.call("فشل بدء التسجيل، يرجى المحاولة مرة أخرى", Colors.red); 
+    } finally {
+      _isRecordingLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> stopRecording() async {
     if (sessionId == null || !_isRecording) return;
+    _isRecordingLoading = true;
+    notifyListeners();
+    
     try {
       final success = await LiveKitService().stopRecording(roomName, sessionId!);
       if (success) { 
         try { await DatabaseService().saveSession({'is_recording': false, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} 
         _isRecording = false; 
-        _isRecordingPaused = false; 
-        notifyListeners(); 
+        _isRecordingPaused = false;
+        _triggerHaptic();
       }
-    } catch (e) { onNotification?.call("فشل إيقاف التسجيل", Colors.red); }
+    } catch (e) { 
+      onNotification?.call("فشل إيقاف التسجيل", Colors.red); 
+    } finally {
+      _isRecordingLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> pauseRecording() async {
@@ -667,8 +686,14 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   Future<void> toggleRecording() async {
-    if (!isTeacher) return; _triggerHaptic(heavy: true);
-    if (_isRecording) { if (_isRecordingPaused) await resumeRecording(); else await stopRecording(); } else await startRecording();
+    if (!isTeacher || _isRecordingLoading) return;
+    _triggerHaptic();
+    if (_isRecording) { 
+      if (_isRecordingPaused) await resumeRecording(); 
+      else await stopRecording(); 
+    } else {
+      await startRecording();
+    }
   }
 
   Future<void> downloadAttendanceReport() async {

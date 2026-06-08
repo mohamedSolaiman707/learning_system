@@ -13,7 +13,7 @@ class ControlsBar extends StatelessWidget {
   final GlobalKey? screenShareKey;
   final GlobalKey? qaKey;
   final GlobalKey? whiteboardKey;
-  final GlobalKey? recordKey; // إضافة مفتاح التسجيل
+  final GlobalKey? recordKey;
 
   const ControlsBar({
     super.key,
@@ -79,7 +79,6 @@ class ControlsBar extends StatelessWidget {
                       ),
                     ),
 
-                    // زر التسجيل (للمدرس فقط)
                     if (controller.isTeacher)
                       _buildShowcase(
                         key: recordKey,
@@ -88,6 +87,7 @@ class ControlsBar extends StatelessWidget {
                         child: _AnimatedControlButton(
                           icon: controller.isRecording ? Icons.stop_circle_rounded : Icons.fiber_manual_record_rounded,
                           isActive: controller.isRecording,
+                          isLoading: controller.isRecordingLoading, // إضافة حالة التحميل
                           activeColor: Colors.red,
                           onPressed: controller.toggleRecording,
                           tooltip: controller.isRecording ? "إيقاف التسجيل" : "بدء التسجيل",
@@ -216,6 +216,7 @@ class ControlsBar extends StatelessWidget {
 class _AnimatedControlButton extends StatelessWidget {
   final IconData icon;
   final bool isActive;
+  final bool isLoading; // متغير جديد لحالة التحميل
   final Color color;
   final Color activeColor;
   final VoidCallback onPressed;
@@ -224,6 +225,7 @@ class _AnimatedControlButton extends StatelessWidget {
   const _AnimatedControlButton({
     required this.icon,
     required this.isActive,
+    this.isLoading = false,
     this.color = Colors.white,
     required this.activeColor,
     required this.onPressed,
@@ -237,20 +239,37 @@ class _AnimatedControlButton extends StatelessWidget {
       child: Tooltip(
         message: tooltip,
         child: InkWell(
-          onTap: onPressed,
+          onTap: isLoading ? null : onPressed,
           borderRadius: BorderRadius.circular(20),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isActive ? activeColor.withOpacity(0.2) : Colors.white.withOpacity(0.05),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isActive ? activeColor : Colors.transparent,
-                width: 1.5,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isActive ? activeColor.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isActive ? activeColor : Colors.transparent,
+                    width: 1.5,
+                  ),
+                ),
+                child: Opacity(
+                  opacity: isLoading ? 0.3 : 1.0,
+                  child: Icon(icon, color: isActive ? activeColor : color, size: 24),
+                ),
               ),
-            ),
-            child: Icon(icon, color: isActive ? activeColor : color, size: 24),
+              if (isLoading)
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(activeColor),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

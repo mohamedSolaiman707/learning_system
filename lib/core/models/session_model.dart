@@ -9,6 +9,8 @@ class SessionModel {
   final String status; // 'waiting' | 'active' | 'ended'
   final String? recordingUrl;
   final bool isRecordingEnabled;
+  final bool isRecording; // حقل جديد
+  final bool isRecordingPaused; // حقل جديد
 
   SessionModel({
     required this.id,
@@ -21,6 +23,8 @@ class SessionModel {
     this.status = 'waiting',
     this.recordingUrl,
     this.isRecordingEnabled = true,
+    this.isRecording = false,
+    this.isRecordingPaused = false,
   });
 
   factory SessionModel.fromMap(Map<String, dynamic> map) {
@@ -54,6 +58,8 @@ class SessionModel {
       status: map['status'] ?? 'waiting',
       recordingUrl: map['recording_url'],
       isRecordingEnabled: map['is_recording_enabled'] ?? true,
+      isRecording: map['is_recording'] ?? false,
+      isRecordingPaused: map['is_recording_paused'] ?? false,
     );
   }
 

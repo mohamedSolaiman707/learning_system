@@ -8,6 +8,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/services/livekit_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/attendance_pdf_service.dart';
+import 'package:http/http.dart' as http;
 
 class Stroke {
   final List<Offset> points;
@@ -37,7 +38,7 @@ class VideoRoomController extends ChangeNotifier {
   EventsListener<RoomEvent>? _listener;
   bool _isLoading = true;
   bool _isProcessing = false;
-  bool _isRecordingLoading = false; // حالة تحميل التسجيل
+  bool _isRecordingLoading = false; 
   String? _errorMessage;
   String? _currentRoomName;
   bool _isBreakoutActive = false;
@@ -203,7 +204,7 @@ class VideoRoomController extends ChangeNotifier {
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((event) {
       bool hasInternet = true;
       if (event is List) {
-        hasInternet = event.any((result) => result != ConnectivityResult.none);
+        hasInternet = (event as List).any((result) => result != ConnectivityResult.none);
       } else {
         hasInternet = event != ConnectivityResult.none;
       }
@@ -553,7 +554,7 @@ class VideoRoomController extends ChangeNotifier {
   void votePoll(String option) {
     if (_activePoll == null) return;
     sendData({'type': 'poll_vote', 'option': option});
-    _activePoll = null; // إخفاء الاستطلاع بعد التصويت للطالب
+    _activePoll = null;
     notifyListeners();
   }
 
@@ -633,15 +634,32 @@ class VideoRoomController extends ChangeNotifier {
     onNotification?.call("جاري تحضير السيرفر للتسجيل... ⏳", Colors.blueGrey);
     
     try {
-      final success = await LiveKitService().startRecording(roomName, sessionId!);
-      if (success) { 
+      final response = await http.post(
+        Uri.parse('${LiveKitService.supabaseUrl}/functions/v1/livekit-recording'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${LiveKitService.supabaseAnonKey}',
+        },
+        body: jsonEncode({
+          'action': 'start',
+          'roomName': roomName,
+          'sessionId': sessionId,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
         try { await DatabaseService().saveSession({'is_recording': true, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} 
         _isRecording = true; 
         _isRecordingPaused = false;
         _triggerHaptic(heavy: true);
+        onNotification?.call("🔴 بدأ التسجيل بنجاح", Colors.red);
+      } else {
+        final errorData = jsonDecode(response.body);
+        onNotification?.call("خطأ من السيرفر: ${errorData['error'] ?? 'فشل البدء'}", Colors.red);
       }
     } catch (e) { 
-      onNotification?.call("فشل بدء التسجيل، يرجى المحاولة مرة أخرى", Colors.red); 
+      onNotification?.call("فشل الاتصال بالسيرفر: تأكد من مفاتيح LIVEKIT في Supabase", Colors.red); 
+      debugPrint("Recording start error: $e");
     } finally {
       _isRecordingLoading = false;
       notifyListeners();
@@ -660,9 +678,12 @@ class VideoRoomController extends ChangeNotifier {
         _isRecording = false; 
         _isRecordingPaused = false;
         _triggerHaptic();
+        onNotification?.call("✅ تم إيقاف التسجيل وجاري المعالجة", Colors.blue);
+      } else {
+        onNotification?.call("فشل إيقاف التسجيل", Colors.red);
       }
     } catch (e) { 
-      onNotification?.call("فشل إيقاف التسجيل", Colors.red); 
+      onNotification?.call("خطأ أثناء الإيقاف: $e", Colors.red); 
     } finally {
       _isRecordingLoading = false;
       notifyListeners();
@@ -678,7 +699,7 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   Future<void> resumeRecording() async {
-    if (sessionId == null || !_isRecording || !_isRecordingPaused) return;
+    if (sessionId == null || !_isRecording || _isRecordingPaused) return;
     try {
       final success = await LiveKitService().resumeRecording(roomName, sessionId!);
       if (success) { try { await DatabaseService().saveSession({'is_recording_paused': false}, id: sessionId!); } catch (_) {} _isRecordingPaused = false; notifyListeners(); }
@@ -709,35 +730,15 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> endSessionForAll() async {
     if (!isTeacher || sessionId == null) return;
     _isProcessing = true; notifyListeners();
-
     try {
-      // إذا كان هناك تسجيل شغال، نقوم بإيقافه أولاً
-      if (_isRecording) {
-        await stopRecording();
-      }
-
-      // 1. إرسال إشارة خروج للكل
+      if (_isRecording) await stopRecording();
       sendData({'type': 'session_ended'});
-
-      // 2. إغلاق سجلات الحضور يدوياً (تأكيد الخروج للجميع)
       await DatabaseService().finalizeSessionAttendance(sessionId!);
-
-      // 3. تحديث حالة الحصة
       await DatabaseService().toggleRoomStatus(sessionId!, false);
       await DatabaseService().updateSessionStatus(sessionId!, 'archived');
-
-      // 4. !!! هام جداً: انتظار ثانية لضمان أن السيرفر قام بحساب المدة وحفظ وقت المغادرة
       await Future.delayed(const Duration(milliseconds: 1500));
-
-      // 5. جلب البيانات النهائية للتقرير
       final attendanceData = await DatabaseService().getSessionAttendance(sessionId!);
-
-      await AttendancePdfService().generateReport(
-        subjectName: title,
-        teacherName: userName,
-        studentsData: attendanceData,
-      );
-
+      await AttendancePdfService().generateReport(subjectName: title, teacherName: userName, studentsData: attendanceData);
       _room?.disconnect();
       onSessionEnded?.call("تم إنهاء الحصة وأرشفة التقرير بنجاح ✅");
     } catch (e) {

@@ -628,7 +628,12 @@ class VideoRoomController extends ChangeNotifier {
     if (sessionId == null || _isRecording) return;
     try {
       final success = await LiveKitService().startRecording(roomName, sessionId!);
-      if (success) { try { await DatabaseService().saveSession({'is_recording': true, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} _isRecording = true; _isRecordingPaused = false; notifyListeners(); }
+      if (success) { 
+        try { await DatabaseService().saveSession({'is_recording': true, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} 
+        _isRecording = true; 
+        _isRecordingPaused = false; 
+        notifyListeners(); 
+      }
     } catch (e) { onNotification?.call("فشل بدء التسجيل", Colors.red); }
   }
 
@@ -636,7 +641,12 @@ class VideoRoomController extends ChangeNotifier {
     if (sessionId == null || !_isRecording) return;
     try {
       final success = await LiveKitService().stopRecording(roomName, sessionId!);
-      if (success) { try { await DatabaseService().saveSession({'is_recording': false, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} _isRecording = true; _isRecordingPaused = false; notifyListeners(); }
+      if (success) { 
+        try { await DatabaseService().saveSession({'is_recording': false, 'is_recording_paused': false}, id: sessionId!); } catch (_) {} 
+        _isRecording = false; 
+        _isRecordingPaused = false; 
+        notifyListeners(); 
+      }
     } catch (e) { onNotification?.call("فشل إيقاف التسجيل", Colors.red); }
   }
 
@@ -671,13 +681,16 @@ class VideoRoomController extends ChangeNotifier {
     } catch (e) { onNotification?.call("فشل استخراج التقرير", Colors.red); } finally { _isProcessing = false; notifyListeners(); }
   }
 
-  // G:/Development/learning_by_video_call/lib/presentation/screens/video_room/video_room_controller.dart
-
   Future<void> endSessionForAll() async {
     if (!isTeacher || sessionId == null) return;
     _isProcessing = true; notifyListeners();
 
     try {
+      // إذا كان هناك تسجيل شغال، نقوم بإيقافه أولاً
+      if (_isRecording) {
+        await stopRecording();
+      }
+
       // 1. إرسال إشارة خروج للكل
       sendData({'type': 'session_ended'});
 

@@ -183,7 +183,6 @@ class DatabaseService {
 
   Future<Map<String, dynamic>> getStudentStats(String studentId) async {
     try {
-      // 1. حساب ساعات التعلم والحصص المكتملة
       final attendanceRes = await _supabase
           .from('attendance')
           .select('total_duration_minutes')
@@ -191,21 +190,24 @@ class DatabaseService {
       
       double totalMinutes = 0;
       int completedSessions = 0;
-      for (var row in (attendanceRes as List)) {
-        totalMinutes += (row['total_duration_minutes'] ?? 0);
-        completedSessions++;
+      if (attendanceRes != null) {
+        for (var row in (attendanceRes as List)) {
+          totalMinutes += (row['total_duration_minutes'] ?? 0);
+          completedSessions++;
+        }
       }
 
-      // 2. حساب نقاط الاختبارات
       final quizRes = await _supabase
           .from('quiz_results')
           .select('is_correct')
           .eq('student_id', studentId);
       
       int quizPoints = 0;
-      for (var row in (quizRes as List)) {
-        if (row['is_correct'] == true) {
-          quizPoints += 1; //  نقطة لكل إجابة صحيحة
+      if (quizRes != null) {
+        for (var row in (quizRes as List)) {
+          if (row['is_correct'] == true) {
+            quizPoints += 10;
+          }
         }
       }
 
@@ -232,6 +234,43 @@ class DatabaseService {
         .lte('start_time', endOfToday)
         .count(CountOption.exact);
     return res.count;
+  }
+
+  // --- Recordings Management ---
+  Future<List<Map<String, dynamic>>> getSessionRecordings(String sessionId) async {
+    try {
+      final response = await _supabase
+          .from('recordings')
+          .select('*')
+          .eq('session_id', sessionId)
+          .eq('status', 'completed')
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint("Error fetching recordings: $e");
+      return [];
+    }
+  }
+
+  Future<void> addRecordingRecord(Map<String, dynamic> data) async {
+    try {
+      await _supabase.from('recordings').insert(data);
+    } catch (e) {
+      debugPrint("Error adding recording: $e");
+    }
+  }
+
+  // --- Attendance, Q&A, and others ---
+
+  Future<List<Map<String, dynamic>>> getAttendanceReportData(String sessionId) async {
+    try {
+      return await _supabase
+          .from('attendance')
+          .select('*, profiles:student_id(full_name, external_id)')
+          .eq('session_id', sessionId);
+    } catch (e) {
+      rethrow;
+    }
   }
 
   Future<void> toggleRoomStatus(String sessionId, bool isActive, {String? roomName}) async {
@@ -321,8 +360,6 @@ class DatabaseService {
     }
   }
 
-  // --- Attendance Features ---
-
   Future<bool> isStudentKicked(String sessionId, String studentId) async {
     try {
       final res = await _supabase
@@ -341,11 +378,10 @@ class DatabaseService {
 
   Future<void> markStudentAsKicked(String sessionId, String studentId) async {
     try {
-      // ملاحظة: قد تحتاج لتحديث الـ SQL Constraint لقبول قيمة 'kicked'
       await _supabase.from('attendance').upsert({
         'session_id': sessionId,
         'student_id': studentId,
-        'status': 'absent', // مؤقتاً حتى يتم تحديث الداتابيز لتقبل 'kicked'
+        'status': 'absent',
         'left_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'session_id, student_id');
     } catch (e) {
@@ -353,26 +389,17 @@ class DatabaseService {
     }
   }
 
-// G:/Development/learning_by_video_call/lib/core/services/database_service.dart
-
   Future<void> logStudentEntry(String sessionId, String studentId, String studentName) async {
     try {
       debugPrint("Attempting to log entry: Session($sessionId) Student($studentId)");
-
-      // 1. التحقق من الطرد
       final isKicked = await isStudentKicked(sessionId, studentId);
-      if (isKicked) {
-        debugPrint("Student is kicked - entry denied.");
-        return;
-      }
+      if (isKicked) return;
 
-      // 2. ضمان وجود البروفايل (UUID Check)
       final profile = await _supabase.from('profiles').select('id').eq('id', studentId).maybeSingle();
       if (profile == null) {
         await _supabase.from('profiles').insert({'id': studentId, 'full_name': studentName, 'role': 'student'});
       }
 
-      // 3. التسجيل في الحصة (Enrollment)
       final existingEnroll = await _supabase.from('enrollments')
           .select('id').eq('session_id', sessionId).eq('student_id', studentId).maybeSingle();
 
@@ -380,7 +407,6 @@ class DatabaseService {
         await _supabase.from('enrollments').insert({'session_id': sessionId, 'student_id': studentId});
       }
 
-      // 4. سجل الحضور (Attendance)
       final existingAtt = await _supabase.from('attendance')
           .select('id, total_duration_minutes')
           .eq('session_id', sessionId).eq('student_id', studentId).maybeSingle();
@@ -400,12 +426,11 @@ class DatabaseService {
           'left_at': null,
         }).eq('id', existingAtt['id']);
       }
-
-      debugPrint("✅ Entry logged successfully in all tables.");
     } catch (e) {
       debugPrint("❌ CRITICAL ERROR in logStudentEntry: $e");
     }
   }
+
   Future<void> logStudentExit(String sessionId, String studentId) async {
     try {
       final record = await _supabase.from('attendance')
@@ -426,7 +451,7 @@ class DatabaseService {
         await _supabase.from('attendance').update({
           'left_at': exitTime.toUtc().toIso8601String(),
           'total_duration_minutes': totalDuration,
-          'status': 'present' // نستخدم present أو نحدث الـ Constraint في الداتابيز لتقبل 'away'
+          'status': 'present'
         }).eq('id', record['id']);
       }
     } catch (e) {
@@ -461,20 +486,8 @@ class DatabaseService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getAttendanceReportData(String sessionId) async {
-    try {
-      return await _supabase
-          .from('attendance')
-          .select('*, profiles:student_id(full_name, external_id)')
-          .eq('session_id', sessionId);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
   Future<List<Map<String, dynamic>>> getSessionAttendance(String sessionId) async {
     try {
-      // جلب الحضور الفعلي
       final attendanceResponse = await _supabase
           .from('attendance')
           .select('*, profiles:student_id(full_name)')
@@ -482,7 +495,6 @@ class DatabaseService {
 
       final List<Map<String, dynamic>> attendanceData = List<Map<String, dynamic>>.from(attendanceResponse);
 
-      // جلب المسجلين
       final enrollmentsResponse = await _supabase
           .from('enrollments')
           .select('student_id, profiles:student_id(full_name)')
@@ -496,7 +508,6 @@ class DatabaseService {
       for (var record in attendanceData) {
         final studentId = record['student_id'];
         processedIds.add(studentId);
-
         report.add({
           'name': record['profiles'] != null ? record['profiles']['full_name'] : 'طالب غير مسجل',
           'present': record['status'] != 'absent',
@@ -518,7 +529,6 @@ class DatabaseService {
           });
         }
       }
-
       return report;
     } catch (e) {
       debugPrint("Error generating attendance report: $e");
@@ -530,12 +540,8 @@ class DatabaseService {
     if (dateStr == null || dateStr == '---') return '---';
     try {
       final dt = DateTime.parse(dateStr).toLocal();
-      final hours = dt.hour.toString().padLeft(2, '0');
-      final minutes = dt.minute.toString().padLeft(2, '0');
-      return "$hours:$minutes";
-    } catch (_) {
-      return dateStr;
-    }
+      return "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
+    } catch (_) { return dateStr; }
   }
 
   Future<List<Map<String, dynamic>>> getSessionEnrollments(String sessionId) async {

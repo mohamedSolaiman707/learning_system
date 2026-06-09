@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { EgressClient, EncodedFileType } from "https://esm.sh/livekit-server-sdk@1.2.7"
+import { EgressClient, EncodedFileType, AccessToken } from "https://esm.sh/livekit-server-sdk@1.2.7"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
@@ -12,85 +12,67 @@ serve(async (req) => {
 
   try {
     const { action, roomName, sessionId, title } = await req.json()
-    console.log(`[REC] Processing: ${action} | Session: ${sessionId}`)
-
+    
     const apiKey = Deno.env.get('LIVEKIT_API_KEY')
     const apiSecret = Deno.env.get('LIVEKIT_API_SECRET')
     let livekitUrl = Deno.env.get('LIVEKIT_URL')
 
-    if (!apiKey || !apiSecret || !livekitUrl) {
-      throw new Error('Required LiveKit secrets are missing (API_KEY, URL)')
-    }
+    if (!apiKey || !apiSecret || !livekitUrl) throw new Error('Missing LiveKit Secrets')
+    if (livekitUrl.startsWith('wss://')) livekitUrl = livekitUrl.replace('wss://', 'https://')
 
-    if (livekitUrl.startsWith('wss://')) {
-      livekitUrl = livekitUrl.replace('wss://', 'https://')
-    }
-
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
-    
     const egressClient = new EgressClient(livekitUrl, apiKey, apiSecret)
+    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
     if (action === 'start') {
       const filename = `rec_${sessionId}_${Date.now()}.mp4`
       const filepath = `recordings/${sessionId}/${filename}`
       
-      let publicDomain = Deno.env.get('R2_PUBLIC_DOMAIN') || ''
-      if (publicDomain.endsWith('/')) publicDomain = publicDomain.slice(0, -1)
+      // توليد توكن للمسجل بصلاحيات كاملة ليتمكن من رؤية البيانات
+      const at = new AccessToken(apiKey, apiSecret, { identity: `recorder_${Date.now()}`, name: 'Recording Bot' })
+      at.addGrant({ roomJoin: true, room: roomName, canSubscribe: true, canPublish: false, canPublishData: true })
+      const recorderToken = at.toJwt()
+
+      const publicDomain = Deno.env.get('R2_PUBLIC_DOMAIN')?.replace(/\/$/, '') || ''
       const rawVideoUrl = `${publicDomain}/${filepath}`
 
-      // الرابط الاحترافي الذي سيظهر للمستخدم (Vercel)
+      // رابط العرض للطالب (بعد انتهاء التسجيل)
       const brandedUrl = `https://learning-system-jet.vercel.app/recording-template.html?video_url=${encodeURIComponent(rawVideoUrl)}&title=${encodeURIComponent(title || 'حصة مسجلة')}`
 
-      // رابط القالب الذي سيستخدمه LiveKit أثناء التسجيل
-      const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}`
+      // رابط القالب الذي سيفتحه السيرفر (WebEgress) ليقوم بتصويره
+      const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}&access_token=${recorderToken}&mode=recording`
 
-      console.log(`[REC] Starting Academy Recording for: ${roomName}`)
+      console.log(`[REC] Starting WebEgress for: ${templateUrl}`)
 
-      try {
-        const info = await egressClient.startRoomCompositeEgress(
-          roomName,
-          {
-            file: {
-              fileType: EncodedFileType.MP4,
-              filepath: filepath,
-              s3: {
-                endpoint: Deno.env.get('R2_ENDPOINT')!,
-                bucket: Deno.env.get('R2_BUCKET')!,
-                accessKey: Deno.env.get('R2_ACCESS_KEY')!,
-                secret: Deno.env.get('R2_SECRET_KEY')!,
-                forcePathStyle: true,
-              },
+      // استخدام startWebEgress بدلاً من startRoomCompositeEgress لتصوير الواجهة بالكامل
+      const info = await egressClient.startWebEgress(
+        templateUrl,
+        {
+          file: {
+            fileType: EncodedFileType.MP4,
+            filepath: filepath,
+            s3: {
+              endpoint: Deno.env.get('R2_ENDPOINT')!,
+              bucket: Deno.env.get('R2_BUCKET')!,
+              accessKey: Deno.env.get('R2_ACCESS_KEY')!,
+              secret: Deno.env.get('R2_SECRET_KEY')!,
+              forcePathStyle: true,
             },
           },
-          {
-            customLayout: templateUrl,
-            encodingOptions: { preset: 2 }
-          }
-        )
+        }
+      )
 
-        // حفظ الرابط الاحترافي (Vercel) في قاعدة البيانات
-        await supabase.from('recordings').insert({
-          session_id: sessionId,
-          egress_id: info.egressId,
-          file_path: filepath,
-          video_url: brandedUrl, // حفظ رابط مخصص بدلاً من رابط الملف الخام
-          status: 'recording',
-          room_name: roomName
-        })
+      await supabase.from('recordings').insert({
+        session_id: sessionId, 
+        egress_id: info.egressId, 
+        file_path: filepath, 
+        video_url: brandedUrl, 
+        status: 'recording', 
+        room_name: roomName
+      })
+      
+      await supabase.from('sessions').update({ is_recording: true }).eq('id', sessionId)
 
-        await supabase.from('sessions').update({ is_recording: true }).eq('id', sessionId)
-
-        return new Response(JSON.stringify({ success: true, egressId: info.egressId }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        })
-      } catch (err) {
-        console.error(`[REC] SDK Error: ${err.message}`)
-        throw err
-      }
+      return new Response(JSON.stringify({ success: true, egressId: info.egressId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (action === 'stop') {
@@ -104,12 +86,7 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ error: 'Invalid action' }), { status: 400 })
-
   } catch (error) {
-    console.error(`[REC] Critical Error: ${error.message}`)
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    })
+    return new Response(JSON.stringify({ error: error.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 })
   }
 })

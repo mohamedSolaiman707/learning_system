@@ -3,91 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Academy Pro Recording UI</title>
+    <title>Academy Pro Recording</title>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary-red: #e63946;
-            --accent-blue: #007bff;
-            --bg-app: #12141a;
-            --sidebar-width: 300px;
-        }
+        :root { --primary-red: #e63946; --accent-blue: #007bff; --bg: #f8f9fb; }
         * { box-sizing: border-box; font-family: 'Cairo', sans-serif; margin: 0; padding: 0; }
-        body, html { width: 100%; height: 100%; background-color: var(--bg-app); overflow: hidden; display: flex; flex-direction: column; }
+        body, html { width: 100%; height: 100%; background-color: #0b0e14; overflow: hidden; display: flex; flex-direction: column; }
 
-        /* Header */
-        #header {
-            height: 60px; background: #ffffff; display: flex; align-items: center; 
-            justify-content: space-between; padding: 0 25px; border-bottom: 1px solid #e2e8f0; z-index: 100;
-        }
-        #session-title { color: #102a43; font-size: 16px; font-weight: 700; }
+        #header { height: 50px; background: white; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #ddd; }
+        #session-title { color: #102a43; font-size: 15px; font-weight: 700; }
         .rec-tag { color: var(--primary-red); display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 12px; }
-        .dot { width: 10px; height: 10px; background: var(--primary-red); border-radius: 50%; animation: blink 1s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        .dot { width: 8px; height: 8px; background: var(--primary-red); border-radius: 50%; animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-        /* App Body */
-        #app-layout { flex: 1; display: flex; overflow: hidden; }
+        #main { flex: 1; display: flex; overflow: hidden; background: #12141a; }
+        #sidebar { width: 280px; background: white; border-left: 1px solid #eee; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 12px; border-bottom: 1px solid #f1f5f9; font-weight: 700; color: var(--accent-blue); text-align: center; font-size: 14px; }
+        #chat-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+        .msg { background: #f1f5f9; padding: 8px 12px; border-radius: 12px; font-size: 12px; border-bottom-right-radius: 2px; }
+        .msg b { color: var(--accent-blue); display: block; font-size: 10px; margin-bottom: 2px; }
 
-        /* Sidebar (Right-side in RTL) */
-        #sidebar {
-            width: var(--sidebar-width); background: #ffffff; border-left: 1px solid #eee;
-            display: flex; flex-direction: column;
-        }
-        .sidebar-header { padding: 15px; border-bottom: 1px solid #f1f5f9; font-weight: 700; color: var(--accent-blue); text-align: center; }
-        #chat-list { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
-        .msg { background: #f1f5f9; padding: 10px; border-radius: 12px; font-size: 12px; border-bottom-right-radius: 2px; }
-        .msg b { color: var(--accent-blue); display: block; margin-bottom: 2px; font-size: 11px; }
-
-        /* Content Area */
-        #content-area { flex: 1; display: flex; flex-direction: column; padding: 15px; gap: 15px; }
-        #stage {
-            flex: 2; background: #000; border-radius: 24px; position: relative; 
-            overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 2px solid #2d3139;
-        }
-        #screenshare-layer { position: absolute; width: 100%; height: 100%; z-index: 1; display: none; }
+        #content { flex: 1; display: flex; flex-direction: column; padding: 10px; gap: 10px; }
+        #stage { flex: 2; background: #000; border-radius: 15px; position: relative; overflow: hidden; border: 1px solid #2d3139; }
+        #screenshare-layer { position: absolute; inset: 0; z-index: 1; display: none; }
         #screenshare-layer video { width: 100%; height: 100%; object-fit: contain; }
-        #whiteboard-canvas { position: absolute; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+        #whiteboard-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
 
-        /* Participants Grid */
-        #video-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;
-        }
-        .p-card { background: #000; border-radius: 15px; overflow: hidden; aspect-ratio: 16/9; position: relative; border: 2px solid transparent; }
-        .p-card.active-speaker { border-color: var(--accent-blue); }
-        .p-card video { width: 100%; height: 100%; object-fit: cover; }
-        .p-name { position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.5); color: white; padding: 2px 8px; border-radius: 5px; font-size: 10px; }
-        .p-hand { position: absolute; top: 10px; left: 10px; background: #ff9800; color: white; width: 24px; height: 24px; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 14px; z-index: 10; }
+        #video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; max-height: 200px; overflow-y: auto; }
+        .card { background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 16/9; position: relative; border: 2px solid transparent; }
+        .card.active { border-color: var(--accent-blue); }
+        .card video { width: 100%; height: 100%; object-fit: cover; }
+        .name { position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.5); color: white; padding: 1px 6px; border-radius: 4px; font-size: 9px; }
+        .hand { position: absolute; top: 6px; left: 6px; background: #ff9800; color: white; width: 22px; height: 22px; border-radius: 50%; display: none; align-items: center; justify-content: center; font-size: 12px; z-index: 10; }
 
-        /* Footer Toolbar */
-        #toolbar {
-            height: 70px; background: white; border-top: 1px solid #e2e8f0;
-            display: flex; align-items: center; justify-content: center; gap: 12px;
-        }
-        .tool-icon { width: 40px; height: 40px; border-radius: 50%; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #475569; border: 1px solid #eee; }
-        .tool-icon.red { background: var(--primary-red); color: white; border: none; }
-        .tool-icon.active { background: #e0f2fe; color: var(--accent-blue); }
+        #toolbar { height: 60px; background: white; border-top: 1px solid #eee; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .btn { width: 35px; height: 35px; border-radius: 50%; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #475569; }
+        .btn.active { color: var(--accent-blue); background: #e0f2fe; }
+        .btn.red { background: var(--primary-red); color: white; }
 
-        /* Video Playback Layer (For Students later) */
-        #playback-layer { display: none; position: fixed; inset: 0; background: black; z-index: 2000; }
-        #playback-layer video { width: 100%; height: 100%; }
+        #playback { display: none; position: fixed; inset: 0; background: black; z-index: 1000; }
+        #playback video { width: 100%; height: 100%; }
     </style>
 </head>
 <body>
-    <div id="playback-layer"><video id="recorded-video" controls autoplay></video></div>
-
+    <div id="playback"><video id="recorded-v" controls autoplay></video></div>
     <header id="header">
-        <div id="session-title">تحميل الحصة...</div>
+        <div id="session-title">أكاديمية التعليم</div>
         <div class="rec-tag"><div class="dot"></div><span>RECORDING LIVE</span></div>
     </header>
-
-    <div id="app-layout">
+    <div id="main">
         <aside id="sidebar">
-            <div class="sidebar-header">💬 المحادثة والأسئلة</div>
+            <div class="sidebar-header">💬 المحادثة</div>
             <div id="chat-list"></div>
         </aside>
-
-        <main id="content-area">
+        <main id="content">
             <div id="stage">
                 <div id="screenshare-layer"></div>
                 <canvas id="whiteboard-canvas"></canvas>
@@ -95,28 +66,37 @@
             <div id="video-grid"></div>
         </main>
     </div>
-
     <footer id="toolbar">
-        <div class="tool-icon active">🎤</div><div class="tool-icon active">📷</div><div class="tool-icon">✋</div><div class="tool-icon red">📞</div><div class="tool-icon">💬</div><div class="tool-icon">👥</div><div class="tool-icon">🖊️</div>
+        <div class="btn active">🎤</div><div class="btn active">📷</div><div class="btn">✋</div><div class="btn red">📞</div><div class="btn">💬</div><div class="btn">👥</div>
     </footer>
 
     <script>
         const params = new URLSearchParams(window.location.search);
-        const videoUrl = params.get('video_url');
+        const vUrl = params.get('video_url');
         const token = params.get('access_token');
+        const roomName = params.get('room');
+        const sbUrl = params.get('sb_url');
+        const sbKey = params.get('sb_key');
+
         document.getElementById('session-title').innerText = params.get('title') || 'حصة تعليمية';
 
-        if (videoUrl) {
-            document.getElementById('playback-layer').style.display = 'block';
-            document.getElementById('recorded-video').src = videoUrl;
+        if (vUrl) {
+            document.getElementById('playback').style.display = 'block';
+            document.getElementById('recorded-v').src = vUrl;
         } else if (token) {
-            connectToRoom(token);
+            init(token);
         }
 
-        const canvas = document.getElementById('whiteboard-canvas');
-        const ctx = canvas.getContext('2d');
+        async function init(t) {
+            // جلب تاريخ الشات من Supabase
+            if (sbUrl && sbKey && roomName) {
+                try {
+                    const supabase = window.supabase.createClient(sbUrl, sbKey);
+                    const { data } = await supabase.from('messages').select('*').eq('room_name', roomName).order('created_at', { ascending: true }).limit(50);
+                    data?.forEach(m => addChat(m.user_name, m.content));
+                } catch(e) { console.error("Supabase Error:", e); }
+            }
 
-        async function connectToRoom(token) {
             const room = new LiveKitClient.Room({ adaptiveStream: true, dynacast: true });
             
             room.on('trackSubscribed', (track, pub, p) => {
@@ -126,65 +106,67 @@
                         layer.innerHTML = ''; layer.appendChild(track.attach());
                         layer.style.display = 'block';
                     } else {
-                        addParticipant(p, track);
+                        addP(p, track);
                     }
                 }
             });
 
             room.on('trackUnsubscribed', (track, pub, p) => {
-                if (track.source !== LiveKitClient.Track.Source.ScreenShare) {
-                    document.getElementById(`p-${p.identity}`)?.remove();
-                } else {
+                if (track.source === LiveKitClient.Track.Source.ScreenShare) {
                     document.getElementById('screenshare-layer').style.display = 'none';
+                } else {
+                    document.getElementById(`p-${p.identity}`)?.remove();
                 }
-            });
-
-            room.on('activeSpeakersChanged', (speakers) => {
-                document.querySelectorAll('.p-card').forEach(c => c.classList.remove('active-speaker'));
-                speakers.forEach(s => document.getElementById(`p-${s.identity}`)?.classList.add('active-speaker'));
             });
 
             room.on('dataReceived', (payload, p) => {
                 try {
-                    const data = JSON.parse(new TextDecoder().decode(payload));
-                    if (data.type === 'chat_message') addChat(data.user_name, data.content);
-                    if (data.type === 'whiteboard_draw') draw(data);
-                    if (data.type === 'hand_raise') {
-                        const hand = document.querySelector(`#p-${p.identity} .p-hand`);
-                        if (hand) hand.style.display = data.value ? 'flex' : 'none';
+                    const d = JSON.parse(new TextDecoder().decode(payload));
+                    if (d.type === 'chat_message') addChat(d.user_name, d.content);
+                    if (d.type === 'hand_raise') {
+                        const h = document.querySelector(`#p-${p.identity} .hand`);
+                        if (h) h.style.display = d.value ? 'flex' : 'none';
+                    }
+                    if (d.type === 'whiteboard_draw') draw(d);
+                    if (d.type === 'whiteboard_clear') {
+                        const canvas = document.getElementById('whiteboard-canvas');
+                        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
                     }
                 } catch(e) {}
             });
 
-            await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
+            await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', t);
+            const canvas = document.getElementById('whiteboard-canvas');
             canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
         }
 
-        function addParticipant(p, track) {
+        function addP(p, track) {
             let card = document.getElementById(`p-${p.identity}`);
             if (!card) {
                 card = document.createElement('div');
-                card.id = `p-${p.identity}`; card.className = 'p-card';
-                card.innerHTML = `<div class="p-hand">✋</div><div class="p-name">${p.name || 'مشارك'}</div>`;
+                card.id = `p-${p.identity}`; card.className = 'card';
+                card.innerHTML = `<div class="hand">✋</div><div class="name">${p.name || 'طالب'}</div>`;
                 document.getElementById('video-grid').appendChild(card);
             }
             card.appendChild(track.attach());
         }
 
-        function addChat(user, text) {
+        function addChat(u, c) {
             const list = document.getElementById('chat-list');
             const div = document.createElement('div');
-            div.className = 'msg'; div.innerHTML = `<b>${user}</b>${text}`;
+            div.className = 'msg'; div.innerHTML = `<b>${u}</b>${c}`;
             list.appendChild(div); list.scrollTop = list.scrollHeight;
         }
 
-        function draw(data) {
-            if (!data.points) return;
-            ctx.strokeStyle = `rgba(${(data.color >> 16) & 255}, ${(data.color >> 8) & 255}, ${data.color & 255}, 1)`;
-            ctx.lineWidth = data.width || 3; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        function draw(d) {
+            const canvas = document.getElementById('whiteboard-canvas');
+            const ctx = canvas.getContext('2d');
+            if (!d.points) return;
+            ctx.strokeStyle = `rgba(${(d.color >> 16) & 255}, ${(d.color >> 8) & 255}, ${d.color & 255}, 1)`;
+            ctx.lineWidth = d.width || 3; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.moveTo(data.points[0].x * canvas.width, data.points[0].y * canvas.height);
-            data.points.forEach(p => ctx.lineTo(p.x * canvas.width, p.y * canvas.height));
+            ctx.moveTo(d.points[0].x * canvas.width, d.points[0].y * canvas.height);
+            d.points.forEach(p => ctx.lineTo(p.x * canvas.width, p.y * canvas.height));
             ctx.stroke();
         }
     </script>

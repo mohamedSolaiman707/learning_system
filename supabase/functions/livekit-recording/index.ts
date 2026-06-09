@@ -16,12 +16,14 @@ serve(async (req) => {
     const apiKey = Deno.env.get('LIVEKIT_API_KEY')
     const apiSecret = Deno.env.get('LIVEKIT_API_SECRET')
     let livekitUrl = Deno.env.get('LIVEKIT_URL')
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
 
     if (!apiKey || !apiSecret || !livekitUrl) throw new Error('Missing LiveKit Secrets')
     if (livekitUrl.startsWith('wss://')) livekitUrl = livekitUrl.replace('wss://', 'https://')
 
     const egressClient = new EgressClient(livekitUrl, apiKey, apiSecret)
-    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+    const supabase = createClient(supabaseUrl!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
     if (action === 'start') {
       const filename = `rec_${sessionId}_${Date.now()}.mp4`
@@ -36,8 +38,10 @@ serve(async (req) => {
 
       const brandedUrl = `https://learning-system-jet.vercel.app/recording-template.html?video_url=${encodeURIComponent(rawVideoUrl)}&title=${encodeURIComponent(title || 'حصة مسجلة')}`
 
-      // تمرير الـ sessionId والـ roomName عشان القالب يجيب البيانات
-      const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}&access_token=${recorderToken}&session_id=${sessionId}&room=${roomName}`
+      // تمرير كل البيانات اللازمة للقالب عشان يظهر الشات والسبورة وكل حاجة بالملي
+      const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}&access_token=${recorderToken}&room=${roomName}&sb_url=${encodeURIComponent(supabaseUrl!)}&sb_key=${encodeURIComponent(supabaseAnonKey!)}&session_id=${sessionId}`
+
+      console.log(`[REC] Starting WebEgress with Template: ${templateUrl}`)
 
       const info = await egressClient.startWebEgress(
         templateUrl,
@@ -57,7 +61,12 @@ serve(async (req) => {
       )
 
       await supabase.from('recordings').insert({
-        session_id: sessionId, egress_id: info.egressId, file_path: filepath, video_url: brandedUrl, status: 'recording', room_name: roomName
+        session_id: sessionId, 
+        egress_id: info.egressId, 
+        file_path: filepath, 
+        video_url: brandedUrl, 
+        status: 'recording', 
+        room_name: roomName
       })
       await supabase.from('sessions').update({ is_recording: true }).eq('id', sessionId)
 

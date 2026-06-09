@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Academy Recording Template</title>
+    <title>Academy Player | منصة الأكاديمية</title>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -22,127 +22,150 @@
             flex-direction: column;
         }
 
-        /* الهيدر العلوي */
         #header {
-            height: 75px;
+            height: 80px;
             background: var(--card-bg);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 30px;
-            box-shadow: 0 2px 15px rgba(0,0,0,0.05);
+            padding: 0 40px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
             z-index: 10;
+            border-bottom: 1px solid #edf2f7;
         }
 
-        .brand { display: flex; align-items: center; gap: 12px; }
-        .logo {
-            width: 40px; height: 45px;
-            background: var(--dark-blue);
-            border-radius: 10px;
-            color: white; display: flex; align-items: center; justify-content: center;
-            font-weight: bold; font-size: 20px;
+        .brand-section { display: flex; align-items: center; gap: 15px; }
+        .logo-icon {
+            width: 45px; height: 45px;
+            background: linear-gradient(135deg, var(--dark-blue), #243b53);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: bold; font-size: 22px;
         }
-        #session-title { color: var(--dark-blue); font-size: 18px; font-weight: 700; }
+        
+        #session-title { color: var(--dark-blue); font-size: 20px; font-weight: 700; }
 
-        .status {
-            background: var(--primary-red); color: white;
-            padding: 6px 15px; border-radius: 8px;
-            display: flex; align-items: center; gap: 8px; font-size: 13px;
+        .indicator {
+            padding: 8px 20px;
+            border-radius: 100px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: 600;
         }
-        .dot { width: 8px; height: 8px; background: white; border-radius: 50%; animation: pulse 1s infinite; }
+        .status-rec { background: var(--primary-red); color: white; }
+        .status-view { background: #e2e8f0; color: var(--dark-blue); }
 
-        /* منطقة الفيديوهات - Responsive Grid */
-        #content {
+        #main-content {
             flex: 1;
-            padding: 20px;
+            padding: 30px;
             display: flex;
             justify-content: center;
             align-items: center;
+            position: relative;
         }
 
+        /* حاوية الفيديو للمشاهد */
+        #video-player-container {
+            display: none; /* مخفي افتراضياً */
+            width: 100%;
+            max-width: 1100px;
+            aspect-ratio: 16 / 9;
+            background: #000;
+            border-radius: 30px;
+            overflow: hidden;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+            border: 8px solid white;
+        }
+        #video-player-container video { width: 100%; height: 100%; }
+
+        /* حاوية الفيديو للتسجيل الحي */
         #video-grid {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            align-items: center;
-            gap: 15px;
+            display: grid;
+            gap: 25px;
             width: 100%;
             height: 100%;
+            max-width: 1400px;
         }
 
         .participant-card {
             position: relative;
             background: #000;
-            border-radius: 20px;
+            border-radius: 28px;
             overflow: hidden;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            border: 4px solid white;
-            transition: all 0.3s ease;
-            flex-grow: 0;
-            flex-shrink: 1;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.08);
+            border: 6px solid white;
             aspect-ratio: 16 / 9;
         }
+        .participant-card video { width: 100%; height: 100%; object-fit: cover; }
 
-        /* أحجام ذكية بناءً على عدد الحضور */
-        .size-full { width: 85%; max-height: 90%; }
-        .size-half { width: calc(50% - 15px); }
-        .size-multi { width: calc(33% - 15px); }
-
-        video { width: 100%; height: 100%; object-fit: cover; }
-
-        .name-label {
-            position: absolute; bottom: 15px; right: 15px;
+        .name-tag {
+            position: absolute; bottom: 20px; right: 20px;
             background: rgba(16, 42, 67, 0.8);
-            color: white; padding: 5px 15px; border-radius: 8px;
-            font-size: 13px; backdrop-filter: blur(5px);
+            color: white; padding: 6px 18px; border-radius: 12px;
+            font-size: 14px; font-weight: 600; backdrop-filter: blur(10px);
         }
 
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .grid-1 { grid-template-columns: 1fr; max-width: 900px; }
+        .grid-multi { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
     </style>
 </head>
 <body>
-<div id="header">
-    <div class="brand">
-        <div class="logo">A</div>
-        <div id="session-title">جاري تحميل الحصة...</div>
-    </div>
-    <div class="status">
-        <div class="dot"></div>
-        <span>تسجيل مباشر</span>
-    </div>
-</div>
+    <header id="header">
+        <div class="brand-section">
+            <div class="logo-icon">A</div>
+            <div id="session-title">جاري تحميل المحتوى...</div>
+        </div>
+        <div id="status-badge" class="indicator status-view">
+            <span>عرض المحاضرة</span>
+        </div>
+    </header>
 
-<div id="content">
-    <div id="video-grid"></div>
-</div>
+    <main id="main-content">
+        <!-- وضع المشاهد (للطالب) -->
+        <div id="video-player-container">
+            <video id="main-video" controls autoplay>
+                <source id="video-source" src="" type="video/mp4">
+                متصفحك لا يدعم تشغيل الفيديو.
+            </video>
+        </div>
 
-<script>
-    const urlParams = new URLSearchParams(window.location.search);
-    const title = urlParams.get('title') || 'حصة تعليمية';
-    document.getElementById('session-title').innerText = title;
+        <!-- وضع التسجيل (للمصور) -->
+        <div id="video-grid" class="grid-1"></div>
+    </main>
 
-    function refreshLayout() {
-        const grid = document.getElementById('video-grid');
-        const cards = document.querySelectorAll('.participant-card');
-        const count = cards.length;
-
-        cards.forEach(card => {
-            card.classList.remove('size-full', 'size-half', 'size-multi');
-            if (count <= 1) card.classList.add('size-full');
-            else if (count === 2) card.classList.add('size-half');
-            else card.classList.add('size-multi');
-        });
-    }
-
-    async function init() {
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const videoUrl = urlParams.get('video_url'); // رابط الفيديو الخام من R2
+        const title = urlParams.get('title') || 'حصة مسجلة';
         const token = urlParams.get('access_token');
-        if (!token) return;
 
-        const room = new LiveKitClient.Room();
-        try {
-            // تصحيح البروتوكول إلى wss:// للاتصال باللايف كيت
+        document.getElementById('session-title').innerText = title;
+
+        if (videoUrl) {
+            // --- وضع المشاهد (Viewer Mode) ---
+            document.getElementById('video-player-container').style.display = 'block';
+            document.getElementById('video-grid').style.display = 'none';
+            document.getElementById('video-source').src = videoUrl;
+            document.getElementById('main-video').load();
+            document.getElementById('status-badge').innerHTML = '<span>مشاهدة التسجيل</span>';
+        } else if (token) {
+            // --- وضع التسجيل (Recording Mode) ---
+            document.getElementById('status-badge').classList.add('status-rec');
+            document.getElementById('status-badge').innerHTML = '<div style="width:10px;height:10px;background:white;border-radius:50%"></div><span>تسجيل مباشر</span>';
+            initRecording(token);
+        }
+
+        function updateLayout() {
+            const grid = document.getElementById('video-grid');
+            const count = document.querySelectorAll('.participant-card').length;
+            grid.className = count <= 1 ? 'grid-1' : 'grid-multi';
+        }
+
+        async function initRecording(token) {
+            const room = new LiveKitClient.Room();
             await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
-
             room.on('trackSubscribed', (track, participant) => {
                 if (track.kind === 'video') {
                     let card = document.getElementById(`p-${participant.identity}`);
@@ -150,23 +173,18 @@
                         card = document.createElement('div');
                         card.id = `p-${participant.identity}`;
                         card.className = 'participant-card';
-                        card.innerHTML = `<div class="name-label">${participant.name || 'مشارك'}</div>`;
+                        card.innerHTML = `<div class="name-tag">${participant.name || 'مشارك'}</div>`;
                         document.getElementById('video-grid').appendChild(card);
                     }
                     card.appendChild(track.attach());
-                    refreshLayout();
+                    updateLayout();
                 }
             });
-
             room.on('participantDisconnected', (p) => {
                 document.getElementById(`p-${p.identity}`)?.remove();
-                refreshLayout();
+                updateLayout();
             });
-        } catch (e) {
-            console.error("Connection failed", e);
         }
-    }
-    init();
-</script>
+    </script>
 </body>
 </html>

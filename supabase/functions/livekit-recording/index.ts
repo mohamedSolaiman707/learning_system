@@ -39,12 +39,15 @@ serve(async (req) => {
       
       let publicDomain = Deno.env.get('R2_PUBLIC_DOMAIN') || ''
       if (publicDomain.endsWith('/')) publicDomain = publicDomain.slice(0, -1)
-      const publicUrl = `${publicDomain}/${filepath}`
+      const rawVideoUrl = `${publicDomain}/${filepath}`
 
-      // رابط صفحة القالب الاحترافية التي أضفتها في مجلد web
+      // الرابط الاحترافي الذي سيظهر للمستخدم (Vercel)
+      const brandedUrl = `https://learning-system-jet.vercel.app/recording-template.html?video_url=${encodeURIComponent(rawVideoUrl)}&title=${encodeURIComponent(title || 'حصة مسجلة')}`
+
+      // رابط القالب الذي سيستخدمه LiveKit أثناء التسجيل
       const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}`
 
-      console.log(`[REC] Starting Academy Style Recording for: ${roomName}`)
+      console.log(`[REC] Starting Academy Recording for: ${roomName}`)
 
       try {
         const info = await egressClient.startRoomCompositeEgress(
@@ -63,21 +66,17 @@ serve(async (req) => {
             },
           },
           {
-            // استخدام رابط القالب المخصص للحصول على تصميم بروفيشنال
             customLayout: templateUrl,
-            encodingOptions: {
-              preset: 2, // H264_1080P_30
-            }
+            encodingOptions: { preset: 2 }
           }
         )
 
-        console.log(`[REC] Egress started successfully: ${info.egressId}`)
-
+        // حفظ الرابط الاحترافي (Vercel) في قاعدة البيانات
         await supabase.from('recordings').insert({
           session_id: sessionId,
           egress_id: info.egressId,
           file_path: filepath,
-          video_url: publicUrl,
+          video_url: brandedUrl, // حفظ رابط مخصص بدلاً من رابط الملف الخام
           status: 'recording',
           room_name: roomName
         })

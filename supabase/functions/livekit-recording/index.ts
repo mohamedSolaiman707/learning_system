@@ -41,10 +41,10 @@ serve(async (req) => {
       if (publicDomain.endsWith('/')) publicDomain = publicDomain.slice(0, -1)
       const publicUrl = `${publicDomain}/${filepath}`
 
-      // رابط صفحة القالب التي سنقوم بإنشائها
+      // رابط صفحة القالب الاحترافية التي أضفتها في مجلد web
       const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}`
 
-      console.log(`[REC] Starting Custom Layout Recording for: ${roomName}`)
+      console.log(`[REC] Starting Academy Style Recording for: ${roomName}`)
 
       try {
         const info = await egressClient.startRoomCompositeEgress(
@@ -63,7 +63,7 @@ serve(async (req) => {
             },
           },
           {
-            // استخدام الرابط المخصص بدلاً من الأشكال الجاهزة
+            // استخدام رابط القالب المخصص للحصول على تصميم بروفيشنال
             customLayout: templateUrl,
             encodingOptions: {
               preset: 2, // H264_1080P_30

@@ -11,7 +11,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { action, roomName, sessionId } = await req.json()
+    const { action, roomName, sessionId, title } = await req.json()
     console.log(`[REC] Processing: ${action} | Session: ${sessionId}`)
 
     const apiKey = Deno.env.get('LIVEKIT_API_KEY')
@@ -41,7 +41,10 @@ serve(async (req) => {
       if (publicDomain.endsWith('/')) publicDomain = publicDomain.slice(0, -1)
       const publicUrl = `${publicDomain}/${filepath}`
 
-      console.log(`[REC] Starting High-Quality Grid Recording (Teams Style) for: ${roomName}`)
+      // رابط صفحة القالب التي سنقوم بإنشائها
+      const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}`
+
+      console.log(`[REC] Starting Custom Layout Recording for: ${roomName}`)
 
       try {
         const info = await egressClient.startRoomCompositeEgress(
@@ -60,9 +63,10 @@ serve(async (req) => {
             },
           },
           {
-            layout: 'grid', // وضع الشبكة يملأ الشاشة بالكامل بشكل أفضل للمحاضرات
+            // استخدام الرابط المخصص بدلاً من الأشكال الجاهزة
+            customLayout: templateUrl,
             encodingOptions: {
-              preset: 2, // H264_1080P_30 جودة عالية جداً
+              preset: 2, // H264_1080P_30
             }
           }
         )
@@ -86,9 +90,6 @@ serve(async (req) => {
         })
       } catch (err) {
         console.error(`[REC] SDK Error: ${err.message}`)
-        if (err.message.includes('not allowed') || err.message.includes('subscription')) {
-          throw new Error('حساب LiveKit Sandbox لا يدعم التسجيل حالياً. يرجى الترقية.')
-        }
         throw err
       }
     }

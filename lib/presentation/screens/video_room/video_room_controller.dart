@@ -332,14 +332,13 @@ class VideoRoomController extends ChangeNotifier {
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
-      // تحسين جودة البث للمعلم
       _room = Room(
         roomOptions: RoomOptions(
           adaptiveStream: true, 
           dynacast: true,
           defaultVideoPublishOptions: isTeacher ? const VideoPublishOptions(
             videoEncoding: VideoEncoding(
-              maxBitrate: 4000000, // 4 Mbps
+              maxBitrate: 4000000, 
               maxFramerate: 30,
             ),
             simulcast: true,
@@ -665,6 +664,7 @@ class VideoRoomController extends ChangeNotifier {
           'action': 'start',
           'roomName': roomName,
           'sessionId': sessionId,
+          'title': title, // إرسال عنوان الحصة للقالب
         }),
       ).timeout(const Duration(seconds: 15));
 

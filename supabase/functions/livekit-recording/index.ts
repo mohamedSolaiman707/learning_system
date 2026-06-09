@@ -12,7 +12,7 @@ serve(async (req) => {
 
   try {
     const { action, roomName, sessionId, title } = await req.json()
-    
+
     const apiKey = Deno.env.get('LIVEKIT_API_KEY')
     const apiSecret = Deno.env.get('LIVEKIT_API_SECRET')
     let livekitUrl = Deno.env.get('LIVEKIT_URL')

@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/material.dart';import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/models/session_model.dart';
+import '../../../../core/utils/responsive.dart';
 import '../attendance/attendance_screen.dart';
 
 class TeacherScheduleTab extends StatefulWidget {
@@ -54,6 +54,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
   @override
   Widget build(BuildContext context) {
     final sessionsForSelectedDay = _getSessionsForDay(_selectedDay!);
+    final bool isDesktop = Responsive.isDesktop(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
@@ -61,24 +62,52 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
         title: const Text("جدول حصصي", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: Responsive.isMobile(context),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _buildCalendar(),
-                const SizedBox(height: 16),
-                _buildSessionsList(sessionsForSelectedDay),
-              ],
-            ),
+          : Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: isDesktop
+              ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 2,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: _buildCalendar(isDesktop),
+                ),
+              ),
+              const VerticalDivider(width: 1, thickness: 1),
+              Expanded(
+                flex: 3,
+                child: _buildSessionsList(sessionsForSelectedDay),
+              ),
+            ],
+          )
+              : Column(
+            children: [
+              _buildCalendar(isDesktop),
+              const SizedBox(height: 16),
+              _buildSessionsList(sessionsForSelectedDay),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildCalendar() {
+  Widget _buildCalendar(bool isDesktop) {
     return Container(
-      decoration: const BoxDecoration(
+      margin: isDesktop ? EdgeInsets.zero : const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+        borderRadius: isDesktop
+            ? BorderRadius.circular(20)
+            : const BorderRadius.vertical(bottom: Radius.circular(30)),
+        boxShadow: isDesktop ? [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)] : null,
       ),
       child: TableCalendar(
         firstDay: DateTime.utc(2023, 1, 1),
@@ -96,35 +125,67 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
         onFormatChanged: (format) => setState(() => _calendarFormat = format),
         eventLoader: _getSessionsForDay,
         calendarStyle: CalendarStyle(
-          todayDecoration: BoxDecoration(color: Colors.blue.withOpacity(0.2), shape: BoxShape.circle),
+          todayDecoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
+          todayTextStyle: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
           selectedDecoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
           markerDecoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+          markersMaxCount: 1,
         ),
-        headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
+        headerStyle: const HeaderStyle(
+          formatButtonVisible: false,
+          titleCentered: true,
+          titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
 
   Widget _buildSessionsList(List<SessionModel> sessions) {
     return Expanded(
-      child: sessions.isEmpty
-          ? Center(child: Column(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "حصص يوم ${DateFormat('EEEE, d MMMM', 'ar_EG').format(_selectedDay!)}",
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
+                  child: Text("${sessions.length} حصص", style: const TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
+                )
+              ],
+            ),
+          ),
+          Expanded(
+            child: sessions.isEmpty
+                ? Center(child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.event_busy, size: 64, color: Colors.grey.shade300),
+                Icon(Icons.event_available_outlined, size: 64, color: Colors.grey.shade200),
                 const SizedBox(height: 16),
-                const Text("لا توجد حصص في هذا اليوم", style: TextStyle(color: Colors.grey)),
+                const Text("يوم فارغ.. لا توجد حصص مجدولة", style: TextStyle(color: Colors.grey)),
               ],
             ))
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+                : ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               itemCount: sessions.length,
               itemBuilder: (context, index) {
                 final session = sessions[index];
                 return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  child: ListTile(
+                  elevation: 0,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: Colors.grey.shade100),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
                     onTap: () {
                       Navigator.push(
                         context,
@@ -137,20 +198,50 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                         ),
                       );
                     },
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
-                      child: const Icon(Icons.book, color: Colors.blue),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 50, height: 50,
+                            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
+                            child: const Icon(Icons.menu_book_rounded, color: Colors.blue),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(session.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.access_time, size: 14, color: Colors.grey),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "${DateFormat('hh:mm a').format(session.startTime)} - ${DateFormat('hh:mm a').format(session.endTime)}",
+                                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(color: Colors.grey.shade50, shape: BoxShape.circle),
+                            child: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.blueGrey),
+                          ),
+                        ],
+                      ),
                     ),
-                    title: Text(session.subjectName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("${DateFormat('hh:mm a').format(session.startTime)} - ${DateFormat('hh:mm a').format(session.endTime)}"),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                   ),
                 );
               },
             ),
+          ),
+        ],
+      ),
     );
   }
 }
-

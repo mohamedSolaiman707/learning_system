@@ -66,7 +66,6 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
     final codeController = TextEditingController(text: session?['class_code']);
     String? selectedTeacherId = session?['teacher_id'];
     
-    // تحويل البيانات القادمة من الداتابيز لتوقيت محلي (مصر) قبل عرضها في الـ Pickers
     DateTime selectedDate = isEditing 
         ? DateTime.parse(session['start_time']).toLocal() 
         : DateTime.now();
@@ -79,105 +78,117 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-        ),
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
-        child: StatefulBuilder(
-          builder: (context, setSheetState) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(isEditing ? "تعديل الحصة" : "إضافة حصة جديدة", 
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
-                ],
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: subjectController,
-                decoration: const InputDecoration(labelText: "اسم المادة", prefixIcon: Icon(Icons.description_outlined)),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: codeController,
-                decoration: InputDecoration(
-                  labelText: "كود الحصة",
-                  prefixIcon: const Icon(Icons.vpn_key_outlined),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.bolt, color: Colors.orange),
-                    onPressed: () => setSheetState(() => codeController.text = _generateRandomCode()),
+      builder: (context) => Align(
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 600), // تحديد عرض أقصى للـ Sheet في الديسكتوب
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+          ),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+          child: StatefulBuilder(
+            builder: (context, setSheetState) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(isEditing ? "تعديل الحصة" : "إضافة حصة جديدة", 
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: subjectController,
+                  decoration: const InputDecoration(labelText: "اسم المادة", prefixIcon: Icon(Icons.description_outlined)),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: codeController,
+                  decoration: InputDecoration(
+                    labelText: "كود الحصة",
+                    prefixIcon: const Icon(Icons.vpn_key_outlined),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.bolt, color: Colors.orange),
+                      onPressed: () => setSheetState(() => codeController.text = _generateRandomCode()),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: selectedTeacherId,
-                decoration:  const InputDecoration(labelText: "اختر المدرس", prefixIcon: Icon(Icons.person_outline)),
-                items: _teachers.map((t) => DropdownMenuItem(value: t['id'].toString(), child: Text(t['full_name']))).toList(),
-                onChanged: (val) => setSheetState(() => selectedTeacherId = val),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedTeacherId,
+                  decoration:  const InputDecoration(labelText: "اختر المدرس", prefixIcon: Icon(Icons.person_outline)),
+                  items: _teachers.map((t) => DropdownMenuItem(value: t['id'].toString(), child: Text(t['full_name']))).toList(),
+                  onChanged: (val) => setSheetState(() => selectedTeacherId = val),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final date = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now().add(const Duration(days: 365)));
+                          if (date != null) setSheetState(() => selectedDate = date);
+                        },
+                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                        icon: const Icon(Icons.calendar_today_outlined),
+                        label: Text(DateFormat('yyyy/MM/dd').format(selectedDate)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final time = await showTimePicker(context: context, initialTime: selectedTime);
+                          if (time != null) setSheetState(() => selectedTime = time);
+                        },
+                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                        icon:  const Icon(Icons.access_time_outlined),
+                        label: Text(selectedTime.format(context)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 32),
+                Center(
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
                       onPressed: () async {
-                        final date = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now().add(const Duration(days: 365)));
-                        if (date != null) setSheetState(() => selectedDate = date);
+                        if (subjectController.text.isEmpty || selectedTeacherId == null) return;
+                        
+                        final startLocal = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute);
+                        final endLocal = startLocal.add(Duration(minutes: selectedDuration));
+
+                        final dbService = Provider.of<DatabaseService>(context, listen: false);
+                        await dbService.saveSession({
+                          'subject_name': subjectController.text,
+                          'class_code': codeController.text.trim().toUpperCase(),
+                          'teacher_id': selectedTeacherId,
+                          'start_time': startLocal.toUtc().toIso8601String(),
+                          'end_time': endLocal.toUtc().toIso8601String(),
+                        }, id: session?['id']);
+
+                        if (mounted) {
+                          Navigator.pop(context);
+                          _fetchData();
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ البيانات بنجاح'), backgroundColor: Colors.green));
+                        }
                       },
-                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      icon: const Icon(Icons.calendar_today_outlined),
-                      label: Text(DateFormat('yyyy/MM/dd').format(selectedDate)),
+                      child: Text(isEditing ? "تحديث الحصة" : "إنشاء الحصة", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final time = await showTimePicker(context: context, initialTime: selectedTime);
-                        if (time != null) setSheetState(() => selectedTime = time);
-                      },
-                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      icon:  const Icon(Icons.access_time_outlined),
-                      label: Text(selectedTime.format(context)),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: () async {
-                  if (subjectController.text.isEmpty || selectedTeacherId == null) return;
-                  
-                  // بناء التاريخ بالتوقيت المحلي للجهاز (مصر)
-                  final startLocal = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute);
-                  final endLocal = startLocal.add(Duration(minutes: selectedDuration));
-
-                  final dbService = Provider.of<DatabaseService>(context, listen: false);
-                  await dbService.saveSession({
-                    'subject_name': subjectController.text,
-                    'class_code': codeController.text.trim().toUpperCase(),
-                    'teacher_id': selectedTeacherId,
-                    'start_time': startLocal.toUtc().toIso8601String(), // تحويل لـ UTC عند الحفظ في Supabase
-                    'end_time': endLocal.toUtc().toIso8601String(),
-                  }, id: session?['id']);
-
-                  if (mounted) {
-                    Navigator.pop(context);
-                    _fetchData();
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ البيانات بنجاح'), backgroundColor: Colors.green));
-                  }
-                },
-                child: Text(isEditing ? "تحديث الحصة" : "إنشاء الحصة"),
-              ),
-              const SizedBox(height: 30),
-            ],
+                ),
+                const SizedBox(height: 30),
+              ],
+            ),
           ),
         ),
       ),
@@ -190,25 +201,31 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
         title: const Text("إدارة الحصص"),
+        centerTitle: Responsive.isMobile(context),
         actions: [
           IconButton(onPressed: _fetchData, icon: const Icon(Icons.refresh)),
           const SizedBox(width: 10),
         ],
       ),
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: _isLoading 
-                ? _buildLoadingState()
-                : _error != null 
-                    ? _buildErrorState()
-                    : Responsive(
-                        mobile: _buildMobileList(),
-                        desktop: _buildDesktopTable(),
-                      ),
+      body: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 1200), // تحديد عرض أقصى للمحتوى كله
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: _isLoading 
+                    ? _buildLoadingState()
+                    : _error != null 
+                        ? _buildErrorState()
+                        : Responsive(
+                            mobile: _buildMobileList(),
+                            desktop: _buildDesktopTable(),
+                          ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
       floatingActionButton: Responsive.isMobile(context) 
           ? FloatingActionButton(onPressed: () => _showSessionSheet(), child: const Icon(Icons.add))
@@ -218,8 +235,12 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.all(24),
-      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5)],
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -227,7 +248,8 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("جدول الحصص الجارية", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Text("سيتم عرض الأوقات بتوقيت مصر المحلي", style: TextStyle(fontSize: 13, color: Colors.blue)),
+              SizedBox(height: 4),
+              Text("سيتم عرض الأوقات بتوقيت مصر المحلي", style: TextStyle(fontSize: 12, color: Colors.blueGrey)),
             ],
           ),
           if (!Responsive.isMobile(context))
@@ -235,7 +257,10 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
               onPressed: () => _showSessionSheet(),
               icon: const Icon(Icons.add),
               label: const Text("إضافة حصة جديدة"),
-              style: ElevatedButton.styleFrom(minimumSize: const Size(180, 54)),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(180, 50),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
         ],
       ),
@@ -245,36 +270,46 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
   Widget _buildDesktopTable() {
     return Container(
       margin: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]),
-      child: SingleChildScrollView(
-        child: DataTable(
-          columns: const [
-            DataColumn(label: Text('المادة')),
-            DataColumn(label: Text('المدرس')),
-            DataColumn(label: Text('الكود')),
-            DataColumn(label: Text('الموعد')),
-            DataColumn(label: Text('الإجراءات')),
-          ],
-          rows: _sessions.map((session) {
-            // تحويل الوقت لـ Local عند العرض في الجدول
-            final startTime = DateTime.parse(session['start_time']).toLocal();
-            return DataRow(cells: [
-              DataCell(Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.bold))),
-              DataCell(Text(session['profiles']?['full_name'] ?? '---')),
-              DataCell(Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
-                child: Text(session['class_code'], style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
-              )),
-              DataCell(Text(DateFormat('yyyy/MM/dd - hh:mm a').format(startTime))),
-              DataCell(Row(
-                children: [
-                  IconButton(onPressed: () => _showSessionSheet(session: session), icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20)),
-                  IconButton(onPressed: () => _confirmDelete(session['id']), icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20)),
-                ],
-              )),
-            ]);
-          }).toList(),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white, 
+        borderRadius: BorderRadius.circular(16), 
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: SingleChildScrollView(
+          child: DataTable(
+            headingRowColor: MaterialStateProperty.all(Colors.grey.shade50),
+            columns: const [
+              DataColumn(label: Text('المادة', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('المدرس', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('الكود', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('الموعد', style: TextStyle(fontWeight: FontWeight.bold))),
+              DataColumn(label: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
+            ],
+            rows: _sessions.map((session) {
+              final startTime = DateTime.parse(session['start_time']).toLocal();
+              return DataRow(cells: [
+                DataCell(Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.w600))),
+                DataCell(Text(session['profiles']?['full_name'] ?? '---')),
+                DataCell(Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
+                  child: Text(session['class_code'], style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.blue)),
+                )),
+                DataCell(Text(DateFormat('yyyy/MM/dd | hh:mm a').format(startTime))),
+                DataCell(Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(tooltip: "تعديل", onPressed: () => _showSessionSheet(session: session), icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 22)),
+                    IconButton(tooltip: "حذف", onPressed: () => _confirmDelete(session['id']), icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22)),
+                  ],
+                )),
+              ]);
+            }).toList(),
+          ),
         ),
       ),
     );
@@ -296,17 +331,39 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
 
   Widget _buildMobileList() {
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       itemCount: _sessions.length,
       itemBuilder: (context, index) {
         final session = _sessions[index];
         final startTime = DateTime.parse(session['start_time']).toLocal();
         return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
           margin: const EdgeInsets.only(bottom: 12),
-          child: ListTile(
-            title: Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text("${session['profiles']?['full_name']} | ${DateFormat('hh:mm a').format(startTime)}"),
-            trailing: IconButton(onPressed: () => _showSessionSheet(session: session), icon: const Icon(Icons.edit_outlined)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: ListTile(
+              leading: Container(
+                width: 45, height: 45,
+                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.class_outlined, color: Colors.blue),
+              ),
+              title: Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 4),
+                  Text("${session['profiles']?['full_name']}"),
+                  Text(DateFormat('hh:mm a - yyyy/MM/dd').format(startTime), style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+              trailing: PopupMenuButton(
+                itemBuilder: (context) => [
+                  PopupMenuItem(child: const ListTile(leading: Icon(Icons.edit), title: Text("تعديل")), onTap: () => Future.delayed(Duration.zero, () => _showSessionSheet(session: session))),
+                  PopupMenuItem(child: const ListTile(leading: Icon(Icons.delete, color: Colors.red), title: Text("حذف", style: TextStyle(color: Colors.red))), onTap: () => Future.delayed(Duration.zero, () => _confirmDelete(session['id']))),
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -319,5 +376,13 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
     child: ListView.builder(padding: const EdgeInsets.all(20), itemCount: 6, itemBuilder: (_, __) => Container(height: 80, margin: const EdgeInsets.only(bottom: 15), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)))),
   );
 
-  Widget _buildErrorState() => Center(child: Text(_error ?? "حدث خطأ"));
+  Widget _buildErrorState() => Center(child: Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      const Icon(Icons.error_outline, size: 48, color: Colors.red),
+      const SizedBox(height: 16),
+      Text(_error ?? "حدث خطأ ما", style: const TextStyle(fontSize: 16)),
+      TextButton(onPressed: _fetchData, child: const Text("حاول مرة أخرى")),
+    ],
+  ));
 }

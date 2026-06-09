@@ -82,8 +82,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
-  // --- دوال العمليات (Actions) ---
-
   Future<void> _createInstantLive() async {
     HapticFeedback.heavyImpact();
     final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -116,7 +114,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         await db.toggleRoomStatus(newSession.id, true);
 
         if (!mounted) return;
-        Navigator.pop(context); // إغلاق الـ Loading
+        Navigator.pop(context); 
 
         _navigateToLive(newSession, teacherName);
       }
@@ -150,8 +148,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     ));
   }
 
-  // --- بناء الواجهة (UI) ---
-
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -179,7 +175,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                   ),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      _buildStatsOverview(isDesktop || isTablet),
+                      _buildStatsOverview(isDesktop, isTablet),
                       const SizedBox(height: 32),
 
                       if (isDesktop)
@@ -244,7 +240,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
 
   Widget _buildHeader(String name, bool isDesktop) {
     return SliverAppBar(
-      expandedHeight: isDesktop ? 150 : 120,
+      expandedHeight: isDesktop ? 120 : 100,
       pinned: true,
       elevation: 0,
       backgroundColor: Colors.white,
@@ -254,8 +250,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
           mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("لوحة التحكم", style: TextStyle(color: Colors.grey, fontSize: isDesktop ? 12 : 10)),
-            Text("أهلاً، أ. $name", style: TextStyle(color: Colors.black, fontSize: isDesktop ? 22 : 18, fontWeight: FontWeight.bold)),
+            Text("أهلاً، أ. $name", style: TextStyle(color: Colors.black, fontSize: isDesktop ? 20 : 16, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -281,17 +276,25 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     );
   }
 
-  Widget _buildStatsOverview(bool isWide) {
-    return Row(
-      children: [
-        Expanded(child: TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: Icons.people_outline_rounded, color: Colors.blue)),
-        const SizedBox(width: 16),
-        Expanded(child: TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: Icons.videocam_outlined, color: Colors.orange)),
-        if (isWide) ...[
-          const SizedBox(width: 16),
-          const Expanded(child: TeacherStatCard(title: "متصل الآن", value: "3", icon: Icons.online_prediction, color: Colors.green)),
-        ]
-      ],
+  Widget _buildStatsOverview(bool isDesktop, bool isTablet) {
+    int crossAxisCount = isDesktop ? 3 : (isTablet ? 2 : 2);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: isDesktop ? 2.5 : 1.6,
+          children: [
+            TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: Icons.people_outline_rounded, color: Colors.blue),
+            TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: Icons.videocam_outlined, color: Colors.orange),
+            if (isDesktop || isTablet)
+              const TeacherStatCard(title: "متصل الآن", value: "3", icon: Icons.online_prediction, color: Colors.green),
+          ],
+        );
+      }
     );
   }
 
@@ -300,43 +303,62 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       padding: EdgeInsets.all(isDesktop ? 32 : 24),
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: [Colors.red.shade700, Colors.red.shade400], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(isDesktop ? 32 : 24),
-        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
       ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                  backgroundColor: Colors.white24,
-                  radius: isDesktop ? 35 : 25,
-                  child: Icon(Icons.bolt_rounded, color: Colors.white, size: isDesktop ? 40 : 30)
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_activeSession!.subjectName, style: TextStyle(color: Colors.white, fontSize: isDesktop ? 22 : 18, fontWeight: FontWeight.bold)),
-                    const Text("الحصة جارية الآن...", style: TextStyle(color: Colors.white70, fontSize: 13)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () => _navigateToLive(_activeSession!, teacherName),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.red.shade700,
-              minimumSize: const Size(double.infinity, 56),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            ),
-            child: const Text("دخول البث المباشر الآن", style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
+      child: isDesktop 
+      ? Row(
+          children: [
+            _buildActiveInfo(isDesktop),
+            const Spacer(),
+            SizedBox(
+              width: 250,
+              child: _buildEnterButton(teacherName),
+            )
+          ],
+        )
+      : Column(
+          children: [
+            _buildActiveInfo(isDesktop),
+            const SizedBox(height: 24),
+            _buildEnterButton(teacherName),
+          ],
+        ),
+    );
+  }
+
+  Widget _buildActiveInfo(bool isDesktop) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircleAvatar(
+            backgroundColor: Colors.white24,
+            radius: isDesktop ? 30 : 25,
+            child: Icon(Icons.bolt_rounded, color: Colors.white, size: isDesktop ? 35 : 30)
+        ),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_activeSession!.subjectName, style: TextStyle(color: Colors.white, fontSize: isDesktop ? 20 : 18, fontWeight: FontWeight.bold)),
+            const Text("الحصة جارية الآن...", style: TextStyle(color: Colors.white70, fontSize: 13)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEnterButton(String teacherName) {
+    return ElevatedButton(
+      onPressed: () => _navigateToLive(_activeSession!, teacherName),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.red.shade700,
+        minimumSize: const Size(double.infinity, 54),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 0,
       ),
+      child: const Text("دخول البث المباشر", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
     );
   }
 
@@ -348,14 +370,14 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     ];
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.grey.shade100)
+          border: Border.all(color: Colors.grey.shade200)
       ),
       child: isVertical
-          ? Column(children: actions.map((a) => Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: a)).toList())
+          ? Column(children: actions.map((a) => Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: a)).toList())
           : Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: actions),
     );
   }
@@ -363,16 +385,17 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   Widget _buildActionButton(String label, IconData icon, Color color, String type) {
     return InkWell(
       onTap: () => _handleQuickAction(type),
+      borderRadius: BorderRadius.circular(12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
-            child: Icon(icon, color: color, size: 24),
+            child: Icon(icon, color: color, size: 26),
           ),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -381,12 +404,17 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   Widget _buildNextSessionCard(bool isDesktop) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.grey.shade100)),
+      decoration: BoxDecoration(
+        color: Colors.white, 
+        borderRadius: BorderRadius.circular(20), 
+        border: Border.all(color: Colors.grey.shade100),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 10)]
+      ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
             child: const Icon(Icons.calendar_month_outlined, color: Colors.blue),
           ),
           const SizedBox(width: 16),
@@ -399,7 +427,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
               ],
             ),
           ),
-          const Icon(Icons.arrow_forward_ios_rounded, size: 18, color: Colors.grey),
+          const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
         ],
       ),
     );
@@ -411,15 +439,13 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         if (isLive)
           FadeTransition(
             opacity: _pulseController,
-            child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
+            child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
           ),
         if (isLive) const SizedBox(width: 8),
         Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       ],
     );
   }
-
-  // --- دوال المساعدة الإضافية ---
 
   void _handleQuickAction(String type) {
     if (type == 'reports') {
@@ -436,21 +462,39 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   void _showSessionPicker(String type) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+      backgroundColor: Colors.transparent,
       builder: (context) => Container(
+        constraints: const BoxConstraints(maxWidth: 600),
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
         padding: const EdgeInsets.all(24),
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: _sessions.length,
-          itemBuilder: (context, i) => ListTile(
-            title: Text(_sessions[i].subjectName),
-            onTap: () {
-              Navigator.pop(context);
-              if (type == 'attendance') {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: _sessions[i].id, subjectName: _sessions[i].subjectName)));
-              }
-            },
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("اختر الحصة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _sessions.length,
+                itemBuilder: (context, i) => Card(
+                  elevation: 0,
+                  color: Colors.grey.shade50,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    title: Text(_sessions[i].subjectName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(intl.DateFormat('yyyy/MM/dd').format(_sessions[i].startTime)),
+                    trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (type == 'attendance') {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: _sessions[i].id, subjectName: _sessions[i].subjectName)));
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -459,46 +503,52 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   void _showAddSessionDialog() {
     final nameController = TextEditingController();
     DateTime startDate = DateTime.now();
-    TimeOfDay startTime = TimeOfDay.now();
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("إضافة حصة جديدة"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameController, decoration: const InputDecoration(labelText: "اسم المادة")),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () async {
-                final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 30)));
-                if (d != null) startDate = d;
-              },
-              child: const Text("اختر التاريخ"),
+      builder: (context) => Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text("إضافة حصة جديدة"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameController, decoration: const InputDecoration(labelText: "اسم المادة", border: OutlineInputBorder())),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 30)));
+                    if (d != null) startDate = d;
+                  },
+                  icon: const Icon(Icons.calendar_today),
+                  label: const Text("اختر تاريخ الحصة"),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameController.text.isEmpty) return;
-              final db = Provider.of<DatabaseService>(context, listen: false);
-              final auth = Provider.of<AuthProvider>(context, listen: false);
-              await db.saveSession({
-                'subject_name': nameController.text,
-                'teacher_id': auth.user!.id,
-                'start_time': startDate.toIso8601String(),
-                'end_time': startDate.add(const Duration(hours: 1)).toIso8601String(),
-                'status': 'waiting',
-              });
-              Navigator.pop(context);
-              _loadData();
-            },
-            child: const Text("حفظ"),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+              ElevatedButton(
+                onPressed: () async {
+                  if (nameController.text.isEmpty) return;
+                  final db = Provider.of<DatabaseService>(context, listen: false);
+                  final auth = Provider.of<AuthProvider>(context, listen: false);
+                  await db.saveSession({
+                    'subject_name': nameController.text,
+                    'teacher_id': auth.user!.id,
+                    'start_time': startDate.toIso8601String(),
+                    'end_time': startDate.add(const Duration(hours: 1)).toIso8601String(),
+                    'status': 'waiting',
+                  });
+                  Navigator.pop(context);
+                  _loadData();
+                },
+                child: const Text("حفظ الحصة"),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

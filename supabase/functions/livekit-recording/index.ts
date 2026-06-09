@@ -41,10 +41,9 @@ serve(async (req) => {
       if (publicDomain.endsWith('/')) publicDomain = publicDomain.slice(0, -1)
       const publicUrl = `${publicDomain}/${filepath}`
 
-      console.log(`[REC] Starting Pro Speaker Recording (1080p) for: ${roomName}`)
+      console.log(`[REC] Starting High-Quality Grid Recording (Teams Style) for: ${roomName}`)
 
       try {
-        // التعديل هنا: فصل المخرجات عن خيارات العرض لضمان شكل Teams/Meet
         const info = await egressClient.startRoomCompositeEgress(
           roomName,
           {
@@ -61,7 +60,7 @@ serve(async (req) => {
             },
           },
           {
-            layout: 'speaker', // يركز على من يتحدث (مثل Teams/Meet)
+            layout: 'grid', // وضع الشبكة يملأ الشاشة بالكامل بشكل أفضل للمحاضرات
             encodingOptions: {
               preset: 2, // H264_1080P_30 جودة عالية جداً
             }

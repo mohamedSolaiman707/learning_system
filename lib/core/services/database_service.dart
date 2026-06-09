@@ -211,10 +211,12 @@ class DatabaseService {
         }
       }
 
-      double hours = totalMinutes / 60;
-      String formattedHours = hours == hours.roundToDouble() 
-          ? hours.toInt().toString() 
-          : hours.toStringAsFixed(1);
+      int hours = (totalMinutes / 60).floor();
+      int mins = (totalMinutes % 60).round();
+
+      String formattedHours = hours > 0 
+          ? "$hours س ${mins > 0 ? 'و $mins د' : ''}" 
+          : "$mins دقيقة";
 
       return {
         'learningHours': formattedHours,

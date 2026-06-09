@@ -267,7 +267,6 @@ class VideoRoomController extends ChangeNotifier {
       _isRecording = res['is_recording'] ?? false;
       _isRecordingPaused = res['is_recording_paused'] ?? false;
       
-      // تنبيه الطالب إذا كانت المحاضرة مسجلة بالفعل عند الدخول
       if (_isRecording && !isTeacher) {
         Future.delayed(const Duration(seconds: 3), () {
           onNotification?.call("🔴 تنبيه: هذه الحصة يتم تسجيلها حالياً", Colors.redAccent);
@@ -288,9 +287,7 @@ class VideoRoomController extends ChangeNotifier {
             _isRecordingPaused = dbPaused;
             if (_isRecording) {
               onNotification?.call(_isRecordingPaused ? "⏸️ تم إيقاف التسجيل مؤقتاً" : "🔴 يتم الآن تسجيل الحصة", _isRecordingPaused ? Colors.orange : Colors.red);
-            } else {
-              onNotification?.call("⏹️ تم إيقاف التسجيل نهائياً", Colors.blueGrey);
-            }
+            } else onNotification?.call("⏹️ تم إيقاف التسجيل نهائياً", Colors.blueGrey);
             notifyListeners();
           }
           if (sessionData['status'] == 'ended' || sessionData['status'] == 'archived') {
@@ -335,7 +332,21 @@ class VideoRoomController extends ChangeNotifier {
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
-      _room = Room(roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true));
+      // تحسين جودة البث للمعلم
+      _room = Room(
+        roomOptions: RoomOptions(
+          adaptiveStream: true, 
+          dynacast: true,
+          defaultVideoPublishOptions: isTeacher ? const VideoPublishOptions(
+            videoEncoding: VideoEncoding(
+              maxBitrate: 4000000, // 4 Mbps
+              maxFramerate: 30,
+            ),
+            simulcast: true,
+          ) : const VideoPublishOptions(simulcast: true),
+        )
+      );
+      
       _listener = _room!.createListener();
       _setupEventListeners();
 

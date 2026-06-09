@@ -266,6 +266,14 @@ class VideoRoomController extends ChangeNotifier {
       final DateTime endTime = DateTime.parse(res['end_time']);
       _isRecording = res['is_recording'] ?? false;
       _isRecordingPaused = res['is_recording_paused'] ?? false;
+      
+      // تنبيه الطالب إذا كانت المحاضرة مسجلة بالفعل عند الدخول
+      if (_isRecording && !isTeacher) {
+        Future.delayed(const Duration(seconds: 3), () {
+          onNotification?.call("🔴 تنبيه: هذه الحصة يتم تسجيلها حالياً", Colors.redAccent);
+        });
+      }
+
       if (res['status'] == 'ended' || res['status'] == 'archived' || DateTime.now().isAfter(endTime)) {
         onSessionEnded?.call("هذه الجلسة انتهت بالفعل.");
         return false;
@@ -280,7 +288,9 @@ class VideoRoomController extends ChangeNotifier {
             _isRecordingPaused = dbPaused;
             if (_isRecording) {
               onNotification?.call(_isRecordingPaused ? "⏸️ تم إيقاف التسجيل مؤقتاً" : "🔴 يتم الآن تسجيل الحصة", _isRecordingPaused ? Colors.orange : Colors.red);
-            } else onNotification?.call("⏹️ تم إيقاف التسجيل نهائياً", Colors.blueGrey);
+            } else {
+              onNotification?.call("⏹️ تم إيقاف التسجيل نهائياً", Colors.blueGrey);
+            }
             notifyListeners();
           }
           if (sessionData['status'] == 'ended' || sessionData['status'] == 'archived') {

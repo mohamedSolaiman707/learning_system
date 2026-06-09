@@ -211,14 +211,19 @@ class DatabaseService {
         }
       }
 
+      double hours = totalMinutes / 60;
+      String formattedHours = hours == hours.roundToDouble() 
+          ? hours.toInt().toString() 
+          : hours.toStringAsFixed(1);
+
       return {
-        'learningHours': (totalMinutes / 60).toStringAsFixed(1),
+        'learningHours': formattedHours,
         'points': (completedSessions * 10) + quizPoints,
         'completedSessions': completedSessions,
       };
     } catch (e) {
       debugPrint("Error getting student stats: $e");
-      return {'learningHours': "0.0", 'points': 0, 'completedSessions': 0};
+      return {'learningHours': "0", 'points': 0, 'completedSessions': 0};
     }
   }
 

@@ -22,7 +22,6 @@ serve(async (req) => {
       throw new Error('Required LiveKit secrets are missing (API_KEY, URL)')
     }
 
-    // تصحيح الرابط (يجب أن يبدأ بـ https)
     if (livekitUrl.startsWith('wss://')) {
       livekitUrl = livekitUrl.replace('wss://', 'https://')
     }
@@ -38,27 +37,36 @@ serve(async (req) => {
       const filename = `rec_${sessionId}_${Date.now()}.mp4`
       const filepath = `recordings/${sessionId}/${filename}`
       
-      // تنظيف الدومين من أي slashes زائدة
       let publicDomain = Deno.env.get('R2_PUBLIC_DOMAIN') || ''
       if (publicDomain.endsWith('/')) publicDomain = publicDomain.slice(0, -1)
       const publicUrl = `${publicDomain}/${filepath}`
 
-      console.log(`[REC] Starting egress for room: ${roomName}`)
+      console.log(`[REC] Starting Pro Speaker Recording (1080p) for: ${roomName}`)
 
       try {
-        const info = await egressClient.startRoomCompositeEgress(roomName, {
-          file: {
-            fileType: EncodedFileType.MP4,
-            filepath: filepath,
-            s3: {
-              endpoint: Deno.env.get('R2_ENDPOINT')!,
-              bucket: Deno.env.get('R2_BUCKET')!,
-              accessKey: Deno.env.get('R2_ACCESS_KEY')!,
-              secret: Deno.env.get('R2_SECRET_KEY')!,
-              forcePathStyle: true,
+        // التعديل هنا: فصل المخرجات عن خيارات العرض لضمان شكل Teams/Meet
+        const info = await egressClient.startRoomCompositeEgress(
+          roomName,
+          {
+            file: {
+              fileType: EncodedFileType.MP4,
+              filepath: filepath,
+              s3: {
+                endpoint: Deno.env.get('R2_ENDPOINT')!,
+                bucket: Deno.env.get('R2_BUCKET')!,
+                accessKey: Deno.env.get('R2_ACCESS_KEY')!,
+                secret: Deno.env.get('R2_SECRET_KEY')!,
+                forcePathStyle: true,
+              },
             },
           },
-        })
+          {
+            layout: 'speaker', // يركز على من يتحدث (مثل Teams/Meet)
+            encodingOptions: {
+              preset: 2, // H264_1080P_30 جودة عالية جداً
+            }
+          }
+        )
 
         console.log(`[REC] Egress started successfully: ${info.egressId}`)
 

@@ -13,7 +13,8 @@ class AttendancePdfService {
     final arabicFont = await PdfGoogleFonts.cairoRegular();
     final boldFont = await PdfGoogleFonts.cairoBold();
     
-    final dateStr = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+    // إزالة الساعة من التاريخ (yyyy-MM-dd فقط)
+    final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     pdf.addPage(
       pw.MultiPage(
@@ -31,7 +32,7 @@ class AttendancePdfService {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Attendance_Report_${subjectName}_$dateStr.pdf',
+      name: 'Attendance_${subjectName}_$dateStr.pdf',
     );
   }
 
@@ -70,18 +71,25 @@ class AttendancePdfService {
   }
 
   pw.Widget _buildTable(List<Map<String, dynamic>> students) {
-    // تم عكس الترتيب: المدة في اليسار واسم الطالب في اليمين
     final headers = ['المدة', 'وقت المغادرة', 'وقت الانضمام', 'الحالة', 'اسم الطالب'];
 
     return pw.TableHelper.fromTextArray(
       headers: headers,
-      data: students.map((s) => [
-        '${s['duration'] ?? 0} د',
-        s['left_at'] ?? '---',
-        s['joined_at'] ?? '---',
-        s['present'] ? 'حاضر' : 'غائب',
-        s['name'] ?? 'غير معروف',
-      ]).toList(),
+      data: students.map((s) {
+        // تحويل "ص" إلى "صباحاً" و "م" إلى "مساءً" ليكون التقرير احترافي
+        String formatTimeForPdf(String time) {
+          if (time == '---') return time;
+          return time.replaceAll('ص', 'صباحاً').replaceAll('م', 'مساءً');
+        }
+
+        return [
+          '${s['duration'] ?? 0} د',
+          formatTimeForPdf(s['left_at'] ?? '---'),
+          formatTimeForPdf(s['joined_at'] ?? '---'),
+          s['present'] ? 'حاضر' : 'غائب',
+          s['name'] ?? 'غير معروف',
+        ];
+      }).toList(),
       headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
       headerDecoration: const pw.BoxDecoration(color: PdfColors.blue800),
       cellHeight: 30,
@@ -90,7 +98,7 @@ class AttendancePdfService {
         1: pw.Alignment.center,
         2: pw.Alignment.center,
         3: pw.Alignment.center,
-        4: pw.Alignment.centerRight, // محاذاة الاسم لليمين
+        4: pw.Alignment.centerRight,
       },
     );
   }

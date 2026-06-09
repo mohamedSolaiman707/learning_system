@@ -1,11 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LiveKitService {
-  // جلب القيم مباشرة من مكتبة Supabase لضمان عدم وجود قيم فارغة
-  static String get supabaseUrl => Supabase.instance.client.supabaseUrl;
-  static String get supabaseAnonKey => Supabase.instance.client.supabaseAnonKey;
+  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const String supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
   Future<String?> getRoomToken({
     required String roomName,
@@ -13,6 +11,8 @@ class LiveKitService {
     required String userName,
   }) async {
     try {
+      if (supabaseUrl.isEmpty) return null;
+
       final response = await http.post(
         Uri.parse('$supabaseUrl/functions/v1/get-livekit-token'),
         headers: {

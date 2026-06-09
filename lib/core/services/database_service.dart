@@ -540,7 +540,10 @@ class DatabaseService {
     if (dateStr == null || dateStr == '---') return '---';
     try {
       final dt = DateTime.parse(dateStr).toLocal();
-      return "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
+      // تحويل الوقت لنظام 12 ساعة مع ص/م
+      final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+      final period = dt.hour >= 12 ? 'م' : 'ص';
+      return "${hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} $period";
     } catch (_) { return dateStr; }
   }
 

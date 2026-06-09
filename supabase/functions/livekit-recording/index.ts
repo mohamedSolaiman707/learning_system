@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { EgressClient, EncodedFileOutput, EncodedFileType } from "https://esm.sh/livekit-server-sdk@1.2.7"
+import { EgressClient, EncodedFileType } from "https://esm.sh/livekit-server-sdk@1.2.7"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
@@ -12,14 +12,19 @@ serve(async (req) => {
 
   try {
     const { action, roomName, sessionId } = await req.json()
-    console.log(`[Recording] Action: ${action} | Room: ${roomName} | Session: ${sessionId}`)
+    console.log(`[REC] Processing: ${action} | Session: ${sessionId}`)
 
     const apiKey = Deno.env.get('LIVEKIT_API_KEY')
     const apiSecret = Deno.env.get('LIVEKIT_API_SECRET')
-    const livekitUrl = Deno.env.get('LIVEKIT_URL')
+    let livekitUrl = Deno.env.get('LIVEKIT_URL')
 
     if (!apiKey || !apiSecret || !livekitUrl) {
-      throw new Error('LIVEKIT_API_KEY or LIVEKIT_URL is missing in Supabase Secrets')
+      throw new Error('Required LiveKit secrets are missing (API_KEY, URL)')
+    }
+
+    // تصحيح الرابط (يجب أن يبدأ بـ https)
+    if (livekitUrl.startsWith('wss://')) {
+      livekitUrl = livekitUrl.replace('wss://', 'https://')
     }
 
     const supabase = createClient(
@@ -32,44 +37,53 @@ serve(async (req) => {
     if (action === 'start') {
       const filename = `rec_${sessionId}_${Date.now()}.mp4`
       const filepath = `recordings/${sessionId}/${filename}`
-      const publicUrl = `${Deno.env.get('R2_PUBLIC_DOMAIN')}/${filepath}`
+      
+      // تنظيف الدومين من أي slashes زائدة
+      let publicDomain = Deno.env.get('R2_PUBLIC_DOMAIN') || ''
+      if (publicDomain.endsWith('/')) publicDomain = publicDomain.slice(0, -1)
+      const publicUrl = `${publicDomain}/${filepath}`
 
-      console.log(`Starting Composite Egress to: ${filepath}`)
+      console.log(`[REC] Starting egress for room: ${roomName}`)
 
-      // إعدادات الـ S3 لـ Cloudflare R2
-      const s3Output = {
-        endpoint: Deno.env.get('R2_ENDPOINT')!,
-        bucket: Deno.env.get('R2_BUCKET')!,
-        accessKey: Deno.env.get('R2_ACCESS_KEY')!,
-        secret: Deno.env.get('R2_SECRET_KEY')!,
-        forcePathStyle: true,
+      try {
+        const info = await egressClient.startRoomCompositeEgress(roomName, {
+          file: {
+            fileType: EncodedFileType.MP4,
+            filepath: filepath,
+            s3: {
+              endpoint: Deno.env.get('R2_ENDPOINT')!,
+              bucket: Deno.env.get('R2_BUCKET')!,
+              accessKey: Deno.env.get('R2_ACCESS_KEY')!,
+              secret: Deno.env.get('R2_SECRET_KEY')!,
+              forcePathStyle: true,
+            },
+          },
+        })
+
+        console.log(`[REC] Egress started successfully: ${info.egressId}`)
+
+        await supabase.from('recordings').insert({
+          session_id: sessionId,
+          egress_id: info.egressId,
+          file_path: filepath,
+          video_url: publicUrl,
+          status: 'recording',
+          room_name: roomName
+        })
+
+        await supabase.from('sessions').update({ is_recording: true }).eq('id', sessionId)
+
+        return new Response(JSON.stringify({ success: true, egressId: info.egressId }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      } catch (err) {
+        console.error(`[REC] SDK Error: ${err.message}`)
+        if (err.message.includes('not allowed') || err.message.includes('subscription')) {
+          throw new Error('حساب LiveKit Sandbox لا يدعم التسجيل حالياً. يرجى الترقية.')
+        }
+        throw err
       }
-
-      const info = await egressClient.startRoomCompositeEgress(roomName, {
-        file: {
-          fileType: EncodedFileType.MP4,
-          filepath: filepath,
-          s3: s3Output,
-        },
-      })
-
-      console.log(`Egress Started: ${info.egressId}`)
-
-      await supabase.from('recordings').insert({
-        session_id: sessionId,
-        egress_id: info.egressId,
-        file_path: filepath,
-        video_url: publicUrl,
-        status: 'recording',
-        room_name: roomName
-      })
-
-      await supabase.from('sessions').update({ is_recording: true }).eq('id', sessionId)
-
-      return new Response(JSON.stringify({ success: true, egressId: info.egressId }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      })
     }
 
     if (action === 'stop') {
@@ -85,10 +99,10 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: 'Invalid action' }), { status: 400 })
 
   } catch (error) {
-    console.error(`[CRITICAL ERROR]: ${error.message}`)
+    console.error(`[REC] Critical Error: ${error.message}`)
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500,
+      status: 400,
     })
   }
 })

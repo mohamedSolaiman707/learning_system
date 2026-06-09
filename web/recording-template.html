@@ -3,188 +3,231 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Academy Player | منصة الأكاديمية</title>
+    <title>Academy Recording | تسجيل كامل للحصة</title>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary-red: #e63946;
             --dark-blue: #102a43;
-            --light-bg: #f8fafc;
-            --card-bg: #ffffff;
+            --accent-blue: #007bff;
         }
         * { box-sizing: border-box; font-family: 'Cairo', sans-serif; margin: 0; padding: 0; }
         body, html {
             width: 100%; height: 100%;
-            background-color: var(--light-bg);
+            background-color: #0b0e14;
             overflow: hidden;
             display: flex;
             flex-direction: column;
         }
 
         #header {
-            height: 80px;
-            background: var(--card-bg);
+            height: 60px;
+            background: rgba(16, 42, 67, 0.95);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 40px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-            z-index: 10;
-            border-bottom: 1px solid #edf2f7;
+            padding: 0 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            z-index: 100;
         }
 
-        .brand-section { display: flex; align-items: center; gap: 15px; }
-        .logo-icon {
-            width: 45px; height: 45px;
-            background: linear-gradient(135deg, var(--dark-blue), #243b53);
-            border-radius: 12px;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: bold; font-size: 22px;
-        }
-        
-        #session-title { color: var(--dark-blue); font-size: 20px; font-weight: 700; }
+        #session-title { color: white; font-size: 18px; font-weight: 600; }
+        .rec-indicator { color: #ff4d4d; display: flex; align-items: center; gap: 8px; font-weight: 700; }
+        .dot { width: 10px; height: 10px; background: #ff4d4d; border-radius: 50%; animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
 
-        .indicator {
-            padding: 8px 20px;
-            border-radius: 100px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 14px;
-            font-weight: 600;
-        }
-        .status-rec { background: var(--primary-red); color: white; }
-        .status-view { background: #e2e8f0; color: var(--dark-blue); }
-
-        #main-content {
+        #main-layout {
             flex: 1;
-            padding: 30px;
             display: flex;
-            justify-content: center;
-            align-items: center;
+            padding: 15px;
+            gap: 15px;
             position: relative;
+            height: calc(100vh - 60px);
         }
 
-        /* حاوية الفيديو للمشاهد */
-        #video-player-container {
-            display: none; /* مخفي افتراضياً */
-            width: 100%;
-            max-width: 1100px;
-            aspect-ratio: 16 / 9;
+        /* حاوية المحتوى الرئيسي (سواء سكرين شير أو سبورة) */
+        #content-area {
+            flex: 3;
             background: #000;
-            border-radius: 30px;
+            border-radius: 20px;
             overflow: hidden;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.15);
-            border: 8px solid white;
+            position: relative;
+            border: 2px solid rgba(255,255,255,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        #video-player-container video { width: 100%; height: 100%; }
 
-        /* حاوية الفيديو للتسجيل الحي */
+        /* طبقة الشير سكرين */
+        #screenshare-layer {
+            position: absolute; width: 100%; height: 100%;
+            display: none; z-index: 1;
+        }
+        #screenshare-layer video { width: 100%; height: 100%; object-fit: contain; }
+
+        /* طبقة السبورة */
+        #whiteboard-layer {
+            position: absolute; width: 100%; height: 100%;
+            z-index: 2; pointer-events: none;
+        }
+        #whiteboard-canvas { width: 100%; height: 100%; }
+
+        /* حاوية الكاميرات */
         #video-grid {
+            flex: 1;
             display: grid;
-            gap: 25px;
-            width: 100%;
-            height: 100%;
-            max-width: 1400px;
+            gap: 10px;
+            align-content: start;
+            transition: all 0.3s ease;
+        }
+
+        .full-grid {
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)) !important;
+            flex: 1 !important;
         }
 
         .participant-card {
             position: relative;
-            background: #000;
-            border-radius: 28px;
+            background: #1a1d23;
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 15px 40px rgba(0,0,0,0.08);
-            border: 6px solid white;
             aspect-ratio: 16 / 9;
+            border: 2px solid transparent;
         }
+        .active-speaker { border-color: var(--accent-blue); box-shadow: 0 0 10px rgba(0,123,255,0.3); }
         .participant-card video { width: 100%; height: 100%; object-fit: cover; }
 
         .name-tag {
-            position: absolute; bottom: 20px; right: 20px;
-            background: rgba(16, 42, 67, 0.8);
-            color: white; padding: 6px 18px; border-radius: 12px;
-            font-size: 14px; font-weight: 600; backdrop-filter: blur(10px);
+            position: absolute; bottom: 8px; right: 8px;
+            background: rgba(0,0,0,0.5); color: white;
+            padding: 2px 10px; border-radius: 6px; font-size: 11px;
         }
 
-        .grid-1 { grid-template-columns: 1fr; max-width: 900px; }
-        .grid-multi { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
+        .hand-icon {
+            position: absolute; top: 10px; left: 10px;
+            background: #ff9800; color: white; width: 28px; height: 28px;
+            border-radius: 50%; display: none; align-items: center; justify-content: center;
+            font-size: 16px; z-index: 10;
+        }
     </style>
 </head>
 <body>
     <header id="header">
-        <div class="brand-section">
-            <div class="logo-icon">A</div>
-            <div id="session-title">جاري تحميل المحتوى...</div>
-        </div>
-        <div id="status-badge" class="indicator status-view">
-            <span>عرض المحاضرة</span>
-        </div>
+        <div id="session-title">جاري تحميل الحصة...</div>
+        <div class="rec-indicator"><div class="dot"></div><span>RECORDING LIVE</span></div>
     </header>
 
-    <main id="main-content">
-        <!-- وضع المشاهد (للطالب) -->
-        <div id="video-player-container">
-            <video id="main-video" controls autoplay>
-                <source id="video-source" src="" type="video/mp4">
-                متصفحك لا يدعم تشغيل الفيديو.
-            </video>
+    <main id="main-layout">
+        <div id="content-area">
+            <div id="screenshare-layer"></div>
+            <div id="whiteboard-layer">
+                <canvas id="whiteboard-canvas"></canvas>
+            </div>
         </div>
-
-        <!-- وضع التسجيل (للمصور) -->
-        <div id="video-grid" class="grid-1"></div>
+        <div id="video-grid" class="full-grid"></div>
     </main>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
-        const videoUrl = urlParams.get('video_url'); // رابط الفيديو الخام من R2
-        const title = urlParams.get('title') || 'حصة مسجلة';
         const token = urlParams.get('access_token');
-
+        const title = urlParams.get('title') || 'حصة تعليمية';
         document.getElementById('session-title').innerText = title;
 
-        if (videoUrl) {
-            // --- وضع المشاهد (Viewer Mode) ---
-            document.getElementById('video-player-container').style.display = 'block';
-            document.getElementById('video-grid').style.display = 'none';
-            document.getElementById('video-source').src = videoUrl;
-            document.getElementById('main-video').load();
-            document.getElementById('status-badge').innerHTML = '<span>مشاهدة التسجيل</span>';
-        } else if (token) {
-            // --- وضع التسجيل (Recording Mode) ---
-            document.getElementById('status-badge').classList.add('status-rec');
-            document.getElementById('status-badge').innerHTML = '<div style="width:10px;height:10px;background:white;border-radius:50%"></div><span>تسجيل مباشر</span>';
-            initRecording(token);
+        const canvas = document.getElementById('whiteboard-canvas');
+        const ctx = canvas.getContext('2d');
+        let hasScreenShare = false;
+
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        setTimeout(resizeCanvas, 1000);
+
+        async function init() {
+            if (!token) return;
+            const room = new LiveKitClient.Room({ adaptiveStream: true });
+
+            room.on('trackSubscribed', (track, pub, participant) => {
+                if (track.kind === 'video') {
+                    if (track.source === LiveKitClient.Track.Source.ScreenShare) {
+                        hasScreenShare = true;
+                        document.getElementById('screenshare-layer').style.display = 'block';
+                        document.getElementById('screenshare-layer').innerHTML = '';
+                        document.getElementById('screenshare-layer').appendChild(track.attach());
+                        updateLayout();
+                    } else {
+                        addParticipant(participant, track);
+                    }
+                }
+            });
+
+            room.on('trackUnsubscribed', (track, pub, participant) => {
+                if (track.source === LiveKitClient.Track.Source.ScreenShare) {
+                    hasScreenShare = false;
+                    document.getElementById('screenshare-layer').style.display = 'none';
+                    updateLayout();
+                } else {
+                    document.getElementById(`p-${participant.identity}`)?.remove();
+                    updateLayout();
+                }
+            });
+
+            room.on('activeSpeakersChanged', (speakers) => {
+                document.querySelectorAll('.participant-card').forEach(c => c.classList.remove('active-speaker'));
+                speakers.forEach(s => document.getElementById(`p-${s.identity}`)?.classList.add('active-speaker'));
+            });
+
+            room.on('dataReceived', (payload, participant) => {
+                const data = JSON.parse(new TextDecoder().decode(payload));
+                if (data.type === 'hand_raise') {
+                    const icon = document.querySelector(`#p-${participant.identity} .hand-icon`);
+                    if (icon) icon.style.display = data.value ? 'flex' : 'none';
+                } else if (data.type === 'whiteboard_draw') {
+                    drawOnCanvas(data);
+                } else if (data.type === 'whiteboard_clear') {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+            });
+
+            await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
+        }
+
+        function addParticipant(p, track) {
+            let card = document.getElementById(`p-${p.identity}`);
+            if (!card) {
+                card = document.createElement('div');
+                card.id = `p-${p.identity}`;
+                card.className = 'participant-card';
+                card.innerHTML = `<div class="hand-icon">✋</div><div class="name-tag">${p.name || 'مشارك'}</div>`;
+                document.getElementById('video-grid').appendChild(card);
+            }
+            card.appendChild(track.attach());
+            updateLayout();
         }
 
         function updateLayout() {
             const grid = document.getElementById('video-grid');
-            const count = document.querySelectorAll('.participant-card').length;
-            grid.className = count <= 1 ? 'grid-1' : 'grid-multi';
+            grid.className = hasScreenShare ? '' : 'full-grid';
+            grid.style.gridTemplateColumns = hasScreenShare ? '1fr' : '';
         }
 
-        async function initRecording(token) {
-            const room = new LiveKitClient.Room();
-            await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
-            room.on('trackSubscribed', (track, participant) => {
-                if (track.kind === 'video') {
-                    let card = document.getElementById(`p-${participant.identity}`);
-                    if (!card) {
-                        card = document.createElement('div');
-                        card.id = `p-${participant.identity}`;
-                        card.className = 'participant-card';
-                        card.innerHTML = `<div class="name-tag">${participant.name || 'مشارك'}</div>`;
-                        document.getElementById('video-grid').appendChild(card);
-                    }
-                    card.appendChild(track.attach());
-                    updateLayout();
-                }
-            });
-            room.on('participantDisconnected', (p) => {
-                document.getElementById(`p-${p.identity}`)?.remove();
-                updateLayout();
-            });
+        function drawOnCanvas(data) {
+            if (!data.points || data.points.length < 2) return;
+            ctx.strokeStyle = `rgba(${(data.color >> 16) & 255}, ${(data.color >> 8) & 255}, ${data.color & 255}, 1)`;
+            ctx.lineWidth = data.width || 3;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(data.points[0].x * canvas.width, data.points[0].y * canvas.height);
+            for (let i = 1; i < data.points.length; i++) {
+                ctx.lineTo(data.points[i].x * canvas.width, data.points[i].y * canvas.height);
+            }
+            ctx.stroke();
         }
+
+        init();
     </script>
 </body>
 </html>

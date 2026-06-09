@@ -49,7 +49,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
-      
+
       if (auth.user != null) {
         final results = await Future.wait([
           db.getTeacherSessions(auth.user!.id),
@@ -62,14 +62,14 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             _totalStudents = (results[1] as Map<String, dynamic>)['totalStudents'] ?? 0;
 
             final now = DateTime.now();
-            
+
             _activeSession = _sessions.cast<SessionModel?>().firstWhere(
-              (s) => s!.status == 'active' || (s.startTime.isBefore(now) && s.endTime.isAfter(now)),
+                  (s) => s!.status == 'active' || (s.startTime.isBefore(now) && s.endTime.isAfter(now)),
               orElse: () => null,
             );
 
             _nextSession = _sessions.cast<SessionModel?>().firstWhere(
-              (s) => s!.startTime.isAfter(now) && s.id != _activeSession?.id,
+                  (s) => s!.startTime.isAfter(now) && s.id != _activeSession?.id,
               orElse: () => null,
             );
 
@@ -82,21 +82,23 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
+  // --- دوال العمليات (Actions) ---
+
   Future<void> _createInstantLive() async {
     HapticFeedback.heavyImpact();
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final db = Provider.of<DatabaseService>(context, listen: false);
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.blue)),
     );
 
     try {
       final now = DateTime.now().toUtc();
       final String teacherName = auth.profile?['full_name'] ?? "المدرس";
-      
+
       final sessionData = {
         'subject_name': "بث مباشر سريع - ${intl.DateFormat('jm').format(DateTime.now())}",
         'teacher_id': auth.user!.id,
@@ -108,34 +110,15 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       };
 
       final newSessionMap = await db.saveSession(sessionData);
-      
+
       if (newSessionMap != null) {
         final newSession = SessionModel.fromMap(newSessionMap);
         await db.toggleRoomStatus(newSession.id, true);
-        
+
         if (!mounted) return;
-        Navigator.pop(context); 
-        
-        Navigator.push(context, MaterialPageRoute(
-          builder: (context) => ChangeNotifierProvider(
-            create: (_) => VideoRoomController(
-              title: newSession.subjectName,
-              roomName: "room_${newSession.id}",
-              userName: "أ. $teacherName",
-              userId: auth.user!.id,
-              isTeacher: true,
-              sessionId: newSession.id,
-            ),
-            child: VideoRoomScreen(
-              title: newSession.subjectName,
-              roomName: "room_${newSession.id}",
-              userName: "أ. $teacherName",
-              userId: auth.user!.id,
-              isTeacher: true,
-              sessionId: newSession.id,
-            ),
-          )
-        ));
+        Navigator.pop(context); // إغلاق الـ Loading
+
+        _navigateToLive(newSession, teacherName);
       }
     } catch (e) {
       Navigator.pop(context);
@@ -143,203 +126,237 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
+  void _navigateToLive(SessionModel session, String teacherName) {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    Navigator.push(context, MaterialPageRoute(
+        builder: (context) => ChangeNotifierProvider(
+          create: (_) => VideoRoomController(
+            title: session.subjectName,
+            roomName: "room_${session.id}",
+            userName: "أ. $teacherName",
+            userId: auth.user!.id,
+            isTeacher: true,
+            sessionId: session.id,
+          ),
+          child: VideoRoomScreen(
+            title: session.subjectName,
+            roomName: "room_${session.id}",
+            userName: "أ. $teacherName",
+            userId: auth.user!.id,
+            isTeacher: true,
+            sessionId: session.id,
+          ),
+        )
+    ));
+  }
+
+  // --- بناء الواجهة (UI) ---
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final name = authProvider.profile?['full_name'] ?? "المدرس";
     final isDesktop = Responsive.isDesktop(context);
+    final isTablet = Responsive.isTablet(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      body: _isLoading 
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : RefreshIndicator(
-              onRefresh: _loadData,
-              child: CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  _buildHeader(name),
-                  SliverToBoxAdapter(
-                    child: Center(
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 1100),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isDesktop ? 40 : 20,
-                          vertical: 20,
-                        ),
-                        child: Column(
+        onRefresh: _loadData,
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                _buildHeader(name, isDesktop),
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isDesktop ? 40 : 20,
+                    vertical: 20,
+                  ),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      _buildStatsOverview(isDesktop || isTablet),
+                      const SizedBox(height: 32),
+
+                      if (isDesktop)
+                        Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildStatsOverview(isDesktop),
-                            const SizedBox(height: 40),
-                            if (_activeSession != null) ...[
-                               _buildSectionTitle("البث المباشر الآن", isLive: true),
-                               const SizedBox(height: 16),
-                               _buildActiveSessionCard(name, isDesktop),
-                               const SizedBox(height: 40),
-                            ],
-                            _buildSectionTitle("الإجراءات السريعة"),
-                            const SizedBox(height: 16),
-                            _buildSmartQuickActions(),
-                            const SizedBox(height: 40),
-                            if (_nextSession != null) ...[
-                              _buildSectionTitle("الحصة القادمة"),
-                              const SizedBox(height: 16),
-                              _buildNextSessionCard(),
-                            ],
+                            if (_activeSession != null)
+                              Expanded(
+                                flex: 2,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildSectionTitle("البث المباشر الآن", isLive: true),
+                                    const SizedBox(height: 16),
+                                    _buildActiveSessionCard(name, isDesktop),
+                                  ],
+                                ),
+                              ),
+                            if (_activeSession != null) const SizedBox(width: 24),
+                            Expanded(
+                              flex: 1,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildSectionTitle("الإجراءات السريعة"),
+                                  const SizedBox(height: 16),
+                                  _buildSmartQuickActions(isVertical: true),
+                                ],
+                              ),
+                            ),
                           ],
-                        ),
-                      ),
-                    ),
+                        )
+                      else ...[
+                        if (_activeSession != null) ...[
+                          _buildSectionTitle("البث المباشر الآن", isLive: true),
+                          const SizedBox(height: 16),
+                          _buildActiveSessionCard(name, isDesktop),
+                          const SizedBox(height: 32),
+                        ],
+                        _buildSectionTitle("الإجراءات السريعة"),
+                        const SizedBox(height: 16),
+                        _buildSmartQuickActions(isVertical: false),
+                      ],
+
+                      const SizedBox(height: 32),
+                      if (_nextSession != null) ...[
+                        _buildSectionTitle("الحصة القادمة"),
+                        const SizedBox(height: 16),
+                        _buildNextSessionCard(isDesktop),
+                      ],
+                      const SizedBox(height: 50),
+                    ]),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildHeader(String name) {
+  Widget _buildHeader(String name, bool isDesktop) {
     return SliverAppBar(
-      expandedHeight: 100, pinned: true, elevation: 0,
+      expandedHeight: isDesktop ? 150 : 120,
+      pinned: true,
+      elevation: 0,
       backgroundColor: Colors.white,
       flexibleSpace: FlexibleSpaceBar(
-        titlePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        titlePadding: EdgeInsets.symmetric(horizontal: isDesktop ? 40 : 20, vertical: 15),
         title: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("لوحة التحكم", style: TextStyle(color: Colors.grey, fontSize: 10)),
-            Text("أهلاً، أ. $name", style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+            Text("لوحة التحكم", style: TextStyle(color: Colors.grey, fontSize: isDesktop ? 12 : 10)),
+            Text("أهلاً، أ. $name", style: TextStyle(color: Colors.black, fontSize: isDesktop ? 22 : 18, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
       actions: [
-        IconButton(
-          onPressed: _createInstantLive,
-          icon: const Icon(Icons.bolt_rounded, color: Colors.red),
-        ),
-        IconButton(
-          onPressed: _showAddSessionDialog,
-          icon: const Icon(Icons.add_rounded, color: Colors.blue),
-        ),
-        const SizedBox(width: 10),
+        _buildHeaderAction(Icons.bolt_rounded, Colors.red, "بث سريع", _createInstantLive),
+        _buildHeaderAction(Icons.add_rounded, Colors.blue, "جدولة حصة", _showAddSessionDialog),
+        const SizedBox(width: 20),
       ],
     );
   }
 
-  Widget _buildSectionTitle(String title, {bool isLive = false}) {
-    return Row(
-      children: [
-        if (isLive) 
-          FadeTransition(
-            opacity: _pulseController,
-            child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
-          ),
-        if (isLive) const SizedBox(width: 8),
-        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF102A43))),
-      ],
+  Widget _buildHeaderAction(IconData icon, Color color, String tooltip, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        onPressed: onTap,
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+          child: Icon(icon, color: color, size: 22),
+        ),
+      ),
     );
   }
 
-  Widget _buildStatsOverview(bool isDesktop) {
+  Widget _buildStatsOverview(bool isWide) {
     return Row(
       children: [
         Expanded(child: TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: Icons.people_outline_rounded, color: Colors.blue)),
         const SizedBox(width: 16),
         Expanded(child: TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: Icons.videocam_outlined, color: Colors.orange)),
+        if (isWide) ...[
+          const SizedBox(width: 16),
+          const Expanded(child: TeacherStatCard(title: "متصل الآن", value: "3", icon: Icons.online_prediction, color: Colors.green)),
+        ]
       ],
     );
   }
 
   Widget _buildActiveSessionCard(String teacherName, bool isDesktop) {
     return Container(
-      width: double.infinity,
+      padding: EdgeInsets.all(isDesktop ? 32 : 24),
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: [Colors.red.shade700, Colors.red.shade400], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.2), blurRadius: 15)],
+        borderRadius: BorderRadius.circular(isDesktop ? 32 : 24),
+        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: isDesktop 
-        ? Row(
+      child: Column(
+        children: [
+          Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(16)),
-                child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 30),
+              CircleAvatar(
+                  backgroundColor: Colors.white24,
+                  radius: isDesktop ? 35 : 25,
+                  child: Icon(Icons.bolt_rounded, color: Colors.white, size: isDesktop ? 40 : 30)
               ),
-              const SizedBox(width: 20),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_activeSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                    const Text("الحصة جارية الآن... الطلاب في انتظارك", style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    Text(_activeSession!.subjectName, style: TextStyle(color: Colors.white, fontSize: isDesktop ? 22 : 18, fontWeight: FontWeight.bold)),
+                    const Text("الحصة جارية الآن...", style: TextStyle(color: Colors.white70, fontSize: 13)),
                   ],
                 ),
               ),
-              const SizedBox(width: 20),
-              ElevatedButton(
-                onPressed: () => _startLive(_activeSession!, teacherName),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.red.shade700,
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                child: const Text("دخول البث المباشر الآن", style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          )
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.bolt_rounded, color: Colors.white, size: 24),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(_activeSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold))),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const Text("الحصة جارية الآن... الطلاب في انتظارك", style: TextStyle(color: Colors.white70, fontSize: 12)),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => _startLive(_activeSession!, teacherName),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.red.shade700,
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                child: const Text("دخول البث المباشر الآن", style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
             ],
           ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () => _navigateToLive(_activeSession!, teacherName),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.red.shade700,
+              minimumSize: const Size(double.infinity, 56),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+            child: const Text("دخول البث المباشر الآن", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildSmartQuickActions() {
+  Widget _buildSmartQuickActions({bool isVertical = false}) {
+    final actions = [
+      _buildActionButton("التحضير", Icons.how_to_reg_outlined, Colors.blue, 'attendance'),
+      _buildActionButton("التقارير", Icons.bar_chart_rounded, Colors.green, 'reports'),
+      _buildActionButton("الجدول", Icons.calendar_today_rounded, Colors.purple, 'schedule'),
+    ];
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white, 
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.shade100),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.grey.shade100)
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildActionButton("التحضير", Icons.how_to_reg_outlined, Colors.blue, 'attendance'),
-          _buildActionButton("التقارير", Icons.bar_chart_rounded, Colors.green, 'reports'),
-          _buildActionButton("الجدول", Icons.calendar_today_rounded, Colors.purple, 'schedule'),
-        ],
-      ),
+      child: isVertical
+          ? Column(children: actions.map((a) => Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: a)).toList())
+          : Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: actions),
     );
   }
 
@@ -347,6 +364,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     return InkWell(
       onTap: () => _handleQuickAction(type),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
@@ -354,208 +372,133 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF102A43))),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
-  Widget _buildNextSessionCard() {
+  Widget _buildNextSessionCard(bool isDesktop) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white, 
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.shade100),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.grey.shade100)),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.calendar_month_outlined, color: Colors.blue, size: 20),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(16)),
+            child: const Icon(Icons.calendar_month_outlined, color: Colors.blue),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_nextSession!.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF102A43))),
+                Text(_nextSession!.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 Text("تبدأ في ${intl.DateFormat('hh:mm a').format(_nextSession!.startTime)}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
               ],
             ),
           ),
-          const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+          const Icon(Icons.arrow_forward_ios_rounded, size: 18, color: Colors.grey),
         ],
       ),
     );
   }
 
+  Widget _buildSectionTitle(String title, {bool isLive = false}) {
+    return Row(
+      children: [
+        if (isLive)
+          FadeTransition(
+            opacity: _pulseController,
+            child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
+          ),
+        if (isLive) const SizedBox(width: 8),
+        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  // --- دوال المساعدة الإضافية ---
+
   void _handleQuickAction(String type) {
-    HapticFeedback.lightImpact();
     if (type == 'reports') {
       Navigator.push(context, MaterialPageRoute(builder: (context) => const TeacherReportsScreen()));
       return;
     }
     if (_sessions.isEmpty) {
-      _showNoSessionAlert();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لا توجد حصص مسجلة")));
       return;
     }
     _showSessionPicker(type);
   }
 
-  void _showNoSessionAlert() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لا توجد حصص مسجلة")));
-  }
-
   void _showSessionPicker(String type) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
       builder: (context) => Container(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-            const Text("اختر الحصة للمتابعة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            ..._sessions.map((s) => ListTile(
-              leading: const Icon(Icons.videocam_outlined, color: Colors.blue),
-              title: Text(s.subjectName, style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text(intl.DateFormat('hh:mm a').format(s.startTime)),
-              onTap: () { Navigator.pop(context); _navigateToActionScreen(type, s); },
-            )),
-            const SizedBox(height: 20),
-          ],
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: _sessions.length,
+          itemBuilder: (context, i) => ListTile(
+            title: Text(_sessions[i].subjectName),
+            onTap: () {
+              Navigator.pop(context);
+              if (type == 'attendance') {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: _sessions[i].id, subjectName: _sessions[i].subjectName)));
+              }
+            },
+          ),
         ),
       ),
     );
-  }
-
-  void _navigateToActionScreen(String type, SessionModel session) {
-    if (type == 'attendance') {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: session.id, subjectName: session.subjectName)));
-    }
-  }
-
-  Future<void> _startLive(SessionModel session, String teacherName) async {
-    HapticFeedback.mediumImpact();
-    try {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      final db = Provider.of<DatabaseService>(context, listen: false);
-      await db.toggleRoomStatus(session.id, true);
-      if (!mounted) return;
-      Navigator.push(context, MaterialPageRoute(
-          builder: (context) => ChangeNotifierProvider(
-            create: (_) => VideoRoomController(
-              title: session.subjectName,
-              roomName: "room_${session.id}",
-              userName: "أ. $teacherName",
-              userId: auth.user!.id,
-              isTeacher: true,
-              sessionId: session.id,
-            ),
-            child: VideoRoomScreen(
-              title: session.subjectName,
-              roomName: "room_${session.id}",
-              userName: "أ. $teacherName",
-              userId: auth.user!.id,
-              isTeacher: true,
-              sessionId: session.id,
-            ),
-          )
-      ));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل بدء البث")));
-    }
   }
 
   void _showAddSessionDialog() {
     final nameController = TextEditingController();
     DateTime startDate = DateTime.now();
     TimeOfDay startTime = TimeOfDay.now();
-    int selectedDuration = 60;
-    bool isRecording = true;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDS) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          title: const Text("جدولة حصة جديدة", style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                      labelText: "اسم الحصة",
-                      prefixIcon: const Icon(Icons.edit_note_outlined),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))
-                  ),
-                ),
-                const SizedBox(height: 20),
-                _buildDateTimePicker(label: "موقت البدء", date: startDate, time: startTime, onTap: () async {
-                  final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 90)));
-                  if (d != null) {
-                    final t = await showTimePicker(context: context, initialTime: startTime);
-                    if (t != null) setDS(() { startDate = d; startTime = t; });
-                  }
-                }),
-                const SizedBox(height: 20),
-                DropdownButtonFormField<int>(
-                  value: selectedDuration,
-                  decoration: InputDecoration(labelText: "المدة", border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))),
-                  items: [30, 45, 60, 90, 120].map((v) => DropdownMenuItem(value: v, child: Text("$v دقيقة"))).toList(),
-                  onChanged: (v) => setDS(() => selectedDuration = v!),
-                ),
-                const SizedBox(height: 10),
-                SwitchListTile(title: const Text("تسجيل الحصة"), value: isRecording, onChanged: (v) => setDS(() => isRecording = v), activeColor: Colors.red),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameController.text.isEmpty) return;
-                final start = DateTime(startDate.year, startDate.month, startDate.day, startTime.hour, startTime.minute).toUtc();
-                final db = Provider.of<DatabaseService>(context, listen: false);
-                await db.saveSession({
-                  'subject_name': nameController.text,
-                  'teacher_id': Provider.of<AuthProvider>(context, listen: false).user!.id,
-                  'start_time': start.toIso8601String(),
-                  'end_time': start.add(Duration(minutes: selectedDuration)).toIso8601String(),
-                  'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString(),
-                  'status': 'waiting',
-                  'is_recording_enabled': isRecording,
-                });
-                Navigator.pop(context);
-                _loadData();
-              },
-              child: const Text("حفظ"),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDateTimePicker({required String label, required DateTime date, required TimeOfDay time, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade300)),
-        child: Row(
+      builder: (context) => AlertDialog(
+        title: const Text("إضافة حصة جديدة"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.calendar_month_rounded, color: Colors.blue),
-            const SizedBox(width: 12),
-            Text("${intl.DateFormat('yyyy-MM-dd').format(date)} ${time.format(context)}", style: const TextStyle(fontWeight: FontWeight.bold))
+            TextField(controller: nameController, decoration: const InputDecoration(labelText: "اسم المادة")),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () async {
+                final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 30)));
+                if (d != null) startDate = d;
+              },
+              child: const Text("اختر التاريخ"),
+            ),
           ],
         ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameController.text.isEmpty) return;
+              final db = Provider.of<DatabaseService>(context, listen: false);
+              final auth = Provider.of<AuthProvider>(context, listen: false);
+              await db.saveSession({
+                'subject_name': nameController.text,
+                'teacher_id': auth.user!.id,
+                'start_time': startDate.toIso8601String(),
+                'end_time': startDate.add(const Duration(hours: 1)).toIso8601String(),
+                'status': 'waiting',
+              });
+              Navigator.pop(context);
+              _loadData();
+            },
+            child: const Text("حفظ"),
+          ),
+        ],
       ),
     );
   }

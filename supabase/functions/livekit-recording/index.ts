@@ -27,7 +27,6 @@ serve(async (req) => {
       const filename = `rec_${sessionId}_${Date.now()}.mp4`
       const filepath = `recordings/${sessionId}/${filename}`
       
-      // توليد توكن للمسجل بصلاحيات كاملة ليتمكن من رؤية البيانات
       const at = new AccessToken(apiKey, apiSecret, { identity: `recorder_${Date.now()}`, name: 'Recording Bot' })
       at.addGrant({ roomJoin: true, room: roomName, canSubscribe: true, canPublish: false, canPublishData: true })
       const recorderToken = at.toJwt()
@@ -35,15 +34,11 @@ serve(async (req) => {
       const publicDomain = Deno.env.get('R2_PUBLIC_DOMAIN')?.replace(/\/$/, '') || ''
       const rawVideoUrl = `${publicDomain}/${filepath}`
 
-      // رابط العرض للطالب (بعد انتهاء التسجيل)
       const brandedUrl = `https://learning-system-jet.vercel.app/recording-template.html?video_url=${encodeURIComponent(rawVideoUrl)}&title=${encodeURIComponent(title || 'حصة مسجلة')}`
 
-      // رابط القالب الذي سيفتحه السيرفر (WebEgress) ليقوم بتصويره
-      const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}&access_token=${recorderToken}&mode=recording`
+      // تمرير الـ sessionId والـ roomName عشان القالب يجيب البيانات
+      const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}&access_token=${recorderToken}&session_id=${sessionId}&room=${roomName}`
 
-      console.log(`[REC] Starting WebEgress for: ${templateUrl}`)
-
-      // استخدام startWebEgress بدلاً من startRoomCompositeEgress لتصوير الواجهة بالكامل
       const info = await egressClient.startWebEgress(
         templateUrl,
         {
@@ -62,14 +57,8 @@ serve(async (req) => {
       )
 
       await supabase.from('recordings').insert({
-        session_id: sessionId, 
-        egress_id: info.egressId, 
-        file_path: filepath, 
-        video_url: brandedUrl, 
-        status: 'recording', 
-        room_name: roomName
+        session_id: sessionId, egress_id: info.egressId, file_path: filepath, video_url: brandedUrl, status: 'recording', room_name: roomName
       })
-      
       await supabase.from('sessions').update({ is_recording: true }).eq('id', sessionId)
 
       return new Response(JSON.stringify({ success: true, egressId: info.egressId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })

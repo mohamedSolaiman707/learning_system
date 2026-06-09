@@ -3,106 +3,135 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Academy Recording</title>
+    <title>Academy Recording Template</title>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #2563eb;
-            --bg: #0f172a;
+            --primary-red: #e63946;
+            --dark-blue: #102a43;
+            --light-bg: #f8fafc;
+            --card-bg: #ffffff;
         }
-        * { box-sizing: border-box; font-family: 'Cairo', sans-serif; }
+        * { box-sizing: border-box; font-family: 'Cairo', sans-serif; margin: 0; padding: 0; }
         body, html {
-            margin: 0; padding: 0; width: 100%; height: 100%;
-            background-color: var(--bg);
-            background-image:
-                radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 0%, rgba(30, 64, 175, 0.15) 0px, transparent 50%);
+            width: 100%; height: 100%;
+            background-color: var(--light-bg);
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
-        /* شريط علوي أنيق */
+        /* الهيدر العلوي */
         #header {
-            position: absolute; top: 0; left: 0; right: 0; height: 80px;
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 0 40px; background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(12px); z-index: 100;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            height: 75px;
+            background: var(--card-bg);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.05);
+            z-index: 10;
         }
 
-        .logo-area { display: flex; align-items: center; gap: 15px; }
-        .logo-circle {
-            width: 45px; height: 45px; background: var(--primary);
-            border-radius: 12px; display: flex; align-items: center;
-            justify-content: center; font-weight: bold; color: white;
-            box-shadow: 0 0 20px rgba(37, 99, 235, 0.4);
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .logo {
+            width: 40px; height: 45px;
+            background: var(--dark-blue);
+            border-radius: 10px;
+            color: white; display: flex; align-items: center; justify-content: center;
+            font-weight: bold; font-size: 20px;
+        }
+        #session-title { color: var(--dark-blue); font-size: 18px; font-weight: 700; }
+
+        .status {
+            background: var(--primary-red); color: white;
+            padding: 6px 15px; border-radius: 8px;
+            display: flex; align-items: center; gap: 8px; font-size: 13px;
+        }
+        .dot { width: 8px; height: 8px; background: white; border-radius: 50%; animation: pulse 1s infinite; }
+
+        /* منطقة الفيديوهات - Responsive Grid */
+        #content {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        #session-title { color: #f8fafc; font-size: 24px; font-weight: 700; }
-
-        .recording-status {
-            background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2);
-            padding: 6px 16px; border-radius: 100px; display: flex; align-items: center; gap: 8px;
-        }
-        .dot { width: 10px; height: 10px; background: #ef4444; border-radius: 50%; animation: pulse 1.5s infinite; }
-        .recording-status span { color: #f8fafc; font-size: 14px; font-weight: 600; }
-
-        /* منطقة الفيديو */
         #video-grid {
-            position: absolute; top: 80px; bottom: 0; left: 0; right: 0;
-            display: grid; gap: 20px; padding: 30px;
-            transition: all 0.5s ease;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            width: 100%;
+            height: 100%;
         }
 
         .participant-card {
-            position: relative; width: 100%; height: 100%;
-            background: #1e293b; border-radius: 24px; overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.05);
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            position: relative;
+            background: #000;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border: 4px solid white;
+            transition: all 0.3s ease;
+            flex-grow: 0;
+            flex-shrink: 1;
+            aspect-ratio: 16 / 9;
         }
+
+        /* أحجام ذكية بناءً على عدد الحضور */
+        .size-full { width: 85%; max-height: 90%; }
+        .size-half { width: calc(50% - 15px); }
+        .size-multi { width: calc(33% - 15px); }
 
         video { width: 100%; height: 100%; object-fit: cover; }
 
-        .name-tag {
-            position: absolute; bottom: 20px; right: 20px;
-            background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px);
-            color: white; padding: 6px 18px; border-radius: 12px;
-            font-size: 15px; font-weight: 600; border: 1px solid rgba(255,255,255,0.1);
+        .name-label {
+            position: absolute; bottom: 15px; right: 15px;
+            background: rgba(16, 42, 67, 0.8);
+            color: white; padding: 5px 15px; border-radius: 8px;
+            font-size: 13px; backdrop-filter: blur(5px);
         }
 
-        @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
-
 <div id="header">
-    <div class="logo-area">
-        <div class="logo-circle">E</div>
-        <div id="session-title">جاري التحميل...</div>
+    <div class="brand">
+        <div class="logo">A</div>
+        <div id="session-title">جاري تحميل الحصة...</div>
     </div>
-    <div class="recording-status">
+    <div class="status">
         <div class="dot"></div>
-        <span>محاضرة مسجلة</span>
+        <span>تسجيل مباشر</span>
     </div>
 </div>
 
-<div id="video-grid"></div>
+<div id="content">
+    <div id="video-grid"></div>
+</div>
 
 <script>
     const urlParams = new URLSearchParams(window.location.search);
     const title = urlParams.get('title') || 'حصة تعليمية';
     document.getElementById('session-title').innerText = title;
 
-    function updateLayout(count) {
+    function refreshLayout() {
         const grid = document.getElementById('video-grid');
-        if (count === 1) {
-            grid.style.gridTemplateColumns = "1fr";
-            grid.style.padding = "40px 15% 60px 15%"; // لجعل فيديو المعلم في المنتصف وبشكل كبير
-        } else {
-            let cols = count > 4 ? 3 : 2;
-            grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-            grid.style.padding = "30px";
-        }
+        const cards = document.querySelectorAll('.participant-card');
+        const count = cards.length;
+
+        cards.forEach(card => {
+            card.classList.remove('size-full', 'size-half', 'size-multi');
+            if (count <= 1) card.classList.add('size-full');
+            else if (count === 2) card.classList.add('size-half');
+            else card.classList.add('size-multi');
+        });
     }
 
     async function init() {
@@ -110,29 +139,32 @@
         if (!token) return;
 
         const room = new LiveKitClient.Room();
-        await room.connect('https://learning-system-07wdu0v6.livekit.cloud', token);
+        try {
+            // تصحيح البروتوكول إلى wss:// للاتصال باللايف كيت
+            await room.connect('wss://learning-system-07wdu0v6.livekit.cloud', token);
 
-        const handleTrack = (track, participant) => {
-            if (track.kind === 'video') {
-                let card = document.getElementById(`p-${participant.identity}`);
-                if (!card) {
-                    card = document.createElement('div');
-                    card.id = `p-${participant.identity}`;
-                    card.className = 'participant-card';
-                    card.innerHTML = `<div class="name-tag">${participant.name || 'طالب'}</div>`;
-                    document.getElementById('video-grid').appendChild(card);
-                    updateLayout(document.querySelectorAll('.participant-card').length);
+            room.on('trackSubscribed', (track, participant) => {
+                if (track.kind === 'video') {
+                    let card = document.getElementById(`p-${participant.identity}`);
+                    if (!card) {
+                        card = document.createElement('div');
+                        card.id = `p-${participant.identity}`;
+                        card.className = 'participant-card';
+                        card.innerHTML = `<div class="name-label">${participant.name || 'مشارك'}</div>`;
+                        document.getElementById('video-grid').appendChild(card);
+                    }
+                    card.appendChild(track.attach());
+                    refreshLayout();
                 }
-                const element = track.attach();
-                card.appendChild(element);
-            }
-        };
+            });
 
-        room.on('trackSubscribed', handleTrack);
-        room.on('participantDisconnected', (p) => {
-            document.getElementById(`p-${p.identity}`)?.remove();
-            updateLayout(document.querySelectorAll('.participant-card').length);
-        });
+            room.on('participantDisconnected', (p) => {
+                document.getElementById(`p-${p.identity}`)?.remove();
+                refreshLayout();
+            });
+        } catch (e) {
+            console.error("Connection failed", e);
+        }
     }
     init();
 </script>

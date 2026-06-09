@@ -147,6 +147,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final name = authProvider.profile?['full_name'] ?? "المدرس";
+    final isDesktop = Responsive.isDesktop(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
@@ -159,29 +160,37 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                 slivers: [
                   _buildHeader(name),
                   SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(Responsive.isMobile(context) ? 20 : 30),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildStatsOverview(),
-                          const SizedBox(height: 32),
-                          if (_activeSession != null) ...[
-                             _buildSectionTitle("البث المباشر الآن", isLive: true),
-                             const SizedBox(height: 16),
-                             _buildActiveSessionCard(name),
-                             const SizedBox(height: 32),
-                          ],
-                          _buildSectionTitle("الإجراءات السريعة"),
-                          const SizedBox(height: 16),
-                          _buildSmartQuickActions(),
-                          const SizedBox(height: 32),
-                          if (_nextSession != null) ...[
-                            _buildSectionTitle("الحصة القادمة"),
-                            const SizedBox(height: 16),
-                            _buildNextSessionCard(),
-                          ],
-                        ],
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1200),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isDesktop ? 40 : 20,
+                            vertical: 30,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildStatsOverview(),
+                              const SizedBox(height: 32),
+                              if (_activeSession != null) ...[
+                                 _buildSectionTitle("البث المباشر الآن", isLive: true),
+                                 const SizedBox(height: 16),
+                                 _buildActiveSessionCard(name),
+                                 const SizedBox(height: 32),
+                              ],
+                              _buildSectionTitle("الإجراءات السريعة"),
+                              const SizedBox(height: 16),
+                              _buildSmartQuickActions(),
+                              const SizedBox(height: 32),
+                              if (_nextSession != null) ...[
+                                _buildSectionTitle("الحصة القادمة"),
+                                const SizedBox(height: 16),
+                                _buildNextSessionCard(),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -256,50 +265,79 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   }
 
   Widget _buildActiveSessionCard(String teacherName) {
+    final isDesktop = Responsive.isDesktop(context);
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: [Colors.red.shade700, Colors.red.shade400], begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(32),
         boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
       ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const CircleAvatar(backgroundColor: Colors.white24, radius: 25, child: Icon(Icons.bolt_rounded, color: Colors.white, size: 30)),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_activeSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    const Text("الحصة جارية الآن... الطلاب في انتظارك", style: TextStyle(color: Colors.white70, fontSize: 13)),
-                  ],
-                ),
+      child: isDesktop 
+      ? Row(
+          children: [
+            const CircleAvatar(backgroundColor: Colors.white24, radius: 30, child: Icon(Icons.bolt_rounded, color: Colors.white, size: 35)),
+            const SizedBox(width: 24),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_activeSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                  const Text("الحصة جارية الآن... الطلاب في انتظارك", style: TextStyle(color: Colors.white70, fontSize: 14)),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () => _startLive(_activeSession!, teacherName),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.red.shade700,
-              minimumSize: const Size(double.infinity, 56),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              elevation: 0,
             ),
-            child: const Text("دخول البث المباشر الآن", style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+            const SizedBox(width: 24),
+            ElevatedButton(
+              onPressed: () => _startLive(_activeSession!, teacherName),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.red.shade700,
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+              child: const Text("دخول البث المباشر الآن", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        )
+      : Column(
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(backgroundColor: Colors.white24, radius: 25, child: Icon(Icons.bolt_rounded, color: Colors.white, size: 30)),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_activeSession!.subjectName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                      const Text("الحصة جارية الآن... الطلاب في انتظارك", style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => _startLive(_activeSession!, teacherName),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.red.shade700,
+                minimumSize: const Size(double.infinity, 56),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+              child: const Text("دخول البث المباشر الآن", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
     );
   }
 
   Widget _buildSmartQuickActions() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.grey.shade100)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -318,12 +356,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
-            child: Icon(icon, color: color, size: 24),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+            child: Icon(icon, color: color, size: 28),
           ),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -331,7 +369,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
 
   Widget _buildNextSessionCard() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -349,8 +387,8 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_nextSession!.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text("تبدأ في ${intl.DateFormat('hh:mm a').format(_nextSession!.startTime)}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                Text(_nextSession!.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Text("تبدأ في ${intl.DateFormat('hh:mm a').format(_nextSession!.startTime)}", style: const TextStyle(color: Colors.grey, fontSize: 13)),
               ],
             ),
           ),

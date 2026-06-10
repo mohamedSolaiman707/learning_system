@@ -45,7 +45,10 @@ class ControlsBar extends StatelessWidget {
               filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 500),
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.5),
                   borderRadius: BorderRadius.circular(32),
@@ -76,9 +79,12 @@ class ControlsBar extends StatelessWidget {
                           _buildShowcase(
                             key: micKey,
                             title: 'الميكروفون',
-                            description: 'اضغط لكتم أو تفعيل صوتك أثناء المحاضرة.',
+                            description:
+                                'اضغط لكتم أو تفعيل صوتك أثناء المحاضرة.',
                             child: _PremiumControlButton(
-                              icon: controller.isMicEnabled ? Icons.mic_rounded : Icons.mic_off_rounded,
+                              icon: controller.isMicEnabled
+                                  ? Icons.mic_rounded
+                                  : Icons.mic_off_rounded,
                               isActive: controller.isMicEnabled,
                               activeColor: Colors.blueAccent,
                               onPressed: controller.toggleMic,
@@ -88,9 +94,12 @@ class ControlsBar extends StatelessWidget {
                           _buildShowcase(
                             key: camKey,
                             title: 'الكاميرا',
-                            description: 'يمكنك فتح الكاميرا لمشاركة صورتك مع المعلم وزملائك.',
+                            description:
+                                'يمكنك فتح الكاميرا لمشاركة صورتك مع المعلم وزملائك.',
                             child: _PremiumControlButton(
-                              icon: controller.isCamEnabled ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+                              icon: controller.isCamEnabled
+                                  ? Icons.videocam_rounded
+                                  : Icons.videocam_off_rounded,
                               isActive: controller.isCamEnabled,
                               activeColor: Colors.blueAccent,
                               onPressed: controller.toggleCam,
@@ -101,15 +110,22 @@ class ControlsBar extends StatelessWidget {
                             _buildShowcase(
                               key: recordKey,
                               title: 'تسجيل المحاضرة',
-                              description: 'ابدأ تسجيل الحصة ليتمكن الطلاب من مشاهدتها لاحقاً عبر السحابة.',
+                              description:
+                                  'ابدأ تسجيل الحصة ليتمكن الطلاب من مشاهدتها لاحقاً عبر السحابة.',
                               child: _PremiumControlButton(
-                                icon: controller.isRecording ? Icons.stop_circle_rounded : Icons.fiber_manual_record_rounded,
+                                icon: controller.isRecording
+                                    ? Icons.stop_circle_rounded
+                                    : Icons.fiber_manual_record_rounded,
                                 isActive: controller.isRecording,
                                 isLoading: controller.isRecordingLoading,
                                 activeColor: Colors.redAccent,
                                 onPressed: controller.toggleRecording,
-                                tooltip: controller.isRecording ? "إيقاف التسجيل" : "بدء التسجيل",
-                                pulse: controller.isRecording && !controller.isRecordingPaused,
+                                tooltip: controller.isRecording
+                                    ? "إيقاف التسجيل"
+                                    : "بدء التسجيل",
+                                pulse:
+                                    controller.isRecording &&
+                                    !controller.isRecordingPaused,
                               ),
                             ),
                         ]),
@@ -121,13 +137,15 @@ class ControlsBar extends StatelessWidget {
                           _buildShowcase(
                             key: emojiKey,
                             title: 'التفاعلات',
-                            description: 'عبر عن مشاعرك وتفاعل مع الشرح باستخدام الإيموجي.',
+                            description:
+                                'عبر عن مشاعرك وتفاعل مع الشرح باستخدام الإيموجي.',
                             child: _ReactionButton(controller: controller),
                           ),
                           _buildShowcase(
                             key: handKey,
                             title: 'رفع اليد',
-                            description: 'استخدمها لتنبيه المعلم أن لديك سؤالاً أو استفساراً.',
+                            description:
+                                'استخدمها لتنبيه المعلم أن لديك سؤالاً أو استفساراً.',
                             child: _PremiumControlButton(
                               icon: Icons.front_hand_rounded,
                               isActive: controller.isHandRaised,
@@ -136,13 +154,17 @@ class ControlsBar extends StatelessWidget {
                               tooltip: "رفع اليد",
                             ),
                           ),
-                          if (controller.isTeacher || !controller.isScreenShareLocked)
+                          if (controller.isTeacher ||
+                              !controller.isScreenShareLocked)
                             _buildShowcase(
                               key: screenShareKey,
                               title: 'مشاركة الشاشة',
-                              description: 'تسمح لك هذه الميزة بعرض شاشة جهازك للجميع.',
+                              description:
+                                  'تسمح لك هذه الميزة بعرض شاشة جهازك للجميع.',
                               child: _PremiumControlButton(
-                                icon: controller.isScreenSharing ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
+                                icon: controller.isScreenSharing
+                                    ? Icons.stop_screen_share_rounded
+                                    : Icons.screen_share_rounded,
                                 isActive: controller.isScreenSharing,
                                 activeColor: Colors.greenAccent,
                                 onPressed: controller.toggleScreenShare,
@@ -158,7 +180,8 @@ class ControlsBar extends StatelessWidget {
                           _buildShowcase(
                             key: chatKey,
                             title: 'الدردشة العامة',
-                            description: 'تواصل نصياً مع جميع الحاضرين في القاعة.',
+                            description:
+                                'تواصل نصياً مع جميع الحاضرين في القاعة.',
                             child: _PremiumControlButton(
                               icon: Icons.chat_bubble_rounded,
                               isActive: controller.isChatOpen,
@@ -171,7 +194,8 @@ class ControlsBar extends StatelessWidget {
                           _buildShowcase(
                             key: qaKey,
                             title: 'الأسئلة والأجوبة',
-                            description: 'اطرح أسئلة تعليمية محددة ليجيب عليها المعلم.',
+                            description:
+                                'اطرح أسئلة تعليمية محددة ليجيب عليها المعلم.',
                             child: _PremiumControlButton(
                               icon: Icons.help_outline_rounded,
                               isActive: controller.isQAOpen,
@@ -184,7 +208,8 @@ class ControlsBar extends StatelessWidget {
                           _buildShowcase(
                             key: whiteboardKey,
                             title: 'السبورة التفاعلية',
-                            description: 'افتح السبورة لمتابعة الرسومات والشروحات التوضيحية.',
+                            description:
+                                'افتح السبورة لمتابعة الرسومات والشروحات التوضيحية.',
                             child: _PremiumControlButton(
                               icon: Icons.edit_note_rounded,
                               isActive: controller.isWhiteboardOpen,
@@ -224,16 +249,28 @@ class ControlsBar extends StatelessWidget {
     );
   }
 
-  Widget _buildShowcase({required GlobalKey? key, required String title, required String description, required Widget child}) {
+  Widget _buildShowcase({
+    required GlobalKey? key,
+    required String title,
+    required String description,
+    required Widget child,
+  }) {
     if (key == null) return child;
     return Showcase(
       key: key,
       title: title,
       description: description,
-      titleTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF102A43), fontFamily: 'Cairo'),
+      titleTextStyle: const TextStyle(
+        fontWeight: FontWeight.bold,
+        fontSize: 18,
+        color: Color(0xFF102A43),
+        fontFamily: 'Cairo',
+      ),
       descTextStyle: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
       tooltipBackgroundColor: Colors.white,
-      targetShapeBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      targetShapeBorder: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: child,
     );
   }
@@ -283,7 +320,8 @@ class _PremiumControlButton extends StatefulWidget {
   State<_PremiumControlButton> createState() => _PremiumControlButtonState();
 }
 
-class _PremiumControlButtonState extends State<_PremiumControlButton> with SingleTickerProviderStateMixin {
+class _PremiumControlButtonState extends State<_PremiumControlButton>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
 
@@ -325,28 +363,31 @@ class _PremiumControlButtonState extends State<_PremiumControlButton> with Singl
               alignment: Alignment.center,
               children: [
                 // Glowing background for active state
-                if (widget.isActive && !widget.isLoading)
-                  _buildGlowEffect(),
+                if (widget.isActive && !widget.isLoading) _buildGlowEffect(),
 
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: widget.isActive 
-                        ? widget.activeColor.withOpacity(0.15) 
+                    color: widget.isActive
+                        ? widget.activeColor.withOpacity(0.15)
                         : Colors.white.withOpacity(0.06),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: widget.isActive ? widget.activeColor.withOpacity(0.5) : Colors.white.withOpacity(0.05),
+                      color: widget.isActive
+                          ? widget.activeColor.withOpacity(0.5)
+                          : Colors.white.withOpacity(0.05),
                       width: 1.5,
                     ),
                   ),
                   child: Opacity(
                     opacity: widget.isLoading ? 0.3 : 1.0,
                     child: Icon(
-                      widget.icon, 
-                      color: widget.isActive ? widget.activeColor : Colors.white.withOpacity(0.8), 
-                      size: 24
+                      widget.icon,
+                      color: widget.isActive
+                          ? widget.activeColor
+                          : Colors.white.withOpacity(0.8),
+                      size: 24,
                     ),
                   ),
                 ),
@@ -357,19 +398,16 @@ class _PremiumControlButtonState extends State<_PremiumControlButton> with Singl
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(widget.activeColor),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        widget.activeColor,
+                      ),
                     ),
                   ),
 
                 if (widget.badgeCount > 0)
-                  Positioned(
-                    top: -2,
-                    right: -2,
-                    child: _buildBadge(),
-                  ),
+                  Positioned(top: -2, right: -2, child: _buildBadge()),
 
-                if (widget.pulse)
-                  _buildPulseEffect(),
+                if (widget.pulse) _buildPulseEffect(),
               ],
             ),
           ),
@@ -405,7 +443,11 @@ class _PremiumControlButtonState extends State<_PremiumControlButton> with Singl
       ),
       child: Text(
         widget.badgeCount > 9 ? "9+" : widget.badgeCount.toString(),
-        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -437,11 +479,15 @@ class _ReactionButton extends StatelessWidget {
       icon: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06), 
+          color: Colors.white.withOpacity(0.06),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.white.withOpacity(0.05)),
         ),
-        child: const Icon(Icons.add_reaction_rounded, color: Colors.white70, size: 24),
+        child: const Icon(
+          Icons.add_reaction_rounded,
+          color: Colors.white70,
+          size: 24,
+        ),
       ),
       itemBuilder: (context) => [
         PopupMenuItem<String>(
@@ -452,7 +498,10 @@ class _ReactionButton extends StatelessWidget {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: ['👏', '👍', '❤️', '😂', '🎉'].map((emoji) {
@@ -465,7 +514,10 @@ class _ReactionButton extends StatelessWidget {
                       borderRadius: BorderRadius.circular(15),
                       child: Padding(
                         padding: const EdgeInsets.all(8),
-                        child: Text(emoji, style: const TextStyle(fontSize: 24)),
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 24),
+                        ),
                       ),
                     );
                   }).toList(),

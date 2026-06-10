@@ -95,15 +95,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
     _capturedParams = _extractParams();
 
     if (_capturedParams!.containsKey('access_token') ||
-        _capturedParams!.containsKey('session_id') ||
-        _capturedParams!.containsKey('sessionId') ||
         _capturedParams!.containsKey('lms_id')) {
       _isRedirecting = true;
     }
 
-    // مراقبة حالة المصادقة لمعالجة الرابط فور تسجيل الدخول
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndProcessLink();
+      _handleIncomingLink();
     });
   }
 
@@ -111,45 +108,24 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final fullUri = Uri.base;
     Map<String, String> params = Map.from(fullUri.queryParameters);
 
-    // معالجة البارامترات في الـ Fragment (لأن Flutter Web يستخدم Hash strategy غالباً)
     if (fullUri.fragment.isNotEmpty) {
       String fragment = fullUri.fragment;
       if (fragment.contains('?')) {
-        final queryPart = fragment.split('?').last;
-        params.addAll(Uri.splitQueryString(queryPart));
-      } else if (fragment.startsWith('/')) {
-        // دعم لروابط مثل /#/live?sessionId=...
-        final parts = fragment.split('?');
-        if (parts.length > 1) {
-          params.addAll(Uri.splitQueryString(parts.last));
-        }
+        fragment = fragment.split('?').last;
+      }
+      if (fragment.startsWith('/')) {
+         if (fragment.contains('?')) {
+           fragment = fragment.split('?').last;
+         } else {
+           fragment = "";
+         }
+      }
+      
+      if (fragment.isNotEmpty) {
+        params.addAll(Uri.splitQueryString(fragment));
       }
     }
     return params;
-  }
-
-  void _checkAndProcessLink() {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    // إذا تغيرت حالة المستخدم، نحاول معالجة الرابط
-    authProvider.addListener(_handleAuthChange);
-
-    // محاولة أولية
-    _handleIncomingLink();
-  }
-
-  void _handleAuthChange() {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.isAuthenticated && !_linkProcessed) {
-      _handleIncomingLink();
-    }
-  }
-
-  @override
-  void dispose() {
-    // إزالة المستمع لتجنب تسريب الذاكرة
-    Provider.of<AuthProvider>(context, listen: false).removeListener(_handleAuthChange);
-    super.dispose();
   }
 
   Future<void> _handleIncomingLink() async {
@@ -158,78 +134,57 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final params = _capturedParams ?? _extractParams();
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    // 1. معالجة التوكين إذا وجد
-    final accessToken = params['access_token'];
-    if (accessToken != null && !authProvider.isAuthenticated) {
-      try {
-        await Supabase.instance.client.auth.setSession(accessToken);
-        // ننتظر قليلاً ليتم تحديث الـ AuthProvider
-        await Future.delayed(const Duration(milliseconds: 800));
-      } catch (e) {
-        debugPrint("SetSession Error: $e");
-      }
-    }
-
-    // 2. التحقق من وجود معرف الجلسة
-    final sessionId = params['session_id'] ?? params['sessionId'];
-    final lmsId = params['lms_id'];
-
-    if (sessionId == null && lmsId == null) {
-      if (mounted) setState(() => _isRedirecting = false);
-      return;
-    }
-
-    // 3. الانتظار حتى يكتمل تسجيل الدخول
-    if (!authProvider.isAuthenticated) {
-      if (mounted) setState(() => _isRedirecting = false);
-      return;
-    }
-
-    // 4. معالجة الرابط وتوجيه المستخدم
-    _linkProcessed = true;
-    if (mounted) setState(() => _isRedirecting = true);
-
     try {
-      final dbService = Provider.of<DatabaseService>(context, listen: false);
-      final sessionData = sessionId != null
-          ? await dbService.getSessionById(sessionId)
-          : await dbService.getSessionByLmsId(lmsId!);
-
-      if (sessionData != null && mounted) {
-        // تسجيل الطالب تلقائياً في الحصة لضمان ظهوره في كشف الحضور
-        if (authProvider.role == 'student') {
-          await dbService.enrollStudentBySessionId(authProvider.user!.id, sessionData['id']);
+      // 1. هل يوجد توكين جديد يحتاج تفعيل؟
+      final accessToken = params['access_token'];
+      if (accessToken != null) {
+        try {
+          await Supabase.instance.client.auth.setSession(accessToken);
+          await Future.delayed(const Duration(seconds: 1));
+        } catch (e) {
+          debugPrint("LTI AutoLogin Error: $e");
         }
+      }
 
-        String? roomName;
-        var roomsData = sessionData['rooms'];
-        if (roomsData != null) {
-          if (roomsData is List && roomsData.isNotEmpty) {
-            roomName = roomsData[0]['room_name'];
-          } else if (roomsData is Map) {
-            roomName = roomsData['room_name'];
+      // 2. هل يوجد lms_id يحتاج فتح الحصة مباشرة؟
+      final lmsId = params['lms_id'];
+      if (lmsId != null && authProvider.isAuthenticated) {
+        _linkProcessed = true;
+        if (mounted) setState(() => _isRedirecting = true);
+
+        final dbService = Provider.of<DatabaseService>(context, listen: false);
+        final sessionData = await dbService.getSessionByLmsId(lmsId);
+
+        if (sessionData != null && mounted) {
+          if (authProvider.role == 'student') {
+            await dbService.enrollStudentBySessionId(authProvider.user!.id, sessionData['id']);
           }
-        }
 
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.videoRoom,
-              (route) => false,
-          arguments: {
-            'roomName': roomName ?? 'room_${sessionData['id']}',
-            'title': sessionData['subject_name'] ?? sessionData['title'] ?? 'قاعة تعليمية',
-            'userName': authProvider.profile?['full_name'] ?? 'User',
-            'userId': authProvider.user?.id ?? '',
-            'isTeacher': authProvider.role == 'teacher',
-            'sessionId': sessionData['id'],
-          },
-        );
-        return;
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            AppRoutes.videoRoom,
+            (route) => false,
+            arguments: {
+              'roomName': 'room_${sessionData['id']}',
+              'title': sessionData['subject_name'] ?? 'قاعة تعليمية',
+              'userName': authProvider.profile?['full_name'] ?? 'User',
+              'userId': authProvider.user?.id ?? '',
+              'isTeacher': authProvider.role == 'teacher',
+              'sessionId': sessionData['id'],
+            },
+          );
+          return;
+        }
       }
     } catch (e) {
-      debugPrint("Link Processing Error: $e");
+      debugPrint("Auth Redirection Flow Error: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRedirecting = false;
+          _linkProcessed = true;
+        });
+      }
     }
-
-    if (mounted) setState(() => _isRedirecting = false);
   }
 
   @override
@@ -237,15 +192,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final authProvider = Provider.of<AuthProvider>(context);
 
     if (_isRedirecting || authProvider.isLoading) {
-      return const Scaffold(
+      return Scaffold(
+        backgroundColor: const Color(0xFFF8F9FB),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 20),
-              Text("جاري تحضير القاعة التعليمية...",
-                  style: TextStyle(fontFamily: 'Cairo', fontSize: 16)),
+              const CircularProgressIndicator(color: Color(0xFF102A43)),
+              const SizedBox(height: 32),
+              const Icon(Icons.security_rounded, size: 48, color: Colors.blueAccent),
+              const SizedBox(height: 16),
+              const Text("جاري التحقق من الهوية...",
+                  style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text("يتم توجيهك الآن إلى القاعة التعليمية",
+                  style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.grey)),
             ],
           ),
         ),

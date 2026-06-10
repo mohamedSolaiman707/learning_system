@@ -92,6 +92,15 @@ class VideoRoomController extends ChangeNotifier {
   StreamSubscription? _statusSubscription;
   Timer? _expiryTimer;
 
+  // Added fields for channel selection
+  String _selectedChannel = "room-cam-right";
+  String get selectedChannel => _selectedChannel;
+
+  void selectChannel(String trackName) {
+    _selectedChannel = trackName;
+    notifyListeners();
+  }
+
   Room? get room => _room;
   bool get isLoading => _isLoading;
   bool get isProcessing => _isProcessing;

@@ -197,7 +197,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
               ),
               child: Row(
                 children: [
-                   const Icon(Icons.forum_outlined, color: Colors.amber.shade800, size: 18),
+                    Icon(Icons.forum_outlined, color: Colors.amber.shade800, size: 18),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(

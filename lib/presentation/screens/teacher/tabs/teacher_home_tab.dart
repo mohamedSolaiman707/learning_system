@@ -63,21 +63,30 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
 
             final now = DateTime.now();
 
-            _activeSession = _sessions.cast<SessionModel?>().firstWhere(
-                  (s) => s!.status == 'active' || (s.startTime.isBefore(now) && s.endTime.isAfter(now) && s.status != 'ended'),
-              orElse: () => null,
-            );
+            // طريقة آمنة لجلب الحصة الحالية والقادمة
+            try {
+              _activeSession = _sessions.where((s) => 
+                s.status == 'active' || 
+                (s.startTime.isBefore(now) && s.endTime.isAfter(now) && s.status != 'ended')
+              ).first;
+            } catch (_) {
+              _activeSession = null;
+            }
 
-            _nextSession = _sessions.cast<SessionModel?>().firstWhere(
-                  (s) => s!.startTime.isAfter(now) && s.id != _activeSession?.id && s.status != 'ended',
-              orElse: () => null,
-            );
+            try {
+              _nextSession = _sessions.where((s) => 
+                s.startTime.isAfter(now) && s.id != _activeSession?.id && s.status != 'ended'
+              ).first;
+            } catch (_) {
+              _nextSession = null;
+            }
 
             _isLoading = false;
           });
         }
       }
     } catch (e) {
+      debugPrint("Error loading teacher data: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -144,28 +153,30 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => Center(
-          child: Container(
+          child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 500),
             child: AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Text("جدولة حصة جديدة"),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: const Text("جدولة حصة جديدة", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
                       controller: nameController, 
-                      decoration: const InputDecoration(
+                      style: const TextStyle(fontFamily: 'Cairo'),
+                      decoration: InputDecoration(
                         labelText: "اسم المادة", 
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.book_outlined)
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                        prefixIcon: const Icon(Icons.book_outlined)
                       )
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     ListTile(
-                      leading: const Icon(Icons.calendar_today, color: Colors.blue),
-                      title: const Text("موعد الحصة"),
-                      subtitle: Text("${intl.DateFormat('yyyy/MM/dd').format(selectedDate)} الساعة ${_formatTimeArabic(DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute))}"),
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.calendar_today, color: Color(0xFF102A43)),
+                      title: const Text("موعد الحصة", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                      subtitle: Text("${intl.DateFormat('yyyy/MM/dd').format(selectedDate)} الساعة ${_formatTimeArabic(DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute))}", style: const TextStyle(fontFamily: 'Cairo')),
                       onTap: () async {
                         final d = await showDatePicker(
                           context: context, 
@@ -174,10 +185,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                           lastDate: DateTime.now().add(const Duration(days: 365))
                         );
                         if (d != null) {
-                          final t = await showTimePicker(
-                            context: context,
-                            initialTime: selectedTime,
-                          );
+                          final t = await showTimePicker(context: context, initialTime: selectedTime);
                           if (t != null) {
                             setDialogState(() {
                               selectedDate = d;
@@ -190,10 +198,11 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                     const SizedBox(height: 16),
                     DropdownButtonFormField<int>(
                       value: selectedDuration,
-                      decoration: const InputDecoration(
+                      style: const TextStyle(fontFamily: 'Cairo', color: Colors.black),
+                      decoration: InputDecoration(
                         labelText: "مدة الحصة (ساعات)",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.timer_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                        prefixIcon: const Icon(Icons.timer_outlined),
                       ),
                       items: const [
                         DropdownMenuItem(value: 1, child: Text("ساعة واحدة")),
@@ -208,7 +217,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo'))),
                 ElevatedButton(
                   onPressed: () async {
                     if (nameController.text.isEmpty) return;
@@ -234,10 +243,11 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                     if (context.mounted) {
                       Navigator.pop(context);
                       _loadData();
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جدولة الحصة بنجاح ✅'), backgroundColor: Colors.green));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جدولة الحصة بنجاح ✅', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
                     }
                   },
-                  child: const Text("حفظ الحصة"),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF102A43), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: const Text("حفظ الحصة", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -281,12 +291,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF102A43)))
           : RefreshIndicator(
         onRefresh: _loadData,
         child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 1200),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1400),
             child: CustomScrollView(
               physics: const BouncingScrollPhysics(),
               slivers: [
@@ -349,7 +359,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                         const SizedBox(height: 16),
                         _buildNextSessionCard(isDesktop),
                       ],
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 60),
                     ]),
                   ),
                 ),
@@ -373,7 +383,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
           mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("أهلاً، أ. $name", style: TextStyle(color: Colors.black, fontSize: isDesktop ? 20 : 16, fontWeight: FontWeight.bold)),
+            Text("أهلاً، أ. $name", style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
           ],
         ),
       ),
@@ -407,7 +417,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       crossAxisCount: crossAxisCount,
       crossAxisSpacing: 16,
       mainAxisSpacing: 16,
-      childAspectRatio: isDesktop ? 2.5 : 1.1, 
+      childAspectRatio: isDesktop ? 2.5 : 1.3, 
       children: [
         TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: Icons.people_outline_rounded, color: Colors.blue),
         TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: Icons.videocam_outlined, color: Colors.orange),
@@ -421,9 +431,9 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     return Container(
       padding: EdgeInsets.all(isDesktop ? 32 : 24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [Colors.red.shade700, Colors.red.shade400], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: LinearGradient(colors: [const Color(0xFF102A43), const Color(0xFF243B53)], begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
+        boxShadow: [BoxShadow(color: const Color(0xFF102A43).withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: isDesktop 
       ? Row(
@@ -447,7 +457,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     return Row(
       children: [
         CircleAvatar(
-            backgroundColor: Colors.white24,
+            backgroundColor: Colors.white12,
             radius: isDesktop ? 30 : 25,
             child: Icon(Icons.bolt_rounded, color: Colors.white, size: isDesktop ? 35 : 30)
         ),
@@ -455,8 +465,8 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_clean(_activeSession!.subjectName), style: TextStyle(color: Colors.white, fontSize: isDesktop ? 20 : 18, fontWeight: FontWeight.bold)),
-            const Text("الحصة جارية الآن...", style: TextStyle(color: Colors.white70, fontSize: 13)),
+            Text(_clean(_activeSession?.subjectName ?? ""), style: TextStyle(color: Colors.white, fontSize: isDesktop ? 20 : 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+            const Text("الحصة جارية الآن...", style: TextStyle(color: Colors.white70, fontSize: 13, fontFamily: 'Cairo')),
           ],
         ),
       ],
@@ -468,11 +478,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       onPressed: () => _navigateToLive(_activeSession!, teacherName),
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.white,
-        foregroundColor: Colors.red.shade700,
+        foregroundColor: const Color(0xFF102A43),
         minimumSize: const Size(double.infinity, 50),
+        elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      child: const Text("دخول البث"),
+      child: const Text("دخول البث الآن", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
     );
   }
 
@@ -488,7 +499,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.grey.shade200)
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]
       ),
       child: isVertical
           ? Column(children: actions.map((a) => Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: a)).toList())
@@ -507,7 +518,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             child: Icon(icon, color: color, size: 26),
           ),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
         ],
       ),
     );
@@ -516,7 +527,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   Widget _buildNextSessionCard(bool isDesktop) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade100)),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]),
       child: Row(
         children: [
           Container(
@@ -529,8 +540,8 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_clean(_nextSession!.subjectName), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text("تبدأ في ${_formatTimeArabic(_nextSession!.startTime)}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                Text(_clean(_nextSession?.subjectName ?? ""), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo')),
+                Text("تبدأ في ${_formatTimeArabic(_nextSession?.startTime ?? DateTime.now())}", style: const TextStyle(color: Colors.grey, fontSize: 12, fontFamily: 'Cairo')),
               ],
             ),
           ),
@@ -548,7 +559,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
           ),
         if (isLive) const SizedBox(width: 8),
-        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
       ],
     );
   }
@@ -571,21 +582,29 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("اختر الحصة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text("اختر الحصة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
             const SizedBox(height: 16),
-            ListView.builder(
-              shrinkWrap: true,
-              itemCount: _sessions.length,
-              itemBuilder: (context, i) => ListTile(
-                title: Text(_clean(_sessions[i].subjectName)),
-                onTap: () {
-                  Navigator.pop(context);
-                  if (type == 'attendance') {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: _sessions[i].id, subjectName: _sessions[i].subjectName)));
-                  }
-                },
+            if (_sessions.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text("لا توجد حصص مسجلة بعد", style: TextStyle(fontFamily: 'Cairo')),
+              )
+            else
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _sessions.length,
+                  itemBuilder: (context, i) => ListTile(
+                    title: Text(_clean(_sessions[i].subjectName), style: const TextStyle(fontFamily: 'Cairo')),
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (type == 'attendance') {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: _sessions[i].id, subjectName: _sessions[i].subjectName)));
+                      }
+                    },
+                  ),
+                ),
               ),
-            ),
           ],
         ),
       ),

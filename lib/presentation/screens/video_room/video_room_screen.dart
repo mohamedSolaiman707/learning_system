@@ -171,7 +171,13 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                           ),
 
                           // الهيدر الاحترافي
-                          Positioned(top: 0, left: 0, right: 0, child: _buildHeader(context, controller)),
+                          Positioned(top: 0, left: 0, right: 0, child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildHeader(context, controller),
+                              if (!widget.isTeacher) _buildChannelSelector(controller, isDesktop),
+                            ],
+                          )),
 
                           if (controller.isWhiteboardOpen) const WhiteboardPanel(),
                           
@@ -226,6 +232,82 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildChannelSelector(VideoRoomController controller, bool isDesktop) {
+    final channels = [
+      {'id': 'room-cam-right', 'label': 'كاميرا اليمين'},
+      {'id': 'room-cam-left', 'label': 'كاميرا الشمال'},
+      {'id': 'room-cam-screen', 'label': 'الشاشة'},
+      {'id': 'whiteboard', 'label': 'السبورة'},
+    ];
+
+    Widget buildButtons() {
+      return Wrap(
+        spacing: 12,
+        runSpacing: 10,
+        alignment: WrapAlignment.center,
+        children: channels.map((ch) {
+          final isSelected = controller.selectedChannel == ch['id'];
+          return SizedBox(
+            width: isDesktop ? 130 : null,
+            child: OutlinedButton(
+              onPressed: () => controller.selectChannel(ch['id']!),
+              style: OutlinedButton.styleFrom(
+                backgroundColor: isSelected ? Colors.blue : Colors.transparent,
+                side: BorderSide(color: isSelected ? Colors.blue : Colors.white),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              child: Text(
+                ch['label']!,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontFamily: 'Cairo',
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: isDesktop
+          ? Center(child: buildButtons())
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: channels.map((ch) {
+                  final isSelected = controller.selectedChannel == ch['id'];
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 10),
+                    child: OutlinedButton(
+                      onPressed: () => controller.selectChannel(ch['id']!),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: isSelected ? Colors.blue : Colors.transparent,
+                        side: BorderSide(color: isSelected ? Colors.blue : Colors.white),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                      child: Text(
+                        ch['label']!,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'Cairo',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
     );
   }
 

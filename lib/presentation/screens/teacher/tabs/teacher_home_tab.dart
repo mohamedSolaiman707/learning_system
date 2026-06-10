@@ -82,6 +82,164 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
+  Future<void> _createInstantLive() async {
+    HapticFeedback.heavyImpact();
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final db = Provider.of<DatabaseService>(context, listen: false);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.blue)),
+    );
+
+    try {
+      final now = DateTime.now().toUtc();
+      final String teacherName = auth.profile?['full_name'] ?? "المدرس";
+
+      final sessionData = {
+        'subject_name': "بث مباشر سريع - ${intl.DateFormat('jm').format(DateTime.now())}",
+        'teacher_id': auth.user!.id,
+        'start_time': now.toIso8601String(),
+        'end_time': now.add(const Duration(hours: 1)).toIso8601String(),
+        'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString(),
+        'status': 'active',
+        'is_recording_enabled': true,
+      };
+
+      final newSessionMap = await db.saveSession(sessionData);
+
+      if (newSessionMap != null) {
+        final newSession = SessionModel.fromMap(newSessionMap);
+        await db.toggleRoomStatus(newSession.id, true);
+
+        if (!mounted) return;
+        Navigator.pop(context); 
+
+        _navigateToLive(newSession, teacherName);
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل بدء البث السريع")));
+    }
+  }
+
+  void _showAddSessionDialog() {
+    final nameController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+    TimeOfDay selectedTime = TimeOfDay.now();
+    int selectedDuration = 1; // الافتراضي ساعة واحدة
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text("جدولة حصة جديدة"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController, 
+                      decoration: const InputDecoration(
+                        labelText: "اسم المادة", 
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.book_outlined)
+                      )
+                    ),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      leading: const Icon(Icons.calendar_today, color: Colors.blue),
+                      title: const Text("موعد الحصة"),
+                      subtitle: Text("${intl.DateFormat('yyyy/MM/dd').format(selectedDate)} الساعة ${selectedTime.format(context)}"),
+                      onTap: () async {
+                        final d = await showDatePicker(
+                          context: context, 
+                          initialDate: selectedDate, 
+                          firstDate: DateTime.now(), 
+                          lastDate: DateTime.now().add(const Duration(days: 365))
+                        );
+                        if (d != null) {
+                          final t = await showTimePicker(
+                            context: context,
+                            initialTime: selectedTime,
+                          );
+                          if (t != null) {
+                            setDialogState(() {
+                              selectedDate = d;
+                              selectedTime = t;
+                            });
+                          }
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<int>(
+                      value: selectedDuration,
+                      decoration: const InputDecoration(
+                        labelText: "مدة الحصة (ساعات)",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.timer_outlined),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text("ساعة واحدة")),
+                        DropdownMenuItem(value: 2, child: Text("ساعتان")),
+                        DropdownMenuItem(value: 3, child: Text("3 ساعات")),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => selectedDuration = val);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (nameController.text.isEmpty) return;
+                    
+                    // دمج التاريخ والوقت
+                    final startDateTime = DateTime(
+                      selectedDate.year, selectedDate.month, selectedDate.day,
+                      selectedTime.hour, selectedTime.minute
+                    );
+                    
+                    final endDateTime = startDateTime.add(Duration(hours: selectedDuration));
+
+                    final db = Provider.of<DatabaseService>(context, listen: false);
+                    final auth = Provider.of<AuthProvider>(context, listen: false);
+                    await db.saveSession({
+                      'subject_name': nameController.text,
+                      'teacher_id': auth.user!.id,
+                      'start_time': startDateTime.toIso8601String(),
+                      'end_time': endDateTime.toIso8601String(),
+                      'status': 'waiting',
+                      'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString(),
+                    });
+                    
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      _loadData();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم جدولة الحصة بنجاح ✅'), backgroundColor: Colors.green)
+                      );
+                    }
+                  },
+                  child: const Text("حفظ الحصة"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _navigateToLive(SessionModel session, String teacherName) {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     Navigator.push(context, MaterialPageRoute(
@@ -184,7 +342,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                         const SizedBox(height: 16),
                         _buildNextSessionCard(isDesktop),
                       ],
-                      const SizedBox(height: 50),
+                      const SizedBox(height: 5),
                     ]),
                   ),
                 ),
@@ -212,6 +370,25 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
           ],
         ),
       ),
+      actions: [
+        _buildHeaderAction(Icons.bolt_rounded, Colors.red, "بث سريع", _createInstantLive),
+        _buildHeaderAction(Icons.add_rounded, Colors.blue, "جدولة حصة", _showAddSessionDialog),
+        const SizedBox(width: 20),
+      ],
+    );
+  }
+
+  Widget _buildHeaderAction(IconData icon, Color color, String tooltip, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        onPressed: onTap,
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+          child: Icon(icon, color: color, size: 22),
+        ),
+      ),
     );
   }
 
@@ -223,7 +400,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       crossAxisCount: crossAxisCount,
       crossAxisSpacing: 16,
       mainAxisSpacing: 16,
-      childAspectRatio: isDesktop ? 2.5 : 1.1, // تعديل الـ Ratio هنا ليعطي طول أكثر
+      childAspectRatio: isDesktop ? 2.5 : 1.1, 
       children: [
         TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: Icons.people_outline_rounded, color: Colors.blue),
         TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: Icons.videocam_outlined, color: Colors.orange),
@@ -407,6 +584,4 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       ),
     );
   }
-
-  void _showAddSessionDialog() {}
 }

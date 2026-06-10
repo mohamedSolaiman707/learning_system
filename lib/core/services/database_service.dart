@@ -633,4 +633,68 @@ class DatabaseService {
       return [];
     }
   }
+
+  // --- Virtual Seating ---
+  Future<List<Map<String, dynamic>>> getSeats(String sessionId) async {
+    try {
+      final response = await _supabase
+          .from('seats')
+          .select()
+          .eq('session_id', sessionId)
+          .order('seat_number', ascending: true);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> assignSeat({
+    required String sessionId,
+    required int seatNumber,
+    required String studentId,
+    required String studentName,
+  }) async {
+    try {
+      await _supabase
+          .from('seats')
+          .update({
+            'student_id': studentId,
+            'student_name': studentName,
+          })
+          .eq('session_id', sessionId)
+          .eq('seat_number', seatNumber);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> initializeSeats(String sessionId) async {
+    try {
+      final existing = await _supabase
+          .from('seats')
+          .select('id')
+          .eq('session_id', sessionId)
+          .limit(1)
+          .maybeSingle();
+
+      if (existing == null) {
+        final List<Map<String, dynamic>> seats = [];
+        for (int i = 1; i <= 16; i++) {
+          String zone = '';
+          if (i <= 6) zone = 'right';
+          else if (i <= 11) zone = 'center';
+          else zone = 'left';
+
+          seats.add({
+            'session_id': sessionId,
+            'seat_number': i,
+            'zone': zone,
+          });
+        }
+        await _supabase.from('seats').insert(seats);
+      }
+    } catch (e) {
+      debugPrint("Error initializing seats: $e");
+    }
+  }
 }

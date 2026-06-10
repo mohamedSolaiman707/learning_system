@@ -29,6 +29,11 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   Duration _timeLeft = Duration.zero;
   StreamSubscription? _statusSubscription;
 
+  bool _seatSelected = false;
+  int? _selectedSeat;
+  List<Map<String, dynamic>> _seats = [];
+  bool _seatsLoading = true;
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +43,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     final db = Provider.of<DatabaseService>(context, listen: false);
     
     db.joinWaitingRoom(widget.session.id, widget.userId);
+    _loadSeats();
 
     _statusSubscription = db.watchSessionStatus(widget.session.id).listen((data) {
       if (data.isEmpty || data.first['status'] == 'ended') {
@@ -64,6 +70,19 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
         _navigateToRoom();
       }
     });
+  }
+
+  Future<void> _loadSeats() async {
+    final db = Provider.of<DatabaseService>(context, listen: false);
+    // Ensuring seats are initialized for the session
+    await db.initializeSeats(widget.session.id);
+    final seats = await db.getSeats(widget.session.id);
+    if (mounted) {
+      setState(() {
+        _seats = seats;
+        _seatsLoading = false;
+      });
+    }
   }
 
   void _calculateTimeLeft() {
@@ -119,8 +138,147 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     super.dispose();
   }
 
+  Widget _buildSeatPicker() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F1014),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0F1014), Color(0xFF1A1C1E)],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              const Text("اختر مقعدك في القاعة",
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: Text("اختر المقعد المناسب لمكانك الفعلي في القاعة لسهولة تواصل المعلم معك",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, fontSize: 14, fontFamily: 'Cairo')),
+              ),
+              const SizedBox(height: 40),
+              if (_seatsLoading)
+                const Expanded(child: Center(child: CircularProgressIndicator()))
+              else
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildZoneColumn("يمين القاعة 📷", "right"),
+                        const SizedBox(width: 12),
+                        _buildZoneColumn("وسط القاعة", "center"),
+                        const SizedBox(width: 12),
+                        _buildZoneColumn("يسار القاعة 📷", "left"),
+                      ],
+                    ),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: _selectedSeat == null ? null : () async {
+                      final db = Provider.of<DatabaseService>(context, listen: false);
+                      await db.assignSeat(
+                        sessionId: widget.session.id,
+                        seatNumber: _selectedSeat!,
+                        studentId: widget.userId,
+                        studentName: widget.userName,
+                      );
+                      setState(() => _seatSelected = true);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      disabledBackgroundColor: Colors.white.withOpacity(0.05),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    ),
+                    child: const Text("تأكيد المقعد والمتابعة",
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildZoneColumn(String label, String zoneKey) {
+    final zoneSeats = _seats.where((s) => s['zone'] == zoneKey).toList();
+    return Expanded(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          ),
+          const SizedBox(height: 16),
+          ...zoneSeats.map((seat) {
+            final int seatNum = seat['seat_number'];
+            final bool isOccupied = seat['student_id'] != null;
+            final bool isSelected = _selectedSeat == seatNum;
+            final String studentName = seat['student_name'] ?? "";
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: GestureDetector(
+                onTap: isOccupied ? null : () => setState(() => _selectedSeat = seatNum),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.blue : (isOccupied ? Colors.white.withOpacity(0.05) : Colors.transparent),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? Colors.blue : (isOccupied ? Colors.transparent : Colors.white24),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    isOccupied ? studentName : seatNum.toString(),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isOccupied ? Colors.white24 : Colors.white,
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!_seatSelected) return _buildSeatPicker();
+
     final bool isDesktop = Responsive.isDesktop(context);
     final timeStr = _timeLeft.inHours > 0 
       ? "${_timeLeft.inHours}:${(_timeLeft.inMinutes % 60).toString().padLeft(2, '0')}:${(_timeLeft.inSeconds % 60).toString().padLeft(2, '0')}"
@@ -129,11 +287,11 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [const Color(0xFF0F1014), const Color(0xFF1A1C1E)],
+            colors: [Color(0xFF0F1014), Color(0xFF1A1C1E)],
           ),
         ),
         child: Center(

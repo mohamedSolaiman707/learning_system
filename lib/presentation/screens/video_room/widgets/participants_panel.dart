@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../video_room_controller.dart';
 
 class ParticipantsPanel extends StatelessWidget {
@@ -22,7 +24,6 @@ class ParticipantsPanel extends StatelessWidget {
       });
     }
 
-    // تغليف اللوحة بالكامل لتدعم الاتجاه من اليمين لليسار
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Container(
@@ -40,6 +41,7 @@ class ParticipantsPanel extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
+                  if (controller.isTeacher) _buildWallControls(context, controller),
                   if (localParticipant != null)
                     _ParticipantTile(participant: localParticipant, controller: controller, isMe: true),
                   const Divider(height: 32),
@@ -54,12 +56,84 @@ class ParticipantsPanel extends StatelessWidget {
     );
   }
 
+  Widget _buildWallControls(BuildContext context, VideoRoomController controller) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.blue.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.desktop_windows_rounded, color: Colors.blue, size: 18),
+              SizedBox(width: 8),
+              Text(
+                "شاشات عرض الفصل (Wall Display)",
+                style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildZoneControl(context, controller, 'right', 'اليمنى'),
+              _buildZoneControl(context, controller, 'center', 'الوسطى'),
+              _buildZoneControl(context, controller, 'left', 'اليسرى'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildZoneControl(BuildContext context, VideoRoomController controller, String zone, String label) {
+    // بناء الرابط بشكل صحيح للويب
+    final String baseUrl = Uri.base.origin;
+    final String wallUrl = "$baseUrl/#/wall-display?sessionId=${controller.sessionId}&zone=$zone&roomName=${controller.roomName}";
+
+    return Column(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.open_in_new_rounded, color: Colors.blue, size: 22),
+          onPressed: () => launchUrl(Uri.parse(wallUrl)),
+          tooltip: "فتح في تبويب جديد",
+        ),
+        Text(label, style: const TextStyle(fontSize: 10, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        InkWell(
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: wallUrl));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("تم نسخ رابط الشاشة بنجاح", style: TextStyle(fontFamily: 'Cairo')),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Text("نسخ الرابط", style: TextStyle(fontSize: 9, color: Colors.blue, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildHeader(VideoRoomController controller, int count) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
       child: Row(
         children: [
-          // العنوان في اليمين (بسبب RTL Directionality)
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -68,7 +142,6 @@ class ParticipantsPanel extends StatelessWidget {
             ],
           ),
           const Spacer(),
-          // زر الإغلاق في اليسار
           IconButton(
             onPressed: controller.toggleParticipants, 
             icon: Container(
@@ -251,7 +324,6 @@ class _ParticipantTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
-          // الصورة في اليمين
           Stack(
             children: [
               CircleAvatar(
@@ -267,7 +339,6 @@ class _ParticipantTile extends StatelessWidget {
             ],
           ),
           const SizedBox(width: 15),
-          // الاسم والحالة في المنتصف (محاذاة لليمين)
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,7 +354,6 @@ class _ParticipantTile extends StatelessWidget {
               ],
             ),
           ),
-          // قائمة التحكم في أقصى اليسار
           if (controller.isTeacher && !isMe) _buildTeacherMenu(context),
         ],
       ),

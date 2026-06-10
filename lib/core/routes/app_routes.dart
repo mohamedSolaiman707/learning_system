@@ -8,6 +8,7 @@ import '../../presentation/screens/teacher/teacher_main_layout.dart';
 import '../../presentation/screens/admin/admin_dashboard.dart';
 import '../../presentation/screens/video_room/video_room_screen.dart';
 import '../../presentation/screens/video_room/video_room_controller.dart';
+import '../../presentation/screens/video_room/wall_display_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -16,7 +17,8 @@ class AppRoutes {
   static const String studentHome = '/student-home';
   static const String teacherHome = '/teacher-home';
   static const String adminHome = '/admin-home';
-  static const String videoRoom = '/video-room'; // إضافة مسار الغرفة
+  static const String videoRoom = '/video-room';
+  static const String wallDisplay = '/wall-display';
 
   static Map<String, WidgetBuilder> get routes => {
     splash: (context) => const SplashScreen(),
@@ -28,14 +30,24 @@ class AppRoutes {
   };
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
-    if (settings.name == videoRoom) {
-      final args = settings.arguments as Map<String, dynamic>?;
-      final String roomName = args?['roomName'] ?? '';
-      final String userName = args?['userName'] ?? '';
-      final String userId = args?['userId'] ?? '';
-      final bool isTeacher = args?['isTeacher'] ?? false;
-      final String? sessionId = args?['sessionId'];
-      final String title = args?['title'] ?? 'غرفة الفيديو';
+    String? routeName = settings.name;
+    Map<String, dynamic> queryParams = {};
+
+    // دعم استخراج البارامترات من الرابط في الويب (مثل ?sessionId=...)
+    if (routeName != null && routeName.contains('?')) {
+      final uri = Uri.parse(routeName);
+      routeName = uri.path;
+      queryParams = uri.queryParameters;
+    }
+
+    if (routeName == videoRoom) {
+      final args = settings.arguments as Map<String, dynamic>? ?? queryParams;
+      final String roomName = args['roomName'] ?? '';
+      final String userName = args['userName'] ?? 'مستخدم';
+      final String userId = args['userId'] ?? '';
+      final bool isTeacher = args['isTeacher'] == true || args['isTeacher'] == 'true';
+      final String? sessionId = args['sessionId'];
+      final String title = args['title'] ?? 'قاعة تعليمية';
 
       return MaterialPageRoute(
         builder: (context) => ChangeNotifierProvider(
@@ -55,6 +67,17 @@ class AppRoutes {
             isTeacher: isTeacher,
             sessionId: sessionId,
           ),
+        ),
+      );
+    }
+
+    if (routeName == wallDisplay) {
+      final args = settings.arguments as Map<String, dynamic>? ?? queryParams;
+      return MaterialPageRoute(
+        builder: (context) => WallDisplayScreen(
+          sessionId: args['sessionId'] ?? '',
+          zone: args['zone'] ?? '',
+          roomName: args['roomName'] ?? '',
         ),
       );
     }

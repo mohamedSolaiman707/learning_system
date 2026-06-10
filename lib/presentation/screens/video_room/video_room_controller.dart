@@ -96,6 +96,9 @@ class VideoRoomController extends ChangeNotifier {
   int _unreadQuestionsCount = 0;
   int _unreadMessages = 0;
 
+  List<Map<String, dynamic>> _seats = [];
+  List<Map<String, dynamic>> get seats => _seats;
+
   final Map<String, bool> _remoteHandStates = {};
   final List<Map<String, dynamic>> _handRaiseQueue = [];
 
@@ -245,6 +248,7 @@ class VideoRoomController extends ChangeNotifier {
   void toggleParticipants() {
     _triggerHaptic();
     _isParticipantsOpen = !_isParticipantsOpen;
+    if (_isParticipantsOpen) refreshSeats();
     _isChatOpen = false;
     _isWhiteboardOpen = false;
     _isQAOpen = false;
@@ -322,11 +326,22 @@ class VideoRoomController extends ChangeNotifier {
 
     try {
       await _loadChatHistory();
+      await refreshSeats();
     } catch (e) {
-      debugPrint("Load chat history error: $e");
+      debugPrint("Load data error: $e");
     }
 
     await connectToRoom(roomName);
+  }
+
+  Future<void> refreshSeats() async {
+    if (sessionId == null) return;
+    try {
+      _seats = await DatabaseService().getSeats(sessionId!);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error refreshing seats: $e");
+    }
   }
 
   Future<void> _loadChatHistory() async {
@@ -515,6 +530,7 @@ class VideoRoomController extends ChangeNotifier {
         }
       })
       ..on<ParticipantConnectedEvent>((event) {
+        refreshSeats();
         notifyListeners();
       })
       ..on<ParticipantDisconnectedEvent>((event) {

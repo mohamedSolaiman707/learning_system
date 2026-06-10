@@ -62,46 +62,55 @@ class _TeacherMainLayoutState extends State<TeacherMainLayout> {
       body: Row(
         children: [
           if (!isMobile)
-            NavigationRail(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) {
-                setState(() => _selectedIndex = index);
-              },
-              extended: isDesktop,
-              labelType: isDesktop 
-                  ? NavigationRailLabelType.none 
-                  : NavigationRailLabelType.all,
-              leading: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 30),
-                child: CircleAvatar(
-                  backgroundColor: const Color(0xFF102A43).withOpacity(0.1),
-                  child: const Icon(Icons.school_rounded, color: Color(0xFF102A43)),
-                ),
-              ),
-              trailing: Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: isDesktop 
-                      ? ListTile(
-                          onTap: _launchSupport,
-                          leading: const Icon(Icons.support_agent_rounded, color: Color(0xFF486581)),
-                          title: const Text("الدعم الفني", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Color(0xFF486581))),
-                        )
-                      : IconButton(
-                          onPressed: _launchSupport,
-                          icon: const Icon(Icons.support_agent_rounded, color: Color(0xFF486581)),
-                          tooltip: "الدعم الفني",
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    child: IntrinsicHeight(
+                      child: NavigationRail(
+                        selectedIndex: _selectedIndex,
+                        onDestinationSelected: (index) {
+                          setState(() => _selectedIndex = index);
+                        },
+                        extended: isDesktop,
+                        labelType: isDesktop 
+                            ? NavigationRailLabelType.none 
+                            : NavigationRailLabelType.all,
+                        leading: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 30),
+                          child: CircleAvatar(
+                            backgroundColor: const Color(0xFF102A43).withOpacity(0.1),
+                            child: const Icon(Icons.school_rounded, color: Color(0xFF102A43)),
+                          ),
                         ),
+                        trailing: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: isDesktop 
+                            ? SizedBox(
+                                width: 250,
+                                child: ListTile(
+                                    onTap: _launchSupport,
+                                    leading: const Icon(Icons.support_agent_rounded, color: Color(0xFF486581)),
+                                    title: const Text("الدعم الفني", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Color(0xFF486581))),
+                                  ),
+                              )
+                            : IconButton(
+                                onPressed: _launchSupport,
+                                icon: const Icon(Icons.support_agent_rounded, color: Color(0xFF486581)),
+                                tooltip: "الدعم الفني",
+                              ),
+                        ),
+                        destinations: _destinations.map((d) => NavigationRailDestination(
+                          icon: d.icon,
+                          selectedIcon: d.selectedIcon,
+                          label: Text(d.label, style: const TextStyle(fontFamily: 'Cairo')),
+                        )).toList(),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              destinations: _destinations.map((d) => NavigationRailDestination(
-                icon: d.icon,
-                selectedIcon: d.selectedIcon,
-                label: Text(d.label, style: const TextStyle(fontFamily: 'Cairo')),
-              )).toList(),
+                );
+              }
             ),
           if (!isMobile) const VerticalDivider(thickness: 1, width: 1),
           Expanded(

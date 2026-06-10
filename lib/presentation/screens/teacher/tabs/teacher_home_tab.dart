@@ -349,7 +349,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                         const SizedBox(height: 16),
                         _buildNextSessionCard(isDesktop),
                       ],
-                      const SizedBox(height: 50),
+                      const SizedBox(height: 5),
                     ]),
                   ),
                 ),

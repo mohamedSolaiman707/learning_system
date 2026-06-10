@@ -5,8 +5,27 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../video_room_controller.dart';
 
-class ParticipantsPanel extends StatelessWidget {
+class ParticipantsPanel extends StatefulWidget {
   const ParticipantsPanel({super.key});
+
+  @override
+  State<ParticipantsPanel> createState() => _ParticipantsPanelState();
+}
+
+class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,23 +54,173 @@ class ParticipantsPanel extends StatelessWidget {
           children: [
             _buildHeader(controller, participants.length + (localParticipant != null ? 1 : 0)),
             
-            if (controller.isTeacher) _buildGlobalControls(controller),
-
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  if (controller.isTeacher) _buildWallControls(context, controller),
-                  if (localParticipant != null)
-                    _ParticipantTile(participant: localParticipant, controller: controller, isMe: true),
-                  const Divider(height: 32),
-                  ...participants.map((p) => _ParticipantTile(participant: p, controller: controller)),
+            if (controller.isTeacher) ...[
+              TabBar(
+                controller: _tabController,
+                labelColor: Colors.blue,
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: Colors.blue,
+                labelStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                tabs: const [
+                  Tab(text: "القائمة"),
+                  Tab(text: "توزيع المقاعد"),
                 ],
               ),
-            ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildParticipantsList(context, controller, localParticipant, participants),
+                    _buildSeatingGrid(context, controller),
+                  ],
+                ),
+              ),
+            ] else
+              Expanded(
+                child: _buildParticipantsList(context, controller, localParticipant, participants),
+              ),
+
             if (controller.isTeacher) _buildTeacherActions(context, controller),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildParticipantsList(BuildContext context, VideoRoomController controller, LocalParticipant? localParticipant, List<RemoteParticipant> participants) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      children: [
+        const SizedBox(height: 10),
+        if (controller.isTeacher) _buildWallControls(context, controller),
+        if (localParticipant != null)
+          _ParticipantTile(participant: localParticipant, controller: controller, isMe: true),
+        const Divider(height: 32),
+        ...participants.map((p) => _ParticipantTile(participant: p, controller: controller)),
+      ],
+    );
+  }
+
+  Widget _buildSeatingGrid(BuildContext context, VideoRoomController controller) {
+    final seats = controller.seats;
+    if (seats.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("سحب وإفلات الطالب لتغيير مكانه", 
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildZoneColumn(controller, "اليمين", "right"),
+              const SizedBox(width: 8),
+              _buildZoneColumn(controller, "الوسط", "center"),
+              const SizedBox(width: 8),
+              _buildZoneColumn(controller, "اليسار", "left"),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildZoneColumn(VideoRoomController controller, String label, String zoneKey) {
+    final zoneSeats = controller.seats.where((s) => s['zone'] == zoneKey).toList();
+    return Expanded(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          ),
+          const SizedBox(height: 12),
+          ...zoneSeats.map((seat) {
+            final int seatNum = seat['seat_number'];
+            final String? studentId = seat['student_id'];
+            final String? studentName = seat['student_name'];
+            final bool isOccupied = studentId != null && studentId.isNotEmpty;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: DragTarget<int>(
+                onWillAcceptWithDetails: (details) => details.data != seatNum,
+                onAcceptWithDetails: (details) {
+                  controller.moveSeat(details.data, seatNum);
+                },
+                builder: (context, candidateData, rejectedData) {
+                  final bool isCandidate = candidateData.isNotEmpty;
+                  
+                  Widget seatWidget = Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: isCandidate ? Colors.blue.withOpacity(0.2) : (isOccupied ? Colors.blue.withOpacity(0.05) : Colors.grey.withOpacity(0.05)),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isCandidate ? Colors.blue : (isOccupied ? Colors.blue.withOpacity(0.3) : Colors.grey.withOpacity(0.2)),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          isOccupied ? (studentName ?? "طالب") : "مقعد $seatNum",
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isOccupied ? Colors.black87 : Colors.grey,
+                            fontSize: 10,
+                            fontWeight: isOccupied ? FontWeight.bold : FontWeight.normal,
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        if (isOccupied)
+                          const Icon(Icons.drag_indicator, size: 14, color: Colors.blue),
+                      ],
+                    ),
+                  );
+
+                  if (isOccupied) {
+                    return Draggable<int>(
+                      data: seatNum,
+                      feedback: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          width: 100,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(studentName ?? "", 
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontFamily: 'Cairo')),
+                        ),
+                      ),
+                      childWhenDragging: Opacity(opacity: 0.3, child: seatWidget),
+                      child: seatWidget,
+                    );
+                  }
+
+                  return seatWidget;
+                },
+              ),
+            );
+          }).toList(),
+        ],
       ),
     );
   }
@@ -93,7 +262,6 @@ class ParticipantsPanel extends StatelessWidget {
   }
 
   Widget _buildZoneControl(BuildContext context, VideoRoomController controller, String zone, String label) {
-    // بناء الرابط بشكل صحيح للويب
     final String baseUrl = Uri.base.origin;
     final String wallUrl = "$baseUrl/#/wall-display?sessionId=${controller.sessionId}&zone=$zone&roomName=${controller.roomName}";
 
@@ -150,65 +318,6 @@ class ParticipantsPanel extends StatelessWidget {
               child: const Icon(Icons.close_rounded, color: Colors.black, size: 20)
             )
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGlobalControls(VideoRoomController controller) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 15),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildQuickToggle(
-            label: "كتم الجميع",
-            icon: Icons.mic_off,
-            color: Colors.green,
-            isActive: controller.isAllMuted,
-            onTap: () => controller.muteAllParticipants(!controller.isAllMuted),
-          ),
-          _buildQuickToggle(
-            label: "كاميرا الجميع",
-            icon: Icons.videocam_off,
-            color: Colors.green,
-            isActive: controller.isCamLocked,
-            onTap: () => controller.disableAllCameras(!controller.isCamLocked),
-          ),
-          _buildQuickToggle(
-            label: "قفل الشات",
-            icon: Icons.chat_bubble_outline,
-            color: Colors.green,
-            isActive: controller.isChatLocked,
-            onTap: controller.toggleChatLock,
-          ),
-          _buildQuickToggle(
-            label: "قفل السبورة",
-            icon: Icons.edit_note,
-            color: Colors.green,
-            isActive: controller.isWhiteboardLocked,
-            onTap: controller.toggleWhiteboardLock,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickToggle({required String label, required IconData icon, required Color color, required bool isActive, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isActive ? Colors.red.withOpacity(0.1) : color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: isActive ? Colors.red : color, size: 24),
-          ),
-          const SizedBox(height: 5),
-          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
         ],
       ),
     );

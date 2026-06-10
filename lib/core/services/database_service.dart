@@ -651,18 +651,54 @@ class DatabaseService {
   Future<void> assignSeat({
     required String sessionId,
     required int seatNumber,
-    required String studentId,
-    required String studentName,
+    required String? studentId,
+    required String? studentName,
   }) async {
     try {
       await _supabase
           .from('seats')
           .update({
-            'student_id': studentId,
-            'student_name': studentName,
+            'student_id': (studentId == null || studentId.isEmpty) ? null : studentId,
+            'student_name': (studentName == null || studentName.isEmpty) ? null : studentName,
           })
           .eq('session_id', sessionId)
           .eq('seat_number', seatNumber);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> moveStudentSeat({
+    required String sessionId,
+    required int fromSeat,
+    required int toSeat,
+  }) async {
+    try {
+      final seats = await getSeats(sessionId);
+      final sourceSeat = seats.firstWhere((s) => s['seat_number'] == fromSeat);
+      final targetSeat = seats.firstWhere((s) => s['seat_number'] == toSeat);
+
+      final studentId = sourceSeat['student_id'];
+      final studentName = sourceSeat['student_name'];
+
+      final targetStudentId = targetSeat['student_id'];
+      final targetStudentName = targetSeat['student_name'];
+
+      // Move source to target
+      await assignSeat(
+        sessionId: sessionId,
+        seatNumber: toSeat,
+        studentId: studentId,
+        studentName: studentName,
+      );
+
+      // Clear source or move target back (Swap)
+      await assignSeat(
+        sessionId: sessionId,
+        seatNumber: fromSeat,
+        studentId: targetStudentId,
+        studentName: targetStudentName,
+      );
     } catch (e) {
       rethrow;
     }

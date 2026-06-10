@@ -326,6 +326,10 @@ class VideoRoomController extends ChangeNotifier {
 
     try {
       await _loadChatHistory();
+      // تهيئة المقاعد إذا كان معلماً، ثم جلبها
+      if (isTeacher && sessionId != null) {
+        await DatabaseService().initializeSeats(sessionId!);
+      }
       await refreshSeats();
     } catch (e) {
       debugPrint("Load data error: $e");
@@ -341,6 +345,42 @@ class VideoRoomController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint("Error refreshing seats: $e");
+    }
+  }
+
+  Future<void> moveSeat(int fromSeat, int toSeat) async {
+    if (sessionId == null || !isTeacher) return;
+    _isProcessing = true;
+    notifyListeners();
+    try {
+      await DatabaseService().moveStudentSeat(
+        sessionId: sessionId!,
+        fromSeat: fromSeat,
+        toSeat: toSeat,
+      );
+      await refreshSeats();
+      onNotification?.call("تم تغيير ترتيب المقاعد بنجاح", Colors.green);
+    } catch (e) {
+      onNotification?.call("فشل في تغيير ترتيب المقاعد", Colors.red);
+    } finally {
+      _isProcessing = false;
+      notifyListeners();
+    }
+  }
+
+  // إخلاء مقعد (للمعلم أو الطالب لتغيير مكانه)
+  Future<void> clearSeat(int seatNumber) async {
+    if (sessionId == null) return;
+    try {
+      await DatabaseService().assignSeat(
+        sessionId: sessionId!,
+        seatNumber: seatNumber,
+        studentId: null,
+        studentName: null,
+      );
+      await refreshSeats();
+    } catch (e) {
+      debugPrint("Error clearing seat: $e");
     }
   }
 

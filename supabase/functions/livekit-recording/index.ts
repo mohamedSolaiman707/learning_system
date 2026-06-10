@@ -25,18 +25,22 @@ serve(async (req) => {
     const egressClient = new EgressClient(livekitUrl, apiKey, apiSecret)
     const supabase = createClient(supabaseUrl!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
-    if (action === 'start') {
-      // --- الحل الجذري لمنع التسجيلات المعلقة ---
-      // قبل بدء أي تسجيل جديد، نبحث عن أي تسجيل "نشط" قديم لنفس الغرفة ونغلقه
+    // --- 1. إجراء الـ Cleanup الجذري (قبل البدء أو عند الطلب) ---
+    const cleanupOrphanEgresses = async () => {
       try {
         const activeEgresses = await egressClient.listEgress({ roomName, active: true })
         for (const e of activeEgresses) {
           await egressClient.stopEgress(e.egressId)
-          console.log(`[CLEANUP] Stopped orphan egress for room ${roomName}: ${e.egressId}`)
+          console.log(`[RADICAL CLEANUP] Stopped orphan egress for ${roomName}: ${e.egressId}`)
         }
       } catch (e) {
-        console.warn('Cleanup check failed, proceeding anyway...', e.message)
+        console.error('Cleanup failed:', e.message)
       }
+    }
+
+    if (action === 'start') {
+      // تنظيف أي زبالة قديمة قبل ما نبدأ جديد
+      await cleanupOrphanEgresses()
 
       const filename = `rec_${sessionId}_${Date.now()}.mp4`
       const filepath = `recordings/${sessionId}/${filename}`
@@ -46,7 +50,7 @@ serve(async (req) => {
       const recorderToken = at.toJwt()
 
       const publicDomain = Deno.env.get('R2_PUBLIC_DOMAIN')?.replace(/\/$/, '') || ''
-      const rawVideoUrl = `${publicDomain}/${filepath}`
+      const finalVideoUrl = `${publicDomain}/${filepath}`
 
       const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}&access_token=${recorderToken}&room=${roomName}&sb_url=${encodeURIComponent(supabaseUrl!)}&sb_key=${encodeURIComponent(supabaseAnonKey!)}&session_id=${sessionId}`
 
@@ -73,29 +77,25 @@ serve(async (req) => {
         session_id: sessionId, 
         egress_id: info.egressId, 
         file_path: filepath, 
-        video_url: rawVideoUrl, // تم تصحيحه ليكون رابط الفيديو المباشر وليس رابط القالب
+        video_url: finalVideoUrl, // الرابط النهائي للرفع وليس القالب
         status: 'recording', 
         room_name: roomName
       })
       await supabase.from('sessions').update({ is_recording: true }).eq('id', sessionId)
 
-      return new Response(JSON.stringify({ success: true, egressId: info.egressId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ success: true, egressId: info.egressId }), { headers: corsHeaders })
     }
 
     if (action === 'stop') {
-      const active = await egressClient.listEgress({ roomName, active: true })
-      if (active.length > 0) {
-        for (const e of active) {
-          await egressClient.stopEgress(e.egressId)
-        }
-        await supabase.from('recordings').update({ status: 'processing' }).eq('room_name', roomName).eq('status', 'recording')
-      }
+      await cleanupOrphanEgresses()
+      await supabase.from('recordings').update({ status: 'processing' }).eq('room_name', roomName).eq('status', 'recording')
       await supabase.from('sessions').update({ is_recording: false, is_recording_paused: false }).eq('id', sessionId)
-      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ success: true }), { headers: corsHeaders })
     }
 
     return new Response(JSON.stringify({ error: 'Invalid action' }), { status: 400 })
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 })
+    console.error('Recording Error:', error.message)
+    return new Response(JSON.stringify({ error: error.message }), { headers: corsHeaders, status: 500 })
   }
 })

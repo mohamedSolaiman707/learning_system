@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:livekit_client/livekit_client.dart';
+import 'package:flutter/material.dart';import 'package:livekit_client/livekit_client.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/livekit_service.dart';
@@ -81,17 +80,17 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
         .stream(primaryKey: ['id'])
         .eq('session_id', widget.sessionId)
         .listen((data) {
-          if (mounted) {
-            setState(() {
-              _zoneStudentIds = data
-                  .where(
-                    (s) => s['zone'] == widget.zone && s['student_id'] != null,
-                  )
-                  .map((s) => s['student_id'] as String)
-                  .toList();
-            });
-          }
+      if (mounted) {
+        setState(() {
+          _zoneStudentIds = data
+              .where(
+                (s) => s['zone'] == widget.zone && s['student_id'] != null,
+          )
+              .map((s) => s['student_id'] as String)
+              .toList();
         });
+      }
+    });
 
     if (mounted) {
       setState(() => _isLoading = false);
@@ -152,130 +151,134 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
           ? const Center(child: CircularProgressIndicator(color: Colors.blue))
           : _room == null
           ? const Center(
-              child: Text(
-                "فشل الاتصال بالقاعة",
-                style: TextStyle(color: Colors.white, fontFamily: 'Cairo'),
-              ),
-            )
+        child: Text(
+          "فشل الاتصال بالقاعة",
+          style: TextStyle(color: Colors.white, fontFamily: 'Cairo'),
+        ),
+      )
           : ListenableBuilder(
-              listenable: _room!,
-              builder: (context, _) {
-                // تصفية المشاركين المنتمين لهذه المنطقة فقط
-                final participants = _room!.remoteParticipants.values.where((
-                  p,
-                ) {
-                  final cleanId = p.identity.split('_').first;
-                  return _zoneStudentIds.any(
-                    (id) => p.identity.contains(id) || cleanId == id,
-                  );
-                }).toList();
+        listenable: _room!,
+        builder: (context, _) {
+          // تصفية المشاركين المنتمين لهذه المنطقة فقط
+          final participants = _room!.remoteParticipants.values.where((
+              p,
+              ) {
+            final cleanId = p.identity.split('_').first;
+            return _zoneStudentIds.any(
+                  (id) => p.identity.contains(id) || cleanId == id,
+            );
+          }).toList();
 
-                // ترتيب المشاركين: الطالب المميز أولاً، ثم من يرفع يده
-                participants.sort((a, b) {
-                  if (a.identity == _spotlightUserId) return -1;
-                  if (b.identity == _spotlightUserId) return 1;
+          // الترتيب الاحترافي: المميز > من يرفع يده > المتحدث الآن > الترتيب الأبجدي
+          participants.sort((a, b) {
+            // 1. التمييز (Spotlight)
+            if (a.identity == _spotlightUserId) return -1;
+            if (b.identity == _spotlightUserId) return 1;
 
-                  bool handA = _handStates[a.identity] ?? false;
-                  bool handB = _handStates[b.identity] ?? false;
-                  if (handA && !handB) return -1;
-                  if (!handA && handB) return 1;
+            // 2. رفع اليد
+            bool handA = _handStates[a.identity] ?? false;
+            bool handB = _handStates[b.identity] ?? false;
+            if (handA && !handB) return -1;
+            if (!handA && handB) return 1;
 
-                  return 0;
-                });
+            // 3. من يتحدث الآن
+            if (a.isSpeaking && !b.isSpeaking) return -1;
+            if (!a.isSpeaking && b.isSpeaking) return 1;
 
-                if (participants.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.group_off_rounded,
-                          color: Colors.white24,
-                          size: 60,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          "لا يوجد طلاب في منطقة ${_getZoneArabicName(widget.zone)} حالياً",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontFamily: 'Cairo',
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
+            // 4. الاسم
+            return (a.name ?? "").compareTo(b.name ?? "");
+          });
+
+          if (participants.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.group_off_rounded,
+                    color: Colors.white24,
+                    size: 60,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "لا يوجد طلاب في منطقة ${_getZoneArabicName(widget.zone)} حالياً",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'Cairo',
+                      fontSize: 18,
                     ),
-                  );
-                }
+                  ),
+                ],
+              ),
+            );
+          }
 
-                return Column(
+          return Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 20,
+                ),
+                color: Colors.blue.withOpacity(0.1),
+                child: Row(
                   children: [
-                    // شريط علوي يوضح المنطقة وحالة الاتصال
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 10,
-                        horizontal: 20,
-                      ),
-                      color: Colors.blue.withOpacity(0.1),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.tv_rounded,
-                            color: Colors.blue,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            "عرض المنطقة: ${_getZoneArabicName(widget.zone)}",
-                            style: const TextStyle(
-                              color: Colors.blue,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'Cairo',
-                              fontSize: 14,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            "${participants.length} طلاب متصلين في هذه الجهة",
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                              fontFamily: 'Cairo',
-                            ),
-                          ),
-                        ],
+                    const Icon(
+                      Icons.tv_rounded,
+                      color: Colors.blue,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      "عرض المنطقة: ${_getZoneArabicName(widget.zone)}",
+                      style: const TextStyle(
+                        color: Colors.blue,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Cairo',
+                        fontSize: 14,
                       ),
                     ),
-                    Expanded(
-                      child: GridView.builder(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              crossAxisSpacing: 10,
-                              mainAxisSpacing: 10,
-                              childAspectRatio: 16 / 9,
-                            ),
-                        padding: const EdgeInsets.all(12),
-                        itemCount: participants.length,
-                        itemBuilder: (context, i) {
-                          final p = participants[i];
-                          final isSpotlight = p.identity == _spotlightUserId;
-
-                          return ParticipantTile(
-                            key: ValueKey(p.identity),
-                            participant: p,
-                            isMainStage:
-                                isSpotlight, // تكبير الصورة إذا كان مميزاً
-                            forceHandRaised:
-                                _handStates[p
-                                    .identity], // تمرير حالة رفع اليد يدوياً
-                          );
-                        },
+                    const Spacer(),
+                    Text(
+                      "${participants.length} طلاب متصلين",
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                        fontFamily: 'Cairo',
                       ),
                     ),
                   ],
-                );
-              },
-            ),
+                ),
+              ),
+              Expanded(
+                child: GridView.builder(
+                  gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 16 / 9,
+                  ),
+                  padding: const EdgeInsets.all(12),
+                  itemCount: participants.length,
+                  itemBuilder: (context, i) {
+                    final p = participants[i];
+                    final isSpotlight = p.identity == _spotlightUserId;
+
+                    return ParticipantTile(
+                      key: ValueKey(p.identity),
+                      participant: p,
+                      isMainStage: isSpotlight,
+                      forceHandRaised: _handStates[p.identity],
+                      forceShowScreen: false, // دائماً نعرض وجه الطالب على شاشة الحائط
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

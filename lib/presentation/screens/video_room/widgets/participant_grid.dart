@@ -33,24 +33,17 @@ class ParticipantGrid extends StatelessWidget {
               return const Center(child: Text("في انتظار دخول المشاركين...", style: TextStyle(color: Colors.white70, fontFamily: 'Cairo')));
             }
 
-            // 1. فحص وجود مشاركة شاشة (Screen Share) في القاعة
             Participant? screenSharingParticipant;
             try {
               screenSharingParticipant = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
             } catch (_) {}
 
-            // -------------------------------------------------------
-            // منطق الطالب (Student Logic)
-            // -------------------------------------------------------
             if (!isTeacher) {
-              // البحث عن تراك القناة المختارة (كاميرا اليمين، اليسار، إلخ)
               final channelParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
 
               if (screenSharingParticipant != null) {
-                // حالة هجينة: مشاركة شاشة + كاميرا القاعة المختارة
                 return _buildHybridStudentLayout(context, screenSharingParticipant, channelParticipant);
               } else {
-                // الحالة العادية: عرض القناة المختارة فقط ملء الشاشة
                 if (channelParticipant != null) {
                   return ParticipantTile(
                     key: ValueKey("channel_${channelParticipant.identity}"), 
@@ -63,9 +56,6 @@ class ParticipantGrid extends StatelessWidget {
               }
             }
 
-            // -------------------------------------------------------
-            // منطق المعلم (Teacher Logic)
-            // -------------------------------------------------------
             final bool isDesktop = Responsive.isDesktop(context);
 
             if (controller.isVideoWallMode) {
@@ -106,13 +96,11 @@ class ParticipantGrid extends StatelessWidget {
     );
   }
 
-  // تخطيط هجين للطالب: يرى الشاشة كبيرة والكاميرا صغيرة
   Widget _buildHybridStudentLayout(BuildContext context, Participant screenPart, Participant? camPart) {
     final bool isDesktop = Responsive.isDesktop(context);
     
     return Stack(
       children: [
-        // 1. الشاشة المشتركة (كبيرة)
         Positioned.fill(
           child: ParticipantTile(
             key: ValueKey("student_main_screen_${screenPart.identity}"),
@@ -122,7 +110,6 @@ class ParticipantGrid extends StatelessWidget {
           ),
         ),
         
-        // 2. كاميرا القاعة (نافذة عائمة صغيرة)
         if (camPart != null)
           Positioned(
             top: isDesktop ? 40 : 20,
@@ -140,7 +127,7 @@ class ParticipantGrid extends StatelessWidget {
                   key: ValueKey("student_side_cam_${camPart.identity}"),
                   participant: camPart,
                   isMainStage: false,
-                  forceShowScreen: false, // إجبار عرض الكاميرا
+                  forceShowScreen: false,
                 ),
               ),
             ),
@@ -259,12 +246,17 @@ class ParticipantTile extends StatelessWidget {
       } catch (_) {}
     }
 
+    final isSpotlighted = context.select<VideoRoomController, bool>(
+      (c) => c.spotlightUserId == participant.identity,
+    );
+
     return ListenableBuilder(
       listenable: participant,
       builder: (context, _) {
         final bool isMe = participant is LocalParticipant;
         final bool isTeacher = participant.identity.toLowerCase().contains('teacher');
         final bool isRoomCam = participant.identity.contains('roomcam_');
+        final bool isSpeaking = participant.isSpeaking;
 
         String displayName = participant.name ?? "";
         if (displayName.isEmpty) {
@@ -298,32 +290,62 @@ class ParticipantTile extends StatelessWidget {
 
         final bool hasVideo = activeVideoTrack != null && (isScreen || participant.isCameraEnabled());
 
-        return Container(
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 500),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(isMainStage ? 20 : 12),
             color: const Color(0xFF1A1B1F),
             border: Border.all(
-              color: participant.isSpeaking ? Colors.greenAccent : Colors.white.withOpacity(0.05),
-              width: participant.isSpeaking ? 3 : 1,
+              color: isSpotlighted 
+                  ? Colors.amber 
+                  : (isSpeaking ? Colors.greenAccent : Colors.white.withOpacity(0.05)),
+              width: (isSpotlighted || isSpeaking) ? 3 : 1,
             ),
-            boxShadow: [if (participant.isSpeaking) BoxShadow(color: Colors.greenAccent.withOpacity(0.2), blurRadius: 15)],
+            boxShadow: [
+              if (isSpeaking) BoxShadow(color: Colors.greenAccent.withOpacity(0.2), blurRadius: 15),
+              if (isSpotlighted) BoxShadow(color: Colors.amber.withOpacity(0.3), blurRadius: 20),
+            ],
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
               Positioned.fill(
-                child: hasVideo
-                    ? (isScreen || !isMainStage
-                        ? VideoTrackRenderer(activeVideoTrack, fit: VideoViewFit.contain)
-                        : Stack(
-                            children: [
-                              Positioned.fill(child: ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), child: VideoTrackRenderer(activeVideoTrack, fit: VideoViewFit.cover))),
-                              Positioned.fill(child: VideoTrackRenderer(activeVideoTrack!, fit: VideoViewFit.contain)),
-                            ],
-                          ))
-                    : _buildAvatar(displayName, isMainStage),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 500),
+                  child: hasVideo
+                      ? (isScreen || !isMainStage
+                          ? VideoTrackRenderer(activeVideoTrack, fit: VideoViewFit.contain, key: ValueKey(activeVideoTrack!.sid))
+                          : Stack(
+                              key: ValueKey(activeVideoTrack!.sid),
+                              children: [
+                                Positioned.fill(child: ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), child: VideoTrackRenderer(activeVideoTrack, fit: VideoViewFit.cover))),
+                                Positioned.fill(child: VideoTrackRenderer(activeVideoTrack!, fit: VideoViewFit.contain)),
+                              ],
+                            ))
+                      : _buildAvatar(displayName, isMainStage),
+                ),
               ),
+
+              // Cinematic Spotlight Overlay
+              if (isSpotlighted)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.amber.withOpacity(0.1),
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.4),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
               Positioned(bottom: 10, left: 10, child: _buildNameLabel(displayName, isMe, participant.isMicrophoneEnabled(), isScreen)),
+              
               Positioned(
                 top: 10,
                 right: 10,
@@ -332,12 +354,23 @@ class ParticipantTile extends StatelessWidget {
                   children: [
                     if (isHandRaised) _buildCircleIcon(Icons.front_hand, Colors.orange),
                     if (isHandRaised) const SizedBox(width: 8),
+                    if (isSpotlighted) _buildBadge("مشاركة مميزة", Colors.amber.shade700, Icons.star),
+                    if (isSpotlighted) const SizedBox(width: 8),
                     if (isRoomCam) _buildBadge("كاميرا القاعة", Colors.teal, Icons.videocam)
                     else if (isTeacher) _buildBadge(isScreen ? "شاشة المعلم" : "المعلم", Colors.blueAccent, isScreen ? Icons.desktop_windows : Icons.school),
                   ],
                 ),
               ),
-              if (participant.isSpeaking) Positioned(top: 0, left: 0, right: 0, child: Container(height: 3, color: Colors.greenAccent)),
+
+              // Audio Visualizer for speaking
+              if (isSpeaking && !isScreen)
+                Positioned(
+                  bottom: 10,
+                  right: 10,
+                  child: _AudioVisualizer(),
+                ),
+
+              if (isSpeaking) Positioned(top: 0, left: 0, right: 0, child: Container(height: 3, color: Colors.greenAccent)),
             ],
           ),
         );
@@ -399,5 +432,50 @@ class ParticipantTile extends StatelessWidget {
 
   Widget _buildCircleIcon(IconData icon, Color color) {
     return Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: color, shape: BoxShape.circle), child: Icon(icon, color: Colors.white, size: 12));
+  }
+}
+
+class _AudioVisualizer extends StatefulWidget {
+  @override
+  State<_AudioVisualizer> createState() => _AudioVisualizerState();
+}
+
+class _AudioVisualizerState extends State<_AudioVisualizer> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  final List<double> _heights = [0.2, 0.8, 0.4, 0.7, 0.3];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 500))..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(_heights.length, (index) {
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 1),
+              width: 2,
+              height: 12 * (_heights[index] * _controller.value + 0.2),
+              decoration: BoxDecoration(
+                color: Colors.greenAccent,
+                borderRadius: BorderRadius.circular(1),
+              ),
+            );
+          }),
+        );
+      },
+    );
   }
 }

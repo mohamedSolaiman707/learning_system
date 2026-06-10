@@ -150,7 +150,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             return _buildLoadingState();
           }
 
-          // تحديد ما إذا كان الشريط الجانبي مفتوحاً
           final bool isSidebarOpen = controller.isChatOpen || controller.isQAOpen || controller.isParticipantsOpen || controller.isPollsOpen;
 
           return ShowCaseWidget(
@@ -158,7 +157,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               children: [
                 Row(
                   children: [
-                    // المنطقة الرئيسية للفيديو
                     Expanded(
                       child: Stack(
                         children: [
@@ -170,12 +168,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                             ),
                           ),
 
-                          // الهيدر الاحترافي
                           Positioned(top: 0, left: 0, right: 0, child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _buildHeader(context, controller),
                               if (!widget.isTeacher) _buildChannelSelector(controller, isDesktop),
+                              if (widget.isTeacher && isDesktop) _buildTeacherHUD(controller),
                             ],
                           )),
 
@@ -186,7 +184,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
                           ..._reactions,
 
-                          // شريط التحكم العائم
                           Align(
                             alignment: Alignment.bottomCenter,
                             child: Padding(
@@ -203,7 +200,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       ),
                     ),
 
-                    // الشريط الجانبي المدمج (للمتصفح والديسكتوب)
                     if (isDesktop)
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
@@ -214,7 +210,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   ],
                 ),
 
-                // Panels للموبايل فقط
                 if (!isDesktop) ...[
                   if (controller.isChatOpen) _buildFeaturePanel(const ChatPanel(), size),
                   if (controller.isQAOpen) _buildFeaturePanel(const QAPanel(), size),
@@ -231,6 +226,44 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildTeacherHUD(VideoRoomController controller) {
+    final score = controller.engagementScore;
+    final handsCount = controller.handRaiseQueue.length;
+    final questionsCount = controller.unreadQuestionsCount;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _HUDMetric(
+            label: "تفاعل الفصل",
+            value: "${score.toInt()}%",
+            icon: Icons.auto_graph_rounded,
+            color: score > 70 ? Colors.greenAccent : (score > 30 ? Colors.orangeAccent : Colors.redAccent),
+            progress: score / 100,
+          ),
+          const SizedBox(width: 15),
+          _HUDMetric(
+            label: "طلبات مشاركة",
+            value: handsCount.toString(),
+            icon: Icons.front_hand_rounded,
+            color: Colors.amberAccent,
+            pulse: handsCount > 0,
+          ),
+          const SizedBox(width: 15),
+          _HUDMetric(
+            label: "أسئلة جديدة",
+            value: questionsCount.toString(),
+            icon: Icons.help_center_rounded,
+            color: Colors.blueAccent,
+            pulse: questionsCount > 0,
+          ),
+        ],
       ),
     );
   }
@@ -527,6 +560,99 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         ),
         child: ClipRRect(borderRadius: BorderRadius.circular(30), child: child),
       ),
+    );
+  }
+}
+
+class _HUDMetric extends StatefulWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+  final double? progress;
+  final bool pulse;
+
+  const _HUDMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+    this.progress,
+    this.pulse = false,
+  });
+
+  @override
+  State<_HUDMetric> createState() => _HUDMetricState();
+}
+
+class _HUDMetricState extends State<_HUDMetric> with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000));
+    if (widget.pulse) _pulseController.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(_HUDMetric oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pulse && !_pulseController.isAnimating) _pulseController.repeat(reverse: true);
+    if (!widget.pulse && _pulseController.isAnimating) _pulseController.stop();
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, child) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: widget.pulse 
+                  ? widget.color.withOpacity(0.3 + (_pulseController.value * 0.4)) 
+                  : Colors.white.withOpacity(0.1),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              if (widget.progress != null)
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    value: widget.progress,
+                    strokeWidth: 3,
+                    backgroundColor: widget.color.withOpacity(0.2),
+                    valueColor: AlwaysStoppedAnimation<Color>(widget.color),
+                  ),
+                )
+              else
+                Icon(widget.icon, color: widget.color, size: 18),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(widget.label, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 9, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                  Text(widget.value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

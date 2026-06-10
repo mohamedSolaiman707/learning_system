@@ -113,6 +113,18 @@ class VideoRoomController extends ChangeNotifier {
   String _selectedChannel = "room-cam-right";
   String get selectedChannel => _selectedChannel;
 
+  // منطق التفاعل الذكي (Engagement Logic)
+  double get engagementScore {
+    if (_room == null || _room!.remoteParticipants.isEmpty) return 0.0;
+    int totalParticipants = _room!.remoteParticipants.length;
+    int activeParticipants = _handRaiseQueue.length + 
+                             (_activePoll != null ? _pollResults.values.fold(0, (a, b) => a + b) : 0) +
+                             _questions.where((q) => q['created_at'] != null).length;
+    
+    double score = (activeParticipants / totalParticipants) * 100;
+    return score.clamp(0.0, 100.0);
+  }
+
   void selectChannel(String trackName) {
     _selectedChannel = trackName;
     notifyListeners();
@@ -326,7 +338,6 @@ class VideoRoomController extends ChangeNotifier {
 
     try {
       await _loadChatHistory();
-      // تهيئة المقاعد إذا كان معلماً، ثم جلبها
       if (isTeacher && sessionId != null) {
         await DatabaseService().initializeSeats(sessionId!);
       }
@@ -368,7 +379,6 @@ class VideoRoomController extends ChangeNotifier {
     }
   }
 
-  // إخلاء مقعد (للمعلم أو الطالب لتغيير مكانه)
   Future<void> clearSeat(int seatNumber) async {
     if (sessionId == null) return;
     try {

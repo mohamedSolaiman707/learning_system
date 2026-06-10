@@ -82,93 +82,6 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
     }
   }
 
-  void _showJoinCodeDialog() {
-    final codeController = TextEditingController();
-    bool isSubmitting = false;
-    final bool isDesktop = Responsive.isDesktop(context);
-
-    showDialog(
-      context: context,
-      builder: (context) => Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isDesktop ? 500 : double.infinity),
-          child: StatefulBuilder(
-            builder: (context, setDialogState) => AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              title: const Text("انضمام لحصة جديدة", textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    "أدخل كود الحصة المكون من 6 أرقام أو حروف",
-                    style: TextStyle(fontSize: 14, color: Colors.grey, fontFamily: 'Cairo'),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: codeController,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: 6, color: Color(0xFF102A43)),
-                    decoration: InputDecoration(
-                      hintText: "ABC123",
-                      hintStyle: TextStyle(color: Colors.grey.shade300, letterSpacing: 6),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 20),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF102A43), width: 1.5)),
-                    ),
-                    textCapitalization: TextCapitalization.characters,
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo', color: Colors.grey)),
-                ),
-                ElevatedButton(
-                  onPressed: isSubmitting
-                      ? null
-                      : () async {
-                          if (codeController.text.isEmpty) return;
-                          setDialogState(() => isSubmitting = true);
-                          try {
-                            final auth = Provider.of<AuthProvider>(context, listen: false);
-                            final db = Provider.of<DatabaseService>(context, listen: false);
-                            await db.enrollStudentByCode(auth.user!.id, codeController.text.trim().toUpperCase());
-                            if (mounted) {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("تمت الإضافة لجدولك بنجاح ✅", style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green),
-                              );
-                              _loadSchedule(initial: true);
-                            }
-                          } catch (e) {
-                            setDialogState(() => isSubmitting = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(e.toString().replaceAll("Exception: ", ""), style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red),
-                            );
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF102A43),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                  child: isSubmitting
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text("انضمام الآن", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   List<SessionModel> _getSessionsForDay(DateTime day) {
     return _allSessions.where((s) => isSameDay(s.startTime, day)).toList();
   }
@@ -181,9 +94,8 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
         title: const Text("الجدول الدراسي", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 18, color: Color(0xFF102A43))),
         backgroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          IconButton(onPressed: _showJoinCodeDialog, icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF102A43), size: 28)),
-          const SizedBox(width: 10),
+        actions: const [
+           SizedBox(width: 10),
         ],
       ),
       body: Center(
@@ -291,19 +203,6 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
             ),
             const SizedBox(height: 24),
             const Text("لا توجد حصص مجدولة لهذا اليوم", style: TextStyle(color: Colors.grey, fontSize: 16, fontFamily: 'Cairo')),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _showJoinCodeDialog,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text("انضم لحصة جديدة", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF102A43).withOpacity(0.05),
-                foregroundColor: const Color(0xFF102A43),
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
           ],
         ),
       );
@@ -327,40 +226,50 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
               BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5)),
             ],
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(20),
-            leading: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: (isLive ? Colors.red : Colors.blue).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(isLive ? Icons.sensors_rounded : Icons.menu_book_rounded, color: isLive ? Colors.red : Colors.blue, size: 28),
-            ),
-            title: Text(session.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, fontFamily: 'Cairo', color: Color(0xFF102A43))),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
               children: [
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.person_outline_rounded, size: 14, color: Colors.grey),
-                    const SizedBox(width: 6),
-                    Text("أ. ${session.teacherName}", style: const TextStyle(fontSize: 13, fontFamily: 'Cairo', color: Colors.grey)),
-                  ],
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: (isLive ? Colors.red : Colors.blue).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(isLive ? Icons.sensors_rounded : Icons.menu_book_rounded, color: isLive ? Colors.red : Colors.blue, size: 28),
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time_rounded, size: 14, color: Colors.grey),
-                    const SizedBox(width: 6),
-                    Text(_formatTimeArabic(session.startTime), style: const TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'Cairo')),
-                  ],
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        session.subjectName, 
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, fontFamily: 'Cairo', color: Color(0xFF102A43)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.person_outline_rounded, size: 14, color: Colors.grey),
+                          const SizedBox(width: 6),
+                          Text("أ. ${session.teacherName}", style: const TextStyle(fontSize: 13, fontFamily: 'Cairo', color: Colors.grey)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time_rounded, size: 14, color: Colors.grey),
+                          const SizedBox(width: 6),
+                          Text(_formatTimeArabic(session.startTime), style: const TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'Cairo')),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-            trailing: isLive
-                ? ElevatedButton(
+                if (isLive)
+                  ElevatedButton(
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -395,11 +304,14 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                     ),
                     child: const Text("دخول الآن", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                   )
-                : Container(
+                else
+                  Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(color: Colors.grey.shade50, shape: BoxShape.circle),
                     child: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
                   ),
+              ],
+            ),
           ),
         );
       },

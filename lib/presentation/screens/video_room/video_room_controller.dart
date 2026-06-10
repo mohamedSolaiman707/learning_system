@@ -408,7 +408,7 @@ class VideoRoomController extends ChangeNotifier {
       _setupEventListeners();
 
       await _room!.connect(
-        'wss://wss://learning-system-academy-axo5qepz.livekit.cloud',
+        'wss://learning-system-academy-axo5qepz.livekit.cloud',
         token,
       );
 

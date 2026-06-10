@@ -82,48 +82,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
-  Future<void> _createInstantLive() async {
-    HapticFeedback.heavyImpact();
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    final db = Provider.of<DatabaseService>(context, listen: false);
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.blue)),
-    );
-
-    try {
-      final now = DateTime.now().toUtc();
-      final String teacherName = auth.profile?['full_name'] ?? "المدرس";
-
-      final sessionData = {
-        'subject_name': "بث مباشر سريع - ${intl.DateFormat('jm').format(DateTime.now())}",
-        'teacher_id': auth.user!.id,
-        'start_time': now.toIso8601String(),
-        'end_time': now.add(const Duration(hours: 1)).toIso8601String(),
-        'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString(),
-        'status': 'active',
-        'is_recording_enabled': true,
-      };
-
-      final newSessionMap = await db.saveSession(sessionData);
-
-      if (newSessionMap != null) {
-        final newSession = SessionModel.fromMap(newSessionMap);
-        await db.toggleRoomStatus(newSession.id, true);
-
-        if (!mounted) return;
-        Navigator.pop(context); 
-
-        _navigateToLive(newSession, teacherName);
-      }
-    } catch (e) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل بدء البث السريع")));
-    }
-  }
-
   void _navigateToLive(SessionModel session, String teacherName) {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     Navigator.push(context, MaterialPageRoute(
@@ -254,47 +212,24 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
           ],
         ),
       ),
-      actions: [
-        _buildHeaderAction(Icons.bolt_rounded, Colors.red, "بث سريع", _createInstantLive),
-        _buildHeaderAction(Icons.add_rounded, Colors.blue, "جدولة حصة", _showAddSessionDialog),
-        const SizedBox(width: 20),
-      ],
-    );
-  }
-
-  Widget _buildHeaderAction(IconData icon, Color color, String tooltip, VoidCallback onTap) {
-    return Tooltip(
-      message: tooltip,
-      child: IconButton(
-        onPressed: onTap,
-        icon: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-          child: Icon(icon, color: color, size: 22),
-        ),
-      ),
     );
   }
 
   Widget _buildStatsOverview(bool isDesktop, bool isTablet) {
     int crossAxisCount = isDesktop ? 3 : (isTablet ? 2 : 2);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: crossAxisCount,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: isDesktop ? 2.5 : 1.6,
-          children: [
-            TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: Icons.people_outline_rounded, color: Colors.blue),
-            TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: Icons.videocam_outlined, color: Colors.orange),
-            if (isDesktop || isTablet)
-              const TeacherStatCard(title: "متصل الآن", value: "3", icon: Icons.online_prediction, color: Colors.green),
-          ],
-        );
-      }
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: crossAxisCount,
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      childAspectRatio: isDesktop ? 2.5 : 1.1, // تعديل الـ Ratio هنا ليعطي طول أكثر
+      children: [
+        TeacherStatCard(title: "الطلاب", value: _totalStudents.toString(), icon: Icons.people_outline_rounded, color: Colors.blue),
+        TeacherStatCard(title: "حصص اليوم", value: _sessions.length.toString(), icon: Icons.videocam_outlined, color: Colors.orange),
+        if (isDesktop || isTablet)
+          const TeacherStatCard(title: "متصل الآن", value: "3", icon: Icons.online_prediction, color: Colors.green),
+      ],
     );
   }
 
@@ -311,10 +246,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
           children: [
             _buildActiveInfo(isDesktop),
             const Spacer(),
-            SizedBox(
-              width: 250,
-              child: _buildEnterButton(teacherName),
-            )
+            SizedBox(width: 200, child: _buildEnterButton(teacherName))
           ],
         )
       : Column(
@@ -329,7 +261,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
 
   Widget _buildActiveInfo(bool isDesktop) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         CircleAvatar(
             backgroundColor: Colors.white24,
@@ -354,11 +285,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.white,
         foregroundColor: Colors.red.shade700,
-        minimumSize: const Size(double.infinity, 54),
+        minimumSize: const Size(double.infinity, 50),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 0,
       ),
-      child: const Text("دخول البث المباشر", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      child: const Text("دخول البث"),
     );
   }
 
@@ -385,17 +315,15 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   Widget _buildActionButton(String label, IconData icon, Color color, String type) {
     return InkWell(
       onTap: () => _handleQuickAction(type),
-      borderRadius: BorderRadius.circular(12),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
             child: Icon(icon, color: color, size: 26),
           ),
-          const SizedBox(height: 10),
-          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -404,12 +332,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   Widget _buildNextSessionCard(bool isDesktop) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white, 
-        borderRadius: BorderRadius.circular(20), 
-        border: Border.all(color: Colors.grey.shade100),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 10)]
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade100)),
       child: Row(
         children: [
           Container(
@@ -427,7 +350,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
               ],
             ),
           ),
-          const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
         ],
       ),
     );
@@ -452,10 +374,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       Navigator.push(context, MaterialPageRoute(builder: (context) => const TeacherReportsScreen()));
       return;
     }
-    if (_sessions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("لا توجد حصص مسجلة")));
-      return;
-    }
     _showSessionPicker(type);
   }
 
@@ -464,7 +382,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        constraints: const BoxConstraints(maxWidth: 600),
         decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -472,26 +389,17 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
           children: [
             const Text("اختر الحصة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _sessions.length,
-                itemBuilder: (context, i) => Card(
-                  elevation: 0,
-                  color: Colors.grey.shade50,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(_sessions[i].subjectName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(intl.DateFormat('yyyy/MM/dd').format(_sessions[i].startTime)),
-                    trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
-                    onTap: () {
-                      Navigator.pop(context);
-                      if (type == 'attendance') {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: _sessions[i].id, subjectName: _sessions[i].subjectName)));
-                      }
-                    },
-                  ),
-                ),
+            ListView.builder(
+              shrinkWrap: true,
+              itemCount: _sessions.length,
+              itemBuilder: (context, i) => ListTile(
+                title: Text(_sessions[i].subjectName),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (type == 'attendance') {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: _sessions[i].id, subjectName: _sessions[i].subjectName)));
+                  }
+                },
               ),
             ),
           ],
@@ -500,56 +408,5 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     );
   }
 
-  void _showAddSessionDialog() {
-    final nameController = TextEditingController();
-    DateTime startDate = DateTime.now();
-
-    showDialog(
-      context: context,
-      builder: (context) => Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 500),
-          child: AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text("إضافة حصة جديدة"),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: nameController, decoration: const InputDecoration(labelText: "اسم المادة", border: OutlineInputBorder())),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final d = await showDatePicker(context: context, initialDate: startDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 30)));
-                    if (d != null) startDate = d;
-                  },
-                  icon: const Icon(Icons.calendar_today),
-                  label: const Text("اختر تاريخ الحصة"),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
-              ElevatedButton(
-                onPressed: () async {
-                  if (nameController.text.isEmpty) return;
-                  final db = Provider.of<DatabaseService>(context, listen: false);
-                  final auth = Provider.of<AuthProvider>(context, listen: false);
-                  await db.saveSession({
-                    'subject_name': nameController.text,
-                    'teacher_id': auth.user!.id,
-                    'start_time': startDate.toIso8601String(),
-                    'end_time': startDate.add(const Duration(hours: 1)).toIso8601String(),
-                    'status': 'waiting',
-                  });
-                  Navigator.pop(context);
-                  _loadData();
-                },
-                child: const Text("حفظ الحصة"),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  void _showAddSessionDialog() {}
 }

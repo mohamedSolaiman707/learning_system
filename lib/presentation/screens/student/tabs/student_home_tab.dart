@@ -362,8 +362,9 @@ class _StudentHomeTabState extends State<StudentHomeTab>
           return GestureDetector(
             onTap: () async {
               final url = Uri.parse(rec['video_url'] ?? '');
-              if (await canLaunchUrl(url))
+              if (await canLaunchUrl(url)) {
                 await launchUrl(url, mode: LaunchMode.externalApplication);
+              }
             },
             child: Container(
               width: 240,

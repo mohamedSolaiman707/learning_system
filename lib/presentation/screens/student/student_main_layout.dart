@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:showcaseview/showcaseview.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/utils/responsive.dart';
 import 'tabs/student_home_tab.dart';
@@ -185,9 +186,16 @@ class _StudentMainContentState extends State<StudentMainContent> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: InkWell(
-          onTap: () {
+          onTap: () async {
             if (index == 99) {
-               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("جاري تحويلك للدعم الفني...")));
+               final Uri whatsappUri = Uri.parse("https://wa.me/201014250577");
+               if (await canLaunchUrl(whatsappUri)) {
+                 await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+               } else {
+                 if (context.mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تعذر فتح واتساب")));
+                 }
+               }
             } else {
               setState(() => _selectedIndex = index);
             }

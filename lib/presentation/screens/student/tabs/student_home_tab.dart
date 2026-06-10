@@ -432,7 +432,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                       SliverToBoxAdapter(
                         child: Center(
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1200),
+                            constraints: const BoxConstraints(maxWidth: 1400),
                             child: Padding(
                               padding: EdgeInsets.symmetric(
                                 horizontal: isDesktop ? 40 : 20,
@@ -548,7 +548,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                 await launchUrl(url, mode: LaunchMode.externalApplication);
             },
             child: Container(
-              width: 240,
+              width: 280,
               margin: const EdgeInsets.only(left: 16),
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -676,6 +676,42 @@ class _StudentHomeTabState extends State<StudentHomeTab>
   }
 
   Widget _buildHorizontalStats() {
+    final bool isDesktop = Responsive.isDesktop(context);
+    final bool isTablet = Responsive.isTablet(context);
+
+    if (isDesktop || isTablet) {
+      return Row(
+        children: [
+          Expanded(
+            child: _buildStatCard(
+              "ساعات التعلم",
+              _stats['learningHours'].toString(),
+              Icons.timer_outlined,
+              Colors.blue,
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: _buildStatCard(
+              "النقاط المكتسبة",
+              _stats['points'].toString(),
+              Icons.stars_rounded,
+              Colors.orange,
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: _buildStatCard(
+              "الحصص المكتملة",
+              _stats['completedSessions'].toString(),
+              Icons.check_circle_outline,
+              Colors.green,
+            ),
+          ),
+        ],
+      );
+    }
+
     return Wrap(
       spacing: 20,
       runSpacing: 20,
@@ -710,8 +746,8 @@ class _StudentHomeTabState extends State<StudentHomeTab>
   ) {
     final isMobile = Responsive.isMobile(context);
     return Container(
-      width: isMobile ? double.infinity : 250,
-      padding: const EdgeInsets.all(20),
+      width: isMobile ? double.infinity : null,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -862,7 +898,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
         itemBuilder: (context, index) {
           final session = _allActiveSessions[index];
           return Container(
-            width: 300,
+            width: 320,
             margin: const EdgeInsets.only(left: 16),
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -913,6 +949,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
 
   Widget _buildSectionHeader(String title, {bool isLive = false}) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           title,
@@ -922,8 +959,8 @@ class _StudentHomeTabState extends State<StudentHomeTab>
             color: Color(0xFF102A43),
           ),
         ),
-        const Spacer(),
-        if (isLive)
+        if (isLive) ...[
+          const SizedBox(width: 12),
           FadeTransition(
             opacity: _liveController,
             child: Container(
@@ -938,6 +975,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
               ),
             ),
           ),
+        ],
       ],
     );
   }

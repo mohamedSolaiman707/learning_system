@@ -143,7 +143,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       body: Consumer<VideoRoomController>(
         builder: (context, controller, child) {
           if (controller.errorMessage != null) {
-            return _buildErrorState(controller);
+            return _buildErrorState(controller, isDesktop);
           }
 
           if (controller.isLoading) {
@@ -246,20 +246,38 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
-  Widget _buildErrorState(VideoRoomController controller) {
+  Widget _buildErrorState(VideoRoomController controller, bool isDesktop) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, color: Colors.red, size: 60),
-          const SizedBox(height: 16),
-          Text(controller.errorMessage!, style: const TextStyle(color: Colors.white, fontFamily: 'Cairo')),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () => controller.init(),
-            child: const Text("إعادة المحاولة"),
-          ),
-        ],
+      child: Container(
+        constraints: BoxConstraints(maxWidth: isDesktop ? 500 : double.infinity),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.redAccent, size: 80),
+            const SizedBox(height: 24),
+            Text(
+              controller.errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: isDesktop ? 250 : double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                onPressed: () => controller.init(),
+                child: const Text("إعادة المحاولة", style: TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

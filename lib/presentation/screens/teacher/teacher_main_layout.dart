@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/responsive.dart';
 import 'tabs/teacher_home_tab.dart';
 import 'tabs/teacher_schedule_tab.dart'; 
@@ -38,9 +40,23 @@ class _TeacherMainLayoutState extends State<TeacherMainLayout> {
     ),
   ];
 
+  Future<void> _launchSupport() async {
+    final Uri whatsappUri = Uri.parse("https://wa.me/201014250577");
+    if (await canLaunchUrl(whatsappUri)) {
+      await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("تعذر فتح واتساب", style: TextStyle(fontFamily: 'Cairo'))),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isMobile = Responsive.isMobile(context);
+    bool isDesktop = Responsive.isDesktop(context);
 
     return Scaffold(
       body: Row(
@@ -51,21 +67,40 @@ class _TeacherMainLayoutState extends State<TeacherMainLayout> {
               onDestinationSelected: (index) {
                 setState(() => _selectedIndex = index);
               },
-              extended: Responsive.isDesktop(context),
-              labelType: Responsive.isDesktop(context) 
+              extended: isDesktop,
+              labelType: isDesktop 
                   ? NavigationRailLabelType.none 
                   : NavigationRailLabelType.all,
               leading: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 30),
                 child: CircleAvatar(
-                  backgroundColor: Colors.orange.withOpacity(0.1),
-                  child: const Icon(Icons.menu_book, color: Colors.orange),
+                  backgroundColor: const Color(0xFF102A43).withOpacity(0.1),
+                  child: const Icon(Icons.school_rounded, color: Color(0xFF102A43)),
+                ),
+              ),
+              trailing: Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: isDesktop 
+                      ? ListTile(
+                          onTap: _launchSupport,
+                          leading: const Icon(Icons.support_agent_rounded, color: Color(0xFF486581)),
+                          title: const Text("الدعم الفني", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Color(0xFF486581))),
+                        )
+                      : IconButton(
+                          onPressed: _launchSupport,
+                          icon: const Icon(Icons.support_agent_rounded, color: Color(0xFF486581)),
+                          tooltip: "الدعم الفني",
+                        ),
+                  ),
                 ),
               ),
               destinations: _destinations.map((d) => NavigationRailDestination(
                 icon: d.icon,
                 selectedIcon: d.selectedIcon,
-                label: Text(d.label),
+                label: Text(d.label, style: const TextStyle(fontFamily: 'Cairo')),
               )).toList(),
             ),
           if (!isMobile) const VerticalDivider(thickness: 1, width: 1),

@@ -18,161 +18,111 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final bool isDesktop = Responsive.isDesktop(context);
     
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
-        title: Text(context.translate('settings')),
+        title: Text(context.translate('settings'), 
+          style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
+        backgroundColor: Colors.white,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
       ),
-      body: Responsive(
-        mobile: _buildListLayout(themeProvider),
-        desktop: _buildGridLayout(themeProvider),
-      ),
-    );
-  }
-
-  Widget _buildListLayout(ThemeProvider themeProvider) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildCategoryHeader(context.translate('theme_mode')),
-          _buildThemeSettings(themeProvider),
-          const SizedBox(height: 30),
-          _buildCategoryHeader(context.translate('language')),
-          _buildLanguageSettings(),
-          const SizedBox(height: 30),
-          _buildCategoryHeader("إعدادات المنصة"),
-          _buildPlatformSettings(),
-          const SizedBox(height: 30),
-          _buildCategoryHeader("النظام"),
-          _buildSystemSettings(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGridLayout(ThemeProvider themeProvider) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("إعدادات النظام المتقدمة", 
-              style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 40),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    _buildCategoryHeader(context.translate('theme_mode')),
-                    _buildThemeSettings(themeProvider),
-                    const SizedBox(height: 30),
-                    _buildCategoryHeader(context.translate('language')),
-                    _buildLanguageSettings(),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 30),
-              Expanded(
-                child: Column(
-                  children: [
-                    _buildCategoryHeader("إعدادات المنصة"),
-                    _buildPlatformSettings(),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 30),
-              Expanded(
-                child: Column(
-                  children: [
-                    _buildCategoryHeader("النظام"),
-                    _buildSystemSettings(),
-                  ],
-                ),
-              ),
-            ],
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(isDesktop ? 40 : 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isDesktop) ...[
+                  const Text("إعدادات النظام", 
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, fontFamily: 'Cairo', color: Color(0xFF102A43))),
+                  const SizedBox(height: 8),
+                  const Text("تحكم في مظهر ووظائف المنصة التعليمية بالكامل", 
+                    style: TextStyle(fontSize: 14, color: Colors.grey, fontFamily: 'Cairo')),
+                  const SizedBox(height: 40),
+                ],
+                
+                _buildCategoryHeader("المظهر واللغة"),
+                _buildCard([
+                  _buildSwitchItem(
+                    themeProvider.isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                    context.translate('dark_mode'),
+                    "تفعيل الوضع الداكن للتطبيق",
+                    themeProvider.isDarkMode,
+                    (val) => themeProvider.toggleTheme(val),
+                  ),
+                  const Divider(height: 1, indent: 70),
+                  _buildSimpleItem(
+                    Icons.language_rounded, 
+                    "لغة المنصة", 
+                    "العربية (مصر)", 
+                    () {}, 
+                    iconColor: Colors.orange
+                  ),
+                ]),
+                
+                const SizedBox(height: 32),
+                
+                _buildCategoryHeader("إعدادات الوصول"),
+                _buildCard([
+                  _buildSwitchItem(
+                    Icons.construction_rounded,
+                    "وضع الصيانة",
+                    "منع دخول الطلاب للحصص مؤقتاً",
+                    _maintenanceMode,
+                    (val) => setState(() => _maintenanceMode = val),
+                  ),
+                  const Divider(height: 1, indent: 70),
+                  _buildSwitchItem(
+                    Icons.person_add_alt_1_rounded,
+                    "تسجيل مستخدمين جدد",
+                    "السماح بإنشاء حسابات طلاب جديدة",
+                    _allowGuestRegistration,
+                    (val) => setState(() => _allowGuestRegistration = val),
+                  ),
+                ]),
+                
+                const SizedBox(height: 32),
+                
+                _buildCategoryHeader("حول النظام"),
+                _buildCard([
+                  _buildSimpleItem(Icons.info_outline_rounded, "إصدار المنصة", "v2.1.0 Professional", null),
+                  const Divider(height: 1, indent: 70),
+                  _buildSimpleItem(
+                    Icons.delete_sweep_outlined, 
+                    "مسح الذاكرة المؤقتة", 
+                    "تنظيف سجلات النظام القديمة", 
+                    () {}, 
+                    color: Colors.redAccent
+                  ),
+                ]),
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
-  }
-
-  Widget _buildThemeSettings(ThemeProvider themeProvider) {
-    return _buildCard([
-      _buildSwitchItem(
-        themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
-        context.translate('dark_mode'),
-        "تغيير مظهر التطبيق بالكامل",
-        themeProvider.isDarkMode,
-        (val) => themeProvider.toggleTheme(val),
-      ),
-    ]);
-  }
-
-  Widget _buildLanguageSettings() {
-    return _buildCard([
-      ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-          child: const Icon(Icons.language, color: Colors.orange),
-        ),
-        title: const Text("لغة التطبيق", style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: const Text("العربية (مصر)"),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-        onTap: () {
-          // يمكن هنا إضافة شيت لاختيار اللغة
-        },
-      ),
-    ]);
-  }
-
-  Widget _buildPlatformSettings() {
-    return _buildCard([
-      _buildSwitchItem(
-        Icons.build_outlined,
-        "وضع الصيانة",
-        "منع دخول الحصص مؤقتاً",
-        _maintenanceMode,
-        (val) => setState(() => _maintenanceMode = val),
-      ),
-      const Divider(indent: 60),
-      _buildSwitchItem(
-        Icons.person_add_outlined,
-        "تسجيل الطلاب",
-        "السماح بإنشاء حسابات جديدة",
-        _allowGuestRegistration,
-        (val) => setState(() => _allowGuestRegistration = val),
-      ),
-    ]);
-  }
-
-  Widget _buildSystemSettings() {
-    return _buildCard([
-      _buildSimpleItem(Icons.info_outline, "عن المنصة", "v1.5.0 Professional", null),
-      const Divider(indent: 60),
-      _buildSimpleItem(Icons.delete_outline, "مسح السجلات", "تنظيف البيانات القديمة", () {}, color: Colors.red),
-    ]);
   }
 
   Widget _buildCategoryHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10, right: 10),
-      child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+      padding: const EdgeInsets.only(bottom: 12, right: 8, left: 8),
+      child: Text(title, 
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blueGrey, fontFamily: 'Cairo')),
     );
   }
 
   Widget _buildCard(List<Widget> children) {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: Column(children: children),
     );
@@ -180,28 +130,34 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   Widget _buildSwitchItem(IconData icon, String title, String sub, bool value, Function(bool) onChanged) {
     return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       leading: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-        child: Icon(icon, color: Colors.blue, size: 22),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: const Color(0xFF102A43).withOpacity(0.05), borderRadius: BorderRadius.circular(14)),
+        child: Icon(icon, color: const Color(0xFF102A43), size: 24),
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-      subtitle: Text(sub, style: const TextStyle(fontSize: 12)),
-      trailing: Switch.adaptive(value: value, onChanged: onChanged),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo')),
+      subtitle: Text(sub, style: const TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'Cairo')),
+      trailing: Switch.adaptive(
+        value: value, 
+        onChanged: onChanged,
+        activeColor: const Color(0xFF102A43),
+      ),
     );
   }
 
-  Widget _buildSimpleItem(IconData icon, String title, String sub, VoidCallback? onTap, {Color? color}) {
+  Widget _buildSimpleItem(IconData icon, String title, String sub, VoidCallback? onTap, {Color? color, Color? iconColor}) {
     return ListTile(
       onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       leading: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: (color ?? Colors.blue).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-        child: Icon(icon, color: color ?? Colors.blue, size: 22),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: (iconColor ?? color ?? const Color(0xFF102A43)).withOpacity(0.05), borderRadius: BorderRadius.circular(14)),
+        child: Icon(icon, color: iconColor ?? color ?? const Color(0xFF102A43), size: 24),
       ),
-      title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: color)),
-      subtitle: Text(sub, style: const TextStyle(fontSize: 12)),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+      title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color, fontFamily: 'Cairo')),
+      subtitle: Text(sub, style: const TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'Cairo')),
+      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
     );
   }
 }

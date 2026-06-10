@@ -6,6 +6,7 @@ import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/services/assignments_service.dart';
 import '../../../../core/models/assignment_model.dart';
 import '../../../../core/models/submission_model.dart';
+import '../../../../core/utils/responsive.dart';
 
 class StudentAssignmentsScreen extends StatefulWidget {
   final String sessionId;
@@ -76,13 +77,13 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
       _loadData(); // إعادة تحميل البيانات
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("تم تسليم الواجب بنجاح ✅"), backgroundColor: Colors.green),
+          const SnackBar(content: Text("تم تسليم الواجب بنجاح ✅", style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green),
         );
       }
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("خطأ أثناء الرفع: $error"), backgroundColor: Colors.red),
+          SnackBar(content: Text("خطأ أثناء الرفع: $error", style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red),
         );
       }
     }
@@ -90,23 +91,30 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = Responsive.isDesktop(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
-        title: Text("واجبات ${widget.subjectName}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
+        title: Text("واجبات ${widget.subjectName}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black, fontFamily: 'Cairo')),
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-          : _assignments.isEmpty
-              ? _buildEmptyState()
-              : ListView.builder(
-                  padding: const EdgeInsets.all(20),
-                  itemCount: _assignments.length,
-                  itemBuilder: (context, index) => _buildAssignmentCard(_assignments[index]),
-                ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1200),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              : _assignments.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      padding: EdgeInsets.all(isDesktop ? 40 : 20),
+                      itemCount: _assignments.length,
+                      itemBuilder: (context, index) => _buildAssignmentCard(_assignments[index]),
+                    ),
+        ),
+      ),
     );
   }
 
@@ -115,37 +123,38 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
     final bool isSubmitted = submission != null;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: Column(
         children: [
           ListTile(
-            contentPadding: const EdgeInsets.all(16),
+            contentPadding: const EdgeInsets.all(20),
             leading: Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: (isSubmitted ? Colors.green : Colors.orange).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: Icon(isSubmitted ? Icons.check_box : Icons.description,
-                color: isSubmitted ? Colors.green : Colors.orange, size: 24),
+              child: Icon(isSubmitted ? Icons.check_box_rounded : Icons.description_outlined,
+                color: isSubmitted ? Colors.green : Colors.orange, size: 28),
             ),
-            title: Text(assignment.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            title: Text(assignment.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, fontFamily: 'Cairo')),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 4),
-                Text(assignment.description ?? "لا يوجد وصف", style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                const SizedBox(height: 6),
+                Text(assignment.description ?? "لا يوجد وصف إضافي لهذا الواجب", 
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontFamily: 'Cairo')),
                 if (isSubmitted && submission.grade != null) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: Text("الدرجة: ${submission.grade}", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                    child: Text("الدرجة: ${submission.grade}", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Cairo')),
                   ),
                 ]
               ],
@@ -153,14 +162,14 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
           ),
           const Divider(height: 1),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
                 if (assignment.fileUrl != null)
                   TextButton.icon(
-                    onPressed: () => launchUrl(Uri.parse(assignment.fileUrl!)),
-                    icon: const Icon(Icons.download, size: 18),
-                    label: const Text("تحميل الواجب"),
+                    onPressed: () => launchUrl(Uri.parse(assignment.fileUrl!), mode: LaunchMode.externalApplication),
+                    icon: const Icon(Icons.file_download_outlined, size: 20),
+                    label: const Text("تحميل الملف", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
                   ),
                 const Spacer(),
                 ElevatedButton(
@@ -169,9 +178,11 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
                     backgroundColor: isSubmitted ? Colors.grey.shade100 : Colors.blue,
                     foregroundColor: isSubmitted ? Colors.grey.shade700 : Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text(isSubmitted ? "تعديل التسليم" : "تسليم الحل"),
+                  child: Text(isSubmitted ? "تعديل التسليم" : "تسليم الحل الآن", 
+                    style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -179,13 +190,24 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
           if (isSubmitted && submission.feedback != null)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.amber.withOpacity(0.05), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20))),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.08),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+              ),
               child: Row(
                 children: [
-                   const Icon(Icons.info_outline, color: Colors.amber, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text("ملاحظة المدرس: ${submission.feedback}", style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                   const Icon(Icons.forum_outlined, color: Colors.amber.shade800, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("ملاحظة المعلم:", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.amber.shade900, fontFamily: 'Cairo')),
+                        Text(submission.feedback!, style: const TextStyle(fontSize: 13, color: Colors.black87, fontFamily: 'Cairo')),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -199,9 +221,15 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.description_outlined, size: 60, color: Colors.grey.shade300),
-          const SizedBox(height: 16),
-          const Text("لا توجد واجبات مطلوبة حالياً", style: TextStyle(color: Colors.grey)),
+          Container(
+            padding: const EdgeInsets.all(30),
+            decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
+            child: Icon(Icons.assignment_turned_in_outlined, size: 80, color: Colors.grey.shade300),
+          ),
+          const SizedBox(height: 24),
+          const Text("لا توجد واجبات مطلوبة حالياً", style: TextStyle(color: Colors.grey, fontSize: 18, fontFamily: 'Cairo')),
+          const SizedBox(height: 8),
+          const Text("سوف تظهر الواجبات هنا فور إضافتها من قبل المعلم", style: TextStyle(color: Colors.grey, fontSize: 14, fontFamily: 'Cairo')),
         ],
       ),
     );

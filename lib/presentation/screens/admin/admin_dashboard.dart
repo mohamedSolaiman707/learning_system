@@ -80,34 +80,34 @@ class _AdminDashboardState extends State<AdminDashboard>
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = Responsive.isDesktop(context);
+    final isMobile = Responsive.isMobile(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      appBar: Responsive.isMobile(context) ? _buildAppBar() : null,
-      drawer: Responsive.isMobile(context)
+      appBar: isMobile ? _buildAppBar() : null,
+      drawer: isMobile
           ? Drawer(child: _buildSidebar(context))
           : null,
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!Responsive.isMobile(context))
-            Expanded(
-              flex: 1,
-              child: Container(
-                height: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 20,
-                    ),
-                  ],
-                ),
-                child: _buildSidebar(context, isDrawer: false),
+          if (!isMobile)
+            Container(
+              width: isDesktop ? 280 : 100,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 20,
+                  ),
+                ],
               ),
+              child: _buildSidebar(context, isDrawer: false, isExpanded: isDesktop),
             ),
           Expanded(
-            flex: 5,
             child: PageTransitionSwitcher(
               transitionBuilder: (child, primaryAnimation, secondaryAnimation) {
                 return FadeThroughTransition(
@@ -123,55 +123,61 @@ class _AdminDashboardState extends State<AdminDashboard>
                   : RefreshIndicator(
                       onRefresh: _loadStats,
                       child: SingleChildScrollView(
-                        padding: EdgeInsets.all(
-                          Responsive.isMobile(context) ? 15.0 : 30.0,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isMobile ? 15.0 : 40.0,
+                          vertical: 30.0,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (!Responsive.isMobile(context))
-                              _buildDesktopHeader(),
-                            if (Responsive.isMobile(context))
-                              _buildMobileHeader(),
-                            const SizedBox(height: 30),
-                            FadeTransition(
-                              opacity: _animationController,
-                              child: SlideTransition(
-                                position:
-                                    Tween<Offset>(
-                                      begin: const Offset(0, 0.1),
-                                      end: Offset.zero,
-                                    ).animate(
-                                      CurvedAnimation(
-                                        parent: _animationController,
-                                        curve: Curves.easeOut,
-                                      ),
-                                    ),
-                                child: _buildStatsGrid(),
-                              ),
-                            ),
-                            const SizedBox(height: 40),
-                            Responsive(
-                              mobile: Column(
-                                children: [
-                                  _buildChartSection(),
-                                  const SizedBox(height: 30),
-                                  _buildRecentActivity(),
-                                ],
-                              ),
-                              desktop: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    flex: 2,
-                                    child: _buildChartSection(),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1400),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (!isMobile)
+                                  _buildDesktopHeader(),
+                                if (isMobile)
+                                  _buildMobileHeader(),
+                                const SizedBox(height: 30),
+                                FadeTransition(
+                                  opacity: _animationController,
+                                  child: SlideTransition(
+                                    position:
+                                        Tween<Offset>(
+                                          begin: const Offset(0, 0.1),
+                                          end: Offset.zero,
+                                        ).animate(
+                                          CurvedAnimation(
+                                            parent: _animationController,
+                                            curve: Curves.easeOut,
+                                          ),
+                                        ),
+                                    child: _buildStatsGrid(),
                                   ),
-                                  const SizedBox(width: 30),
-                                  Expanded(child: _buildRecentActivity()),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(height: 40),
+                                Responsive(
+                                  mobile: Column(
+                                    children: [
+                                      _buildChartSection(),
+                                      const SizedBox(height: 30),
+                                      _buildRecentActivity(),
+                                    ],
+                                  ),
+                                  desktop: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        flex: 2,
+                                        child: _buildChartSection(),
+                                      ),
+                                      const SizedBox(width: 30),
+                                      Expanded(child: _buildRecentActivity()),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -186,7 +192,8 @@ class _AdminDashboardState extends State<AdminDashboard>
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
-      title: const Text("لوحة التحكم"),
+      title: const Text("لوحة التحكم", style: TextStyle(color: Colors.black, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+      iconTheme: const IconThemeData(color: Colors.black),
       actions: [
         IconButton(onPressed: _loadStats, icon: const Icon(Icons.refresh)),
         const SizedBox(width: 15),
@@ -204,19 +211,24 @@ class _AdminDashboardState extends State<AdminDashboard>
           children: [
             Text(
               "مرحباً، ${profile?['full_name'] ?? 'المسؤول'}",
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
             ),
             const Text(
               "إليك نظرة سريعة على ما يحدث في المنصة اليوم",
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              style: TextStyle(fontSize: 16, color: Colors.grey, fontFamily: 'Cairo'),
             ),
           ],
         ),
         ElevatedButton.icon(
           onPressed: _loadStats,
           icon: const Icon(Icons.refresh, size: 20),
-          label: const Text("تحديث البيانات"),
-          style: ElevatedButton.styleFrom(minimumSize: const Size(150, 50)),
+          label: const Text("تحديث البيانات", style: TextStyle(fontFamily: 'Cairo')),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(150, 50),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         ),
       ],
     );
@@ -228,11 +240,11 @@ class _AdminDashboardState extends State<AdminDashboard>
       children: [
         Text(
           "نظرة عامة",
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
         ),
         Text(
           "آخر إحصائيات النظام",
-          style: TextStyle(fontSize: 14, color: Colors.grey),
+          style: TextStyle(fontSize: 14, color: Colors.grey, fontFamily: 'Cairo'),
         ),
       ],
     );
@@ -243,14 +255,19 @@ class _AdminDashboardState extends State<AdminDashboard>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, size: 60, color: Colors.red),
+          const Icon(Icons.error_outline, size: 80, color: Colors.redAccent),
           const SizedBox(height: 16),
-          Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+          Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontFamily: 'Cairo', fontSize: 18)),
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: _loadStats,
-            style: ElevatedButton.styleFrom(minimumSize: const Size(200, 50)),
-            child: const Text("إعادة المحاولة"),
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(200, 50),
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text("إعادة المحاولة", style: TextStyle(fontFamily: 'Cairo')),
           ),
         ],
       ),
@@ -260,16 +277,19 @@ class _AdminDashboardState extends State<AdminDashboard>
   Widget _buildStatsGrid() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        int crossAxisCount = Responsive.isDesktop(context)
-            ? 4
-            : (Responsive.isTablet(context) ? 2 : 1);
+        bool isDesktop = Responsive.isDesktop(context);
+        bool isTablet = Responsive.isTablet(context);
+        
+        int crossAxisCount = isDesktop ? 4 : (isTablet ? 2 : 1);
+        double childAspectRatio = isDesktop ? 1.8 : 2.2;
+
         return GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           crossAxisCount: crossAxisCount,
           crossAxisSpacing: 20,
           mainAxisSpacing: 20,
-          childAspectRatio: Responsive.isDesktop(context) ? 1.5 : 2.0,
+          childAspectRatio: childAspectRatio,
           children: [
             AdminStatCard(
               title: "إجمالي الطلاب",
@@ -303,6 +323,8 @@ class _AdminDashboardState extends State<AdminDashboard>
 
   Widget _buildChartSection() {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -310,7 +332,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           children: [
             const Text(
               "تحليلات الحضور",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
             ),
             const SizedBox(height: 30),
             SizedBox(
@@ -354,6 +376,8 @@ class _AdminDashboardState extends State<AdminDashboard>
 
   Widget _buildRecentActivity() {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -361,7 +385,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           children: [
             const Text(
               "النشاطات الأخيرة",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
             ),
             const SizedBox(height: 20),
             _buildActivityItem(
@@ -401,29 +425,39 @@ class _AdminDashboardState extends State<AdminDashboard>
       ),
       title: Text(
         title,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
       ),
-      subtitle: Text(time, style: const TextStyle(fontSize: 12)),
+      subtitle: Text(time, style: const TextStyle(fontSize: 12, fontFamily: 'Cairo')),
       contentPadding: EdgeInsets.zero,
     );
   }
 
-  Widget _buildSidebar(BuildContext context, {bool isDrawer = true}) {
+  Widget _buildSidebar(BuildContext context, {bool isDrawer = true, bool isExpanded = true}) {
     return Column(
       children: [
-        const SizedBox(height: 60),
-        const Icon(Icons.school, size: 60, color: Colors.blue),
-        const SizedBox(height: 10),
-        const Text(
-          "EduConnect",
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        const SizedBox(height: 50),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(Icons.school, size: 30, color: Colors.white),
         ),
+        if (isExpanded) ...[
+          const SizedBox(height: 15),
+          const Text(
+            "EduConnect",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
+          ),
+        ],
         const SizedBox(height: 40),
-        _buildSidebarItem(Icons.bar_chart, "لوحة التحكم", true, () {}),
+        _buildSidebarItem(Icons.bar_chart, "لوحة التحكم", true, isExpanded, () {}),
         _buildSidebarItem(
           Icons.person_outline,
           "المستخدمين",
           false,
+          isExpanded,
           () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -435,6 +469,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           Icons.videocam_outlined,
           "الحصص",
           false,
+          isExpanded,
           () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -446,6 +481,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           Icons.settings_outlined,
           "الإعدادات",
           false,
+          isExpanded,
           () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -458,6 +494,7 @@ class _AdminDashboardState extends State<AdminDashboard>
           Icons.logout,
           "خروج",
           false,
+          isExpanded,
           (){
             Provider.of<AuthProvider>(context, listen: false).logout();
             Navigator.pushReplacementNamed(context, AppRoutes.login);
@@ -473,6 +510,7 @@ class _AdminDashboardState extends State<AdminDashboard>
     IconData icon,
     String title,
     bool isSelected,
+    bool isExpanded,
     VoidCallback onTap, {
     bool isDestructive = false,
   }) {
@@ -484,15 +522,17 @@ class _AdminDashboardState extends State<AdminDashboard>
             ? Colors.blue
             : (isDestructive ? Colors.red : Colors.grey),
       ),
-      title: Text(
+      title: isExpanded ? Text(
         title,
         style: TextStyle(
+          fontFamily: 'Cairo',
           color: isSelected
               ? Colors.blue
               : (isDestructive ? Colors.red : Colors.black),
         ),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 30),
+      ) : null,
+      contentPadding: EdgeInsets.symmetric(horizontal: isExpanded ? 30 : 0),
+      visualDensity: isExpanded ? VisualDensity.standard : VisualDensity.compact,
     );
   }
 

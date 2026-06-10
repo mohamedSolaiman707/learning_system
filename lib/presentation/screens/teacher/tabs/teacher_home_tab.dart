@@ -82,6 +82,13 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
+  // دالة مساعدة لتحويل AM/PM إلى صباحاً ومساءً
+  String _formatTimeArabic(DateTime time) {
+    String formatted = intl.DateFormat('hh:mm').format(time.toLocal());
+    return "$formatted ${time.toLocal().hour < 12 ? "صباحاً" : "مساءً"}";
+  }
+
+  // --- دالة البث السريع ---
   Future<void> _createInstantLive() async {
     HapticFeedback.heavyImpact();
     final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -94,14 +101,14 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     );
 
     try {
-      final now = DateTime.now().toUtc();
+      final now = DateTime.now();
       final String teacherName = auth.profile?['full_name'] ?? "المدرس";
 
       final sessionData = {
-        'subject_name': "بث مباشر سريع - ${intl.DateFormat('jm').format(DateTime.now())}",
+        'subject_name': "بث مباشر سريع - ${_formatTimeArabic(now)}",
         'teacher_id': auth.user!.id,
-        'start_time': now.toIso8601String(),
-        'end_time': now.add(const Duration(hours: 1)).toIso8601String(),
+        'start_time': now.toUtc().toIso8601String(),
+        'end_time': now.add(const Duration(hours: 1)).toUtc().toIso8601String(),
         'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString(),
         'status': 'active',
         'is_recording_enabled': true,
@@ -114,21 +121,22 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         await db.toggleRoomStatus(newSession.id, true);
 
         if (!mounted) return;
-        Navigator.pop(context); 
+        Navigator.pop(context); // إغلاق الـ Loading
 
         _navigateToLive(newSession, teacherName);
       }
     } catch (e) {
-      Navigator.pop(context);
+      if (mounted) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل بدء البث السريع")));
     }
   }
 
+  // --- دالة إضافة حصة مجدولة ---
   void _showAddSessionDialog() {
     final nameController = TextEditingController();
     DateTime selectedDate = DateTime.now();
     TimeOfDay selectedTime = TimeOfDay.now();
-    int selectedDuration = 1; // الافتراضي ساعة واحدة
+    int selectedDuration = 1; 
 
     showDialog(
       context: context,
@@ -155,7 +163,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                     ListTile(
                       leading: const Icon(Icons.calendar_today, color: Colors.blue),
                       title: const Text("موعد الحصة"),
-                      subtitle: Text("${intl.DateFormat('yyyy/MM/dd').format(selectedDate)} الساعة ${selectedTime.format(context)}"),
+                      subtitle: Text("${intl.DateFormat('yyyy/MM/dd').format(selectedDate)} الساعة ${selectedTime.format(context).replaceAll("AM", "صباحاً").replaceAll("PM", "مساءً")}"),
                       onTap: () async {
                         final d = await showDatePicker(
                           context: context, 
@@ -203,7 +211,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                   onPressed: () async {
                     if (nameController.text.isEmpty) return;
                     
-                    // دمج التاريخ والوقت
                     final startDateTime = DateTime(
                       selectedDate.year, selectedDate.month, selectedDate.day,
                       selectedTime.hour, selectedTime.minute
@@ -225,9 +232,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                     if (context.mounted) {
                       Navigator.pop(context);
                       _loadData();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('تم جدولة الحصة بنجاح ✅'), backgroundColor: Colors.green)
-                      );
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جدولة الحصة بنجاح ✅'), backgroundColor: Colors.green));
                     }
                   },
                   child: const Text("حفظ الحصة"),
@@ -523,7 +528,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(_nextSession!.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text("تبدأ في ${intl.DateFormat('hh:mm a').format(_nextSession!.startTime)}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                Text("تبدأ في ${_formatTimeArabic(_nextSession!.startTime)}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
               ],
             ),
           ),

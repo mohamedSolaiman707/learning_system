@@ -82,7 +82,13 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
-  // دالة مساعدة لتحويل AM/PM إلى صباحاً ومساءً
+  // دالة لتنظيف AM/PM من النصوص
+  String _clean(String? text) {
+    if (text == null) return "";
+    return text.replaceAll("AM", "صباحاً").replaceAll("PM", "مساءً");
+  }
+
+  // دالة مساعدة لتحويل الوقت إلى صباحاً ومساءً
   String _formatTimeArabic(DateTime time) {
     String formatted = intl.DateFormat('hh:mm').format(time.toLocal());
     return "$formatted ${time.toLocal().hour < 12 ? "صباحاً" : "مساءً"}";
@@ -121,7 +127,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         await db.toggleRoomStatus(newSession.id, true);
 
         if (!mounted) return;
-        Navigator.pop(context); // إغلاق الـ Loading
+        Navigator.pop(context); 
 
         _navigateToLive(newSession, teacherName);
       }
@@ -163,7 +169,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                     ListTile(
                       leading: const Icon(Icons.calendar_today, color: Colors.blue),
                       title: const Text("موعد الحصة"),
-                      subtitle: Text("${intl.DateFormat('yyyy/MM/dd').format(selectedDate)} الساعة ${selectedTime.format(context).replaceAll("AM", "صباحاً").replaceAll("PM", "مساءً")}"),
+                      subtitle: Text("${intl.DateFormat('yyyy/MM/dd').format(selectedDate)} الساعة ${_formatTimeArabic(DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute))}"),
                       onTap: () async {
                         final d = await showDatePicker(
                           context: context, 
@@ -347,7 +353,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                         const SizedBox(height: 16),
                         _buildNextSessionCard(isDesktop),
                       ],
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 50),
                     ]),
                   ),
                 ),
@@ -453,7 +459,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_activeSession!.subjectName, style: TextStyle(color: Colors.white, fontSize: isDesktop ? 20 : 18, fontWeight: FontWeight.bold)),
+            Text(_clean(_activeSession!.subjectName), style: TextStyle(color: Colors.white, fontSize: isDesktop ? 20 : 18, fontWeight: FontWeight.bold)),
             const Text("الحصة جارية الآن...", style: TextStyle(color: Colors.white70, fontSize: 13)),
           ],
         ),
@@ -527,7 +533,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_nextSession!.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(_clean(_nextSession!.subjectName), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 Text("تبدأ في ${_formatTimeArabic(_nextSession!.startTime)}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
               ],
             ),
@@ -575,7 +581,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
               shrinkWrap: true,
               itemCount: _sessions.length,
               itemBuilder: (context, i) => ListTile(
-                title: Text(_sessions[i].subjectName),
+                title: Text(_clean(_sessions[i].subjectName)),
                 onTap: () {
                   Navigator.pop(context);
                   if (type == 'attendance') {

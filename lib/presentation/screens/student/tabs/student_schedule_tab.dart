@@ -32,26 +32,29 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
     _loadScheduleWithCache();
   }
 
+  // دالة تحويل الوقت إلى العربية
+  String _formatTimeArabic(DateTime time) {
+    String formatted = DateFormat('hh:mm').format(time.toLocal());
+    return "$formatted ${time.toLocal().hour < 12 ? "صباحاً" : "مساءً"}";
+  }
+
   Future<void> _loadScheduleWithCache() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-
     final cache = Provider.of<CacheService>(context, listen: false);
-    
-    // 1. Load from Cache first
     try {
       final cachedSessions = await cache.getEnrolledSessions();
       if (mounted && cachedSessions != null) {
         setState(() {
-          _allSessions = cachedSessions.map((e) => SessionModel.fromMap(e)).toList();
-          _isLoading = false; // Data is ready to be shown
+          _allSessions = cachedSessions
+              .map((e) => SessionModel.fromMap(e))
+              .toList();
+          _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint("Schedule cache error: $e");
     }
-
-    // 2. Fetch fresh data from Network
     await _loadSchedule(initial: _isLoading);
   }
 
@@ -62,21 +65,20 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
       final cache = Provider.of<CacheService>(context, listen: false);
-      
       final data = await db.getStudentSchedule(auth.user!.id);
-      
-      // Save to cache for offline use
-      final sessionMaps = data.map((e) => e['sessions'] as Map<String, dynamic>).toList();
+      final sessionMaps = data
+          .map((e) => e['sessions'] as Map<String, dynamic>)
+          .toList();
       await cache.saveEnrolledSessions(sessionMaps);
-
       if (mounted) {
         setState(() {
-          _allSessions = data.map((e) => SessionModel.fromMap(e['sessions'])).toList();
+          _allSessions = data
+              .map((e) => SessionModel.fromMap(e['sessions']))
+              .toList();
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint("Schedule network error: $e");
       if (mounted && initial) setState(() => _isLoading = false);
     }
   }
@@ -84,64 +86,104 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
   void _showJoinCodeDialog() {
     final codeController = TextEditingController();
     bool isSubmitting = false;
-
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Text("انضمام لحصة جديدة", textAlign: TextAlign.center),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("أدخل كود الحصة للانضمام إلى جدولك", 
-                style: TextStyle(fontSize: 13, color: Colors.grey), textAlign: TextAlign.center),
+              const Text(
+                "أدخل كود الحصة للانضمام إلى جدولك",
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 20),
               TextField(
                 controller: codeController,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, letterSpacing: 4),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                  letterSpacing: 4,
+                ),
                 decoration: InputDecoration(
                   hintText: "ABC123",
-                  hintStyle: TextStyle(color: Colors.grey.shade300, letterSpacing: 4),
+                  hintStyle: TextStyle(
+                    color: Colors.grey.shade300,
+                    letterSpacing: 4,
+                  ),
                   filled: true,
                   fillColor: Colors.grey.shade50,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
                 textCapitalization: TextCapitalization.characters,
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("إلغاء"),
+            ),
             ElevatedButton(
-              onPressed: isSubmitting ? null : () async {
-                if (codeController.text.isEmpty) return;
-                
-                setDialogState(() => isSubmitting = true);
-                try {
-                  final auth = Provider.of<AuthProvider>(context, listen: false);
-                  final db = Provider.of<DatabaseService>(context, listen: false);
-                  
-                  await db.enrollStudentByCode(auth.user!.id, codeController.text);
-                  
-                  if (mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("تم الانضمام للحصة بنجاح"), backgroundColor: Colors.green)
-                    );
-                    _loadSchedule(initial: true);
-                  }
-                } catch (e) {
-                  setDialogState(() => isSubmitting = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: Colors.red)
-                  );
-                }
-              },
-              child: isSubmitting 
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text("انضمام"),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (codeController.text.isEmpty) return;
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        final auth = Provider.of<AuthProvider>(
+                          context,
+                          listen: false,
+                        );
+                        final db = Provider.of<DatabaseService>(
+                          context,
+                          listen: false,
+                        );
+                        await db.enrollStudentByCode(
+                          auth.user!.id,
+                          codeController.text,
+                        );
+                        if (mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("تم الانضمام للحصة بنجاح"),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          _loadSchedule(initial: true);
+                        }
+                      } catch (e) {
+                        setDialogState(() => isSubmitting = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              e.toString().replaceAll("Exception: ", ""),
+                            ),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text("انضمام"),
             ),
           ],
         ),
@@ -158,10 +200,13 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
-        title: const Text("جدول حصصي", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+        title: const Text(
+          "جدول حصصي",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         elevation: 0,
       ),
-      body: _isLoading 
+      body: _isLoading
           ? _buildLoadingSkeleton()
           : RefreshIndicator(
               onRefresh: () => _loadSchedule(initial: true),
@@ -177,9 +222,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
     return Column(
       children: [
         _buildCalendarCard(),
-        Expanded(
-          child: _buildSessionsList(_getSessionsForDay(_selectedDay!)),
-        ),
+        Expanded(child: _buildSessionsList(_getSessionsForDay(_selectedDay!))),
       ],
     );
   }
@@ -210,7 +253,9 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10),
+        ],
       ),
       child: TableCalendar(
         firstDay: DateTime.now().subtract(const Duration(days: 365)),
@@ -232,12 +277,21 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
         headerStyle: const HeaderStyle(
           formatButtonVisible: false,
           titleCentered: true,
-          titleTextStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo'),
+          titleTextStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         calendarStyle: const CalendarStyle(
-          todayDecoration: BoxDecoration(color: Colors.lightBlueAccent, shape: BoxShape.circle),
-          selectedDecoration: BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
-          markerDecoration: BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+          todayDecoration: BoxDecoration(
+            color: Colors.lightBlueAccent,
+            shape: BoxShape.circle,
+          ),
+          selectedDecoration: BoxDecoration(
+            color: Colors.blue,
+            shape: BoxShape.circle,
+          ),
+          markerDecoration: BoxDecoration(
+            color: Colors.orange,
+            shape: BoxShape.circle,
+          ),
         ),
       ),
     );
@@ -249,37 +303,47 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.calendar_today_outlined, size: 60, color: Colors.grey.shade300),
+            Icon(
+              Icons.calendar_today_outlined,
+              size: 60,
+              color: Colors.grey.shade300,
+            ),
             const SizedBox(height: 16),
-            const Text("لا توجد حصص في هذا اليوم", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo')),
+            const Text(
+              "لا توجد حصص في هذا اليوم",
+              style: TextStyle(color: Colors.grey),
+            ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _showJoinCodeDialog,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade50, foregroundColor: Colors.blue, elevation: 0),
-              child: const Text("انضم لحصة الآن", style: TextStyle(fontFamily: 'Cairo')),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade50,
+                foregroundColor: Colors.blue,
+                elevation: 0,
+              ),
+              child: const Text("انضم لحصة الآن"),
             ),
           ],
         ),
       );
     }
-
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final userName = authProvider.profile?['full_name'] ?? "Student";
     final userId = authProvider.user?.id ?? "";
-
     return ListView.builder(
       padding: const EdgeInsets.all(20),
       itemCount: sessions.length,
       itemBuilder: (context, index) {
         final session = sessions[index];
         final isLive = session.isLive;
-
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10),
+            ],
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
@@ -294,47 +358,68 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                 color: isLive ? Colors.red : Colors.blue,
               ),
             ),
-            title: Text(session.subjectName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo')),
+            title: Text(
+              session.subjectName,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("مع: ${session.teacherName}", style: const TextStyle(fontFamily: 'Cairo')),
-                Text(DateFormat('hh:mm a').format(session.startTime), style: const TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'Cairo')),
+                Text("مع: ${session.teacherName}"),
+                Text(
+                  _formatTimeArabic(session.startTime),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               ],
             ),
-            trailing: isLive 
-              ? ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (context) => ChangeNotifierProvider(
-                        create: (_) => VideoRoomController(
-                          title: session.subjectName,
-                          roomName: "room_${session.id}",
-                          userName: userName,
-                          userId: userId,
-                          isTeacher: false,
-                          sessionId: session.id,
+            trailing: isLive
+                ? ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ChangeNotifierProvider(
+                            create: (_) => VideoRoomController(
+                              title: session.subjectName,
+                              roomName: "room_${session.id}",
+                              userName: userName,
+                              userId: userId,
+                              isTeacher: false,
+                              sessionId: session.id,
+                            ),
+                            child: VideoRoomScreen(
+                              title: session.subjectName,
+                              roomName: "room_${session.id}",
+                              userName: userName,
+                              userId: userId,
+                              isTeacher: false,
+                              sessionId: session.id,
+                            ),
+                          ),
                         ),
-                        child: VideoRoomScreen(
-                          title: session.subjectName,
-                          roomName: "room_${session.id}",
-                          userName: userName,
-                          userId: userId,
-                          isTeacher: false,
-                          sessionId: session.id,
-                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      minimumSize: const Size(80, 40),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                    ));
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    minimumSize: const Size(80, 40),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text(
+                      "دخول",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                : const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 14,
+                    color: Colors.grey,
                   ),
-                  child: const Text("دخول", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                )
-              : const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
           ),
         );
       },
@@ -347,12 +432,26 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       highlightColor: Colors.grey.shade100,
       child: Column(
         children: [
-          Container(height: 350, margin: const EdgeInsets.all(20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24))),
+          Container(
+            height: 350,
+            margin: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+          ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               itemCount: 3,
-              itemBuilder: (_, __) => Container(height: 100, margin: const EdgeInsets.only(bottom: 15), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20))),
+              itemBuilder: (_, __) => Container(
+                height: 100,
+                margin: const EdgeInsets.only(bottom: 15),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
             ),
           ),
         ],

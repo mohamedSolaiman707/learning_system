@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/models/session_model.dart';
@@ -49,6 +50,12 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
 
   List<SessionModel> _getSessionsForDay(DateTime day) {
     return _allSessions.where((session) => isSameDay(session.startTime, day)).toList();
+  }
+
+  // دالة تحويل AM/PM إلى صباحاً ومساءً
+  String _formatTimeArabic(DateTime time) {
+    String formatted = DateFormat('hh:mm').format(time.toLocal());
+    return "$formatted ${time.toLocal().hour < 12 ? "صباحاً" : "مساءً"}";
   }
 
   @override
@@ -219,7 +226,7 @@ class _TeacherScheduleTabState extends State<TeacherScheduleTab> {
                                     const Icon(Icons.access_time, size: 14, color: Colors.grey),
                                     const SizedBox(width: 4),
                                     Text(
-                                      "${DateFormat('hh:mm a').format(session.startTime)} - ${DateFormat('hh:mm a').format(session.endTime)}",
+                                      "${_formatTimeArabic(session.startTime)} - ${_formatTimeArabic(session.endTime)}",
                                       style: const TextStyle(color: Colors.grey, fontSize: 13),
                                     ),
                                   ],

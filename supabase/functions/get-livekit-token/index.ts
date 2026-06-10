@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { roomName, userId, userName } = await req.json()
+    const { roomName, userId, userName, isRoomCamera } = await req.json()
 
     const apiKey = Deno.env.get('LIVEKIT_API_KEY')
     const apiSecret = Deno.env.get('LIVEKIT_API_SECRET')
@@ -20,18 +20,30 @@ serve(async (req) => {
       throw new Error("LiveKit API Key or Secret not set")
     }
 
+    const identity = isRoomCamera ? `roomcam_${userId}` : userId.toString()
+
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: userId.toString(), // التأكد من أنه string
+      identity: identity,
       name: userName,
     })
 
-    at.addGrant({ 
-      roomJoin: true, 
-      room: roomName, 
-      canPublish: true, 
-      canSubscribe: true,
-      canPublishData: true // إضافة هذه الصلاحية لضمان عمل أوامر التحكم
-    })
+    if (isRoomCamera) {
+      at.addGrant({ 
+        roomJoin: true, 
+        room: roomName, 
+        canPublish: true, 
+        canSubscribe: false,
+        canPublishData: false
+      })
+    } else {
+      at.addGrant({ 
+        roomJoin: true, 
+        room: roomName, 
+        canPublish: true, 
+        canSubscribe: true,
+        canPublishData: true 
+      })
+    }
 
     return new Response(
       JSON.stringify({ token: at.toJwt() }),

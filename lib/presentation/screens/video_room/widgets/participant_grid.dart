@@ -1,4 +1,5 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:provider/provider.dart';
@@ -13,14 +14,19 @@ class ParticipantGrid extends StatelessWidget {
     return Selector<VideoRoomController, Room?>(
       selector: (_, c) => c.room,
       builder: (context, room, _) {
-        if (room == null)
+        if (room == null) {
           return const Center(
             child: CircularProgressIndicator(color: Colors.blue),
           );
+        }
 
         return ListenableBuilder(
           listenable: room,
           builder: (context, _) {
+            final controller = context.read<VideoRoomController>();
+            final isTeacher = controller.isTeacher;
+            final selectedChannel = controller.selectedChannel;
+
             final List<Participant> allParticipants = [
               if (room.localParticipant != null) room.localParticipant!,
               ...room.remoteParticipants.values,
@@ -35,24 +41,74 @@ class ParticipantGrid extends StatelessWidget {
               );
             }
 
+            // منطق تصفية القنوات للطلاب فقط
+            if (!isTeacher) {
+              final channelParticipant = allParticipants
+                  .where((p) => p.identity.contains(selectedChannel))
+                  .firstOrNull;
+
+              if (channelParticipant != null) {
+                return _ParticipantTile(
+                  key: ValueKey("channel_${channelParticipant.identity}"),
+                  participant: channelParticipant,
+                  isMainStage: true,
+                );
+              } else {
+                return const Center(
+                  child: Text(
+                    "جاري تحميل القناة...",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'Cairo',
+                      fontSize: 16,
+                    ),
+                  ),
+                );
+              }
+            }
+
+            // المنطق الأصلي للمعلم (بدون تغيير)
             final bool isDesktop = Responsive.isDesktop(context);
 
-            // 1. تحديد المشارك الرئيسي (المدرس أو مشارك الشاشة)
+            if (isTeacher && controller.isVideoWallMode) {
+              int crossAxisCount = 2;
+              if (isDesktop) {
+                crossAxisCount = 4;
+              } else if (Responsive.isTablet(context)) {
+                crossAxisCount = 3;
+              }
+
+              return GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 16 / 9,
+                ),
+                itemCount: allParticipants.length,
+                itemBuilder: (context, index) {
+                  return _ParticipantTile(
+                    key: ValueKey("wall_${allParticipants[index].identity}"),
+                    participant: allParticipants[index],
+                    isMainStage: false,
+                  );
+                },
+              );
+            }
+
             Participant? mainParticipant;
 
-            // الأولوية لمشاركة الشاشة
             try {
               mainParticipant = allParticipants.firstWhere(
                 (p) => p.isScreenShareEnabled(),
               );
             } catch (_) {
-              // ثم الأولوية للمدرس
               try {
                 mainParticipant = allParticipants.firstWhere(
                   (p) => p.identity.toLowerCase().contains('teacher'),
                 );
               } catch (_) {
-                // إذا لم يوجد، نأخذ أول شخص (غالباً هو المستخدم الحالي)
                 mainParticipant = allParticipants.first;
               }
             }
@@ -61,7 +117,6 @@ class ParticipantGrid extends StatelessWidget {
                 .where((p) => p.identity != mainParticipant?.identity)
                 .toList();
 
-            // 2. استخدام التوزيع الاحترافي (Speaker View) في الديسكتوب
             if (isDesktop) {
               return _buildProfessionalDesktopLayout(
                 context,
@@ -70,7 +125,6 @@ class ParticipantGrid extends StatelessWidget {
               );
             }
 
-            // 3. التوزيع للموبايل
             return _buildMobileLayout(
               context,
               mainParticipant,
@@ -82,7 +136,6 @@ class ParticipantGrid extends StatelessWidget {
     );
   }
 
-  // توزيع الديسكتوب الاحترافي (شاشة كبيرة للمدرس + شريط جانبي للطلاب)
   Widget _buildProfessionalDesktopLayout(
     BuildContext context,
     Participant main,
@@ -93,7 +146,6 @@ class ParticipantGrid extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          // شاشة المدرس (المساحة العظمى)
           Expanded(
             flex: 4,
             child: _ParticipantTile(
@@ -102,8 +154,6 @@ class ParticipantGrid extends StatelessWidget {
               isMainStage: true,
             ),
           ),
-
-          // شريط الطلاب الجانبي (يظهر فقط إذا وجد طلاب)
           if (others.isNotEmpty)
             Container(
               width: 240,
@@ -130,7 +180,6 @@ class ParticipantGrid extends StatelessWidget {
     );
   }
 
-  // توزيع الموبايل
   Widget _buildMobileLayout(
     BuildContext context,
     Participant main,
@@ -190,6 +239,7 @@ class _ParticipantTile extends StatelessWidget {
         final bool isTeacher = participant.identity.toLowerCase().contains(
           'teacher',
         );
+        final bool isRoomCam = participant.identity.contains('roomcam_');
 
         String displayName = participant.name ?? "";
         if (displayName.isEmpty) {
@@ -245,17 +295,15 @@ class _ParticipantTile extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
-              // عرض الفيديو
               Positioned.fill(
                 child: hasVideo
                     ? (isScreen || !isMainStage
                           ? VideoTrackRenderer(
-                              activeVideoTrack!,
+                              activeVideoTrack,
                               fit: VideoViewFit.contain,
                             )
                           : Stack(
                               children: [
-                                // خلفية مضببة للفيديوهات الطولية لملء الشاشة بذكاء
                                 Positioned.fill(
                                   child: ImageFiltered(
                                     imageFilter: ImageFilter.blur(
@@ -263,7 +311,7 @@ class _ParticipantTile extends StatelessWidget {
                                       sigmaY: 20,
                                     ),
                                     child: VideoTrackRenderer(
-                                      activeVideoTrack!,
+                                      activeVideoTrack,
                                       fit: VideoViewFit.cover,
                                     ),
                                   ),
@@ -278,8 +326,6 @@ class _ParticipantTile extends StatelessWidget {
                             ))
                     : _buildAvatar(displayName, isMainStage),
               ),
-
-              // ملصق الاسم
               Positioned(
                 bottom: 10,
                 left: 10,
@@ -289,8 +335,6 @@ class _ParticipantTile extends StatelessWidget {
                   participant.isMicrophoneEnabled(),
                 ),
               ),
-
-              // الشارات
               Positioned(
                 top: 10,
                 right: 10,
@@ -300,13 +344,13 @@ class _ParticipantTile extends StatelessWidget {
                     if (isHandRaised)
                       _buildCircleIcon(Icons.front_hand, Colors.orange),
                     if (isHandRaised) const SizedBox(width: 8),
-                    if (isTeacher)
+                    if (isRoomCam)
+                      _buildBadge("كاميرا القاعة", Colors.teal, Icons.videocam)
+                    else if (isTeacher)
                       _buildBadge("المعلم", Colors.blueAccent, Icons.school),
                   ],
                 ),
               ),
-
-              // إطار المتحدث
               if (participant.isSpeaking)
                 Positioned(
                   top: 0,

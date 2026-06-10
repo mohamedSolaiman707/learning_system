@@ -70,6 +70,20 @@ class VideoRoomController extends ChangeNotifier {
   bool _isQAOpen = false;
   bool _isParticipantsOpen = false;
 
+  bool _isVideoWallMode = false;
+
+  Map<String, String> _studentAnswers = {};
+  Map<String, String> get studentAnswers => _studentAnswers;
+
+  Map<String, dynamic>? _activeQuestion;
+  Map<String, dynamic>? get activeQuestion => _activeQuestion;
+
+  String? _myCurrentAnswer;
+  String? get myCurrentAnswer => _myCurrentAnswer;
+
+  String? _myCurrentPollVote;
+  String? get myCurrentPollVote => _myCurrentPollVote;
+
   final List<Stroke> _whiteboardStrokes = [];
   final List<Stroke> _redoStack = [];
   Color _selectedColor = Colors.black;
@@ -80,6 +94,7 @@ class VideoRoomController extends ChangeNotifier {
   List<Map<String, dynamic>> _messages = [];
   final List<Map<String, dynamic>> _questions = [];
   int _unreadQuestionsCount = 0;
+  int _unreadMessages = 0;
 
   final Map<String, bool> _remoteHandStates = {};
   final List<Map<String, dynamic>> _handRaiseQueue = [];
@@ -92,7 +107,6 @@ class VideoRoomController extends ChangeNotifier {
   StreamSubscription? _statusSubscription;
   Timer? _expiryTimer;
 
-  // Added fields for channel selection
   String _selectedChannel = "room-cam-right";
   String get selectedChannel => _selectedChannel;
 
@@ -117,12 +131,14 @@ class VideoRoomController extends ChangeNotifier {
   bool get isPollsOpen => _isPollsOpen;
   bool get isQAOpen => _isQAOpen;
   bool get isParticipantsOpen => _isParticipantsOpen;
+  bool get isVideoWallMode => _isVideoWallMode;
   List<Stroke> get whiteboardStrokes => _whiteboardStrokes;
   Map<String, dynamic>? get activePoll => _activePoll;
   Map<String, int> get pollResults => _pollResults;
   List<Map<String, dynamic>> get messages => _messages;
   List<Map<String, dynamic>> get questions => _questions;
   int get unreadQuestionsCount => _unreadQuestionsCount;
+  int get unreadMessages => _unreadMessages;
   String? get spotlightedQuestionId => _spotlightedQuestionId;
   Map<String, bool> get remoteHandStates => _remoteHandStates;
   List<Map<String, dynamic>> get handRaiseQueue => _handRaiseQueue;
@@ -151,9 +167,53 @@ class VideoRoomController extends ChangeNotifier {
       HapticFeedback.lightImpact();
   }
 
+  void launchQuestion(Map<String, dynamic> question) {
+    _activeQuestion = question;
+    _studentAnswers = {};
+    _myCurrentAnswer = null;
+    sendData({'type': 'new_active_question', 'question': question});
+    notifyListeners();
+  }
+
+  void closeQuestion() {
+    _activeQuestion = null;
+    _myCurrentAnswer = null;
+    sendData({'type': 'close_active_question'});
+    notifyListeners();
+  }
+
+  void submitAnswer(String answer) {
+    _myCurrentAnswer = answer;
+    final identity = _room?.localParticipant?.identity ?? userId;
+    sendData({
+      'type': 'student_answer',
+      'from': userName,
+      'identity': identity,
+      'answer': answer,
+    });
+    notifyListeners();
+  }
+
+  void revealCorrectAnswer(String answer) {
+    sendData({
+      'type': 'reveal_answer',
+      'correct': answer,
+    });
+    if (_activeQuestion != null) {
+      _activeQuestion!['correctAnswer'] = answer;
+    }
+    notifyListeners();
+  }
+
+  void toggleVideoWallMode() {
+    _isVideoWallMode = !_isVideoWallMode;
+    notifyListeners();
+  }
+
   void toggleChat() {
     _triggerHaptic();
     _isChatOpen = !_isChatOpen;
+    if (_isChatOpen) _unreadMessages = 0;
     _isWhiteboardOpen = false;
     _isQAOpen = false;
     _isParticipantsOpen = false;
@@ -499,6 +559,7 @@ class VideoRoomController extends ChangeNotifier {
     switch (data['type']) {
       case 'chat_message':
         _messages.insert(0, data);
+        if (!_isChatOpen) _unreadMessages++;
         break;
       case 'reaction':
         onReactionReceived?.call(data['value']);
@@ -644,6 +705,7 @@ class VideoRoomController extends ChangeNotifier {
       case 'new_poll':
         _activePoll = data['poll'];
         _pollResults = {};
+        _myCurrentPollVote = null;
         if (!isTeacher)
           onNotification?.call("استطلاع جديد متاح 📊", Colors.blue);
         break;
@@ -652,6 +714,32 @@ class VideoRoomController extends ChangeNotifier {
           _pollResults[data['option']] =
               (_pollResults[data['option']] ?? 0) + 1;
           notifyListeners();
+        }
+        break;
+      case 'poll_end':
+        _activePoll = null;
+        _pollResults = {};
+        _myCurrentPollVote = null;
+        break;
+      case 'new_active_question':
+        _activeQuestion = data['question'];
+        _studentAnswers = {};
+        _myCurrentAnswer = null;
+        if (!isTeacher)
+          onNotification?.call("سؤال جديد من المدرس ❓", Colors.blue);
+        break;
+      case 'close_active_question':
+        _activeQuestion = null;
+        _myCurrentAnswer = null;
+        break;
+      case 'student_answer':
+        if (isTeacher) {
+          _studentAnswers[data['from']] = data['answer'];
+        }
+        break;
+      case 'reveal_answer':
+        if (_activeQuestion != null) {
+          _activeQuestion!['correctAnswer'] = data['correct'];
         }
         break;
     }
@@ -835,10 +923,17 @@ class VideoRoomController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void endPoll() {
+    _activePoll = null;
+    _pollResults = {};
+    sendData({'type': 'poll_end'});
+    notifyListeners();
+  }
+
   void votePoll(String option) {
     if (_activePoll == null) return;
+    _myCurrentPollVote = option;
     sendData({'type': 'poll_vote', 'option': option});
-    _activePoll = null;
     notifyListeners();
   }
 
@@ -916,12 +1011,13 @@ class VideoRoomController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void sendMessage(String text) async {
+  void sendMessage(String text, {Map<String, dynamic>? replyTo}) async {
     if (text.trim().isEmpty || (_isChatLocked && !isTeacher)) return;
     final msg = {
       'user_name': userName,
       'content': text.trim(),
       'created_at': DateTime.now().toIso8601String(),
+      if (replyTo != null) 'reply_to': replyTo,
     };
     _messages.insert(0, msg);
     sendData({'type': 'chat_message', ...msg});
@@ -930,6 +1026,7 @@ class VideoRoomController extends ChangeNotifier {
         'room_name': roomName,
         'user_name': userName,
         'content': text.trim(),
+        if (replyTo != null) 'reply_to': replyTo,
       });
     } catch (_) {}
     notifyListeners();
@@ -1228,7 +1325,6 @@ class VideoRoomController extends ChangeNotifier {
 
   @override
   void dispose() {
-    // حل جذري: إيقاف التسجيل فوراً إذا خرج المدرس وكان التسجيل لا يزال نشطاً
     if (isTeacher && _isRecording) {
       LiveKitService().stopRecording(roomName, sessionId ?? "");
     }

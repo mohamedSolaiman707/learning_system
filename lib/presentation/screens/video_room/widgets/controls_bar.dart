@@ -136,12 +136,39 @@ class ControlsBar extends StatelessWidget {
                       key: chatKey,
                       title: 'الدردشة العامة',
                       description: 'تواصل نصياً مع جميع الحاضرين في القاعة.',
-                      child: _AnimatedControlButton(
-                        icon: Icons.chat_bubble_rounded,
-                        isActive: controller.isChatOpen,
-                        activeColor: Colors.blue,
-                        onPressed: controller.toggleChat,
-                        tooltip: "الدردشة",
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          _AnimatedControlButton(
+                            icon: Icons.chat_bubble_rounded,
+                            isActive: controller.isChatOpen,
+                            activeColor: Colors.blue,
+                            onPressed: controller.toggleChat,
+                            tooltip: "الدردشة",
+                          ),
+                          if (controller.unreadMessages > 0)
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  controller.unreadMessages > 9 
+                                    ? "9+" 
+                                    : controller.unreadMessages.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     _buildShowcase(

@@ -448,6 +448,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               ],
             ),
           ),
+          if (widget.isTeacher) ...[
+            _CircleIconButton(
+              icon: controller.isVideoWallMode 
+                  ? Icons.view_sidebar_rounded 
+                  : Icons.grid_view_rounded,
+              color: Colors.white.withOpacity(0.1),
+              onPressed: () => controller.toggleVideoWallMode(),
+            ),
+            const SizedBox(width: 12),
+          ],
           if (isDesktop) _buildDesktopClock(),
         ],
       ),

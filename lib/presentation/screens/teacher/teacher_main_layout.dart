@@ -46,7 +46,11 @@ class _TeacherMainLayoutState extends State<TeacherMainLayout> {
         await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
-      debugPrint("WhatsApp Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("تعذر فتح واتساب", style: TextStyle(fontFamily: 'Cairo'))),
+        );
+      }
     }
   }
 
@@ -56,11 +60,10 @@ class _TeacherMainLayoutState extends State<TeacherMainLayout> {
     bool isDesktop = Responsive.isDesktop(context);
 
     return Scaffold(
-      backgroundColor: Colors.white,
       body: Row(
         children: [
-          if (!isMobile) 
-            _buildNavigationRail(isDesktop),
+          if (!isMobile)
+            _buildDesktopSidebar(isDesktop),
           if (!isMobile) const VerticalDivider(thickness: 1, width: 1, color: Colors.black12),
           Expanded(
             child: IndexedStack(
@@ -70,51 +73,58 @@ class _TeacherMainLayoutState extends State<TeacherMainLayout> {
           ),
         ],
       ),
-      bottomNavigationBar: isMobile 
+      bottomNavigationBar: isMobile
           ? NavigationBar(
               selectedIndex: _selectedIndex,
               onDestinationSelected: (index) => setState(() => _selectedIndex = index),
               destinations: _destinations,
-              backgroundColor: Colors.white,
-              elevation: 8,
             )
           : null,
     );
   }
 
-  Widget _buildNavigationRail(bool isExpanded) {
-    return NavigationRail(
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (index) => setState(() => _selectedIndex = index),
-      extended: isExpanded,
-      backgroundColor: Colors.white,
-      minWidth: 80,
-      minExtendedWidth: 250,
-      labelType: isExpanded ? NavigationRailLabelType.none : NavigationRailLabelType.all,
-      unselectedIconTheme: const IconThemeData(color: Color(0xFF486581)),
-      selectedIconTheme: const IconThemeData(color: Color(0xFF102A43)),
-      selectedLabelTextStyle: const TextStyle(color: Color(0xFF102A43), fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-      unselectedLabelTextStyle: const TextStyle(color: Color(0xFF486581), fontFamily: 'Cairo'),
-      leading: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 30),
-        child: CircleAvatar(
-          backgroundColor: const Color(0xFF102A43).withOpacity(0.1),
-          child: const Icon(Icons.school_rounded, color: Color(0xFF102A43)),
-        ),
-      ),
-      trailing: Expanded(
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 20),
+  Widget _buildDesktopSidebar(bool isExpanded) {
+    return Container(
+      width: isExpanded ? 260 : 80,
+      color: Colors.white,
+      child: Column(
+        children: [
+          const SizedBox(height: 40),
+          // Logo
+          CircleAvatar(
+            backgroundColor: const Color(0xFF102A43).withOpacity(0.1),
+            child: const Icon(Icons.school_rounded, color: Color(0xFF102A43)),
+          ),
+          const SizedBox(height: 40),
+
+          // Navigation Items
+          Expanded(
+            child: NavigationRail(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+              extended: isExpanded,
+              backgroundColor: Colors.transparent,
+              minWidth: 80,
+              minExtendedWidth: 260,
+              labelType: isExpanded ? NavigationRailLabelType.none : NavigationRailLabelType.all,
+              destinations: _destinations.map((d) => NavigationRailDestination(
+                icon: d.icon,
+                selectedIcon: d.selectedIcon,
+                label: Text(d.label, style: const TextStyle(fontFamily: 'Cairo')),
+              )).toList(),
+            ),
+          ),
+
+          // Support Item at Bottom
+          Padding(
+            padding: const EdgeInsets.all(16.0),
             child: isExpanded
-                ? SizedBox(
-                    width: 200,
-                    child: ListTile(
-                      onTap: _launchSupport,
-                      leading: const Icon(Icons.support_agent_rounded, color: Color(0xFF486581)),
-                      title: const Text("الدعم الفني", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Color(0xFF486581))),
-                    ),
+                ? ListTile(
+                    onTap: _launchSupport,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    leading: const Icon(Icons.support_agent_rounded, color: Color(0xFF486581)),
+                    title: const Text("الدعم الفني", style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Color(0xFF486581))),
+                    hoverColor: Colors.blue.withOpacity(0.05),
                   )
                 : IconButton(
                     onPressed: _launchSupport,
@@ -122,13 +132,9 @@ class _TeacherMainLayoutState extends State<TeacherMainLayout> {
                     tooltip: "الدعم الفني",
                   ),
           ),
-        ),
+          const SizedBox(height: 20),
+        ],
       ),
-      destinations: _destinations.map((d) => NavigationRailDestination(
-        icon: d.icon,
-        selectedIcon: d.selectedIcon,
-        label: Text(d.label),
-      )).toList(),
     );
   }
 }

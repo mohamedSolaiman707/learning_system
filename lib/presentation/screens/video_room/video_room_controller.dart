@@ -602,6 +602,7 @@ class VideoRoomController extends ChangeNotifier {
 
   void undoWhiteboard() { if (_whiteboardStrokes.isNotEmpty) { _redoStack.add(_whiteboardStrokes.removeLast()); sendData({'type': 'whiteboard_undo'}); notifyListeners(); } }
   void redoWhiteboard() { if (_redoStack.isNotEmpty) { _whiteboardStrokes.add(_redoStack.removeLast()); sendData({'type': 'whiteboard_redo'}); notifyListeners(); } }
+  void hideWhiteboard() => _isWhiteboardOpen = false;
   void clearWhiteboard() { _whiteboardStrokes.clear(); _redoStack.clear(); sendData({'type': 'whiteboard_clear'}); notifyListeners(); }
 
   void sendMessage(String text) async {
@@ -664,7 +665,7 @@ class VideoRoomController extends ChangeNotifier {
           'action': 'start',
           'roomName': roomName,
           'sessionId': sessionId,
-          'title': title, // إرسال عنوان الحصة للقالب
+          'title': title, 
         }),
       ).timeout(const Duration(seconds: 15));
 
@@ -771,6 +772,10 @@ class VideoRoomController extends ChangeNotifier {
 
   @override
   void dispose() {
+    // حل جذري: إيقاف التسجيل فوراً إذا خرج المدرس وكان التسجيل لا يزال نشطاً
+    if (isTeacher && _isRecording) {
+      LiveKitService().stopRecording(roomName, sessionId ?? "");
+    }
     if (sessionId != null) try { DatabaseService().logStudentExit(sessionId!, userId); } catch (_) {}
     _connectivitySubscription?.cancel(); _statusSubscription?.cancel(); _expiryTimer?.cancel(); _breakoutTimer?.cancel(); _room?.disconnect();
     super.dispose();

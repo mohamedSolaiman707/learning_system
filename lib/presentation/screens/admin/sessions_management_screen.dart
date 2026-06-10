@@ -81,7 +81,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
       builder: (context) => Align(
         alignment: Alignment.bottomCenter,
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 600), // تحديد عرض أقصى للـ Sheet في الديسكتوب
+          constraints: const BoxConstraints(maxWidth: 600),
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
@@ -147,7 +147,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                         },
                         style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                         icon:  const Icon(Icons.access_time_outlined),
-                        label: Text(selectedTime.format(context)),
+                        label: Text(selectedTime.format(context).replaceAll("AM", "صباحاً").replaceAll("PM", "مساءً")),
                       ),
                     ),
                   ],
@@ -164,22 +164,23 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                       onPressed: () async {
                         if (subjectController.text.isEmpty || selectedTeacherId == null) return;
                         
+                        // بناء الوقت المحلي
                         final startLocal = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute);
                         final endLocal = startLocal.add(Duration(minutes: selectedDuration));
 
                         final dbService = Provider.of<DatabaseService>(context, listen: false);
                         await dbService.saveSession({
-                          'subject_name': subjectController.text,
+                          'subject_name': subjectController.text.trim(),
                           'class_code': codeController.text.trim().toUpperCase(),
                           'teacher_id': selectedTeacherId,
-                          'start_time': startLocal.toUtc().toIso8601String(),
+                          'start_time': startLocal.toUtc().toIso8601String(), // الحل الجذري: الحفظ دائماً بصيغة UTC
                           'end_time': endLocal.toUtc().toIso8601String(),
                         }, id: session?['id']);
 
                         if (mounted) {
                           Navigator.pop(context);
                           _fetchData();
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ البيانات بنجاح'), backgroundColor: Colors.green));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ البيانات بنجاح ✅'), backgroundColor: Colors.green));
                         }
                       },
                       child: Text(isEditing ? "تحديث الحصة" : "إنشاء الحصة", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -209,7 +210,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
       ),
       body: Center(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 1200), // تحديد عرض أقصى للمحتوى كله
+          constraints: const BoxConstraints(maxWidth: 1200),
           child: Column(
             children: [
               _buildHeader(),
@@ -291,6 +292,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
             ],
             rows: _sessions.map((session) {
               final startTime = DateTime.parse(session['start_time']).toLocal();
+              String timeStr = DateFormat('hh:mm').format(startTime) + (startTime.hour < 12 ? " صباحاً" : " مساءً");
               return DataRow(cells: [
                 DataCell(Text(session['subject_name'], style: const TextStyle(fontWeight: FontWeight.w600))),
                 DataCell(Text(session['profiles']?['full_name'] ?? '---')),
@@ -299,7 +301,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                   decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
                   child: Text(session['class_code'], style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.blue)),
                 )),
-                DataCell(Text(DateFormat('yyyy/MM/dd | hh:mm a').format(startTime))),
+                DataCell(Text("${DateFormat('yyyy/MM/dd').format(startTime)} | $timeStr")),
                 DataCell(Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -336,6 +338,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
       itemBuilder: (context, index) {
         final session = _sessions[index];
         final startTime = DateTime.parse(session['start_time']).toLocal();
+        String timeStr = DateFormat('hh:mm').format(startTime) + (startTime.hour < 12 ? " صباحاً" : " مساءً");
         return Card(
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
@@ -354,7 +357,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                 children: [
                   const SizedBox(height: 4),
                   Text("${session['profiles']?['full_name']}"),
-                  Text(DateFormat('hh:mm a - yyyy/MM/dd').format(startTime), style: const TextStyle(fontSize: 12)),
+                  Text("${DateFormat('yyyy/MM/dd').format(startTime)} - $timeStr", style: const TextStyle(fontSize: 12)),
                 ],
               ),
               trailing: PopupMenuButton(

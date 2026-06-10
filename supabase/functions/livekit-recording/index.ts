@@ -26,6 +26,18 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
     if (action === 'start') {
+      // --- الحل الجذري لمنع التسجيلات المعلقة ---
+      // قبل بدء أي تسجيل جديد، نبحث عن أي تسجيل "نشط" قديم لنفس الغرفة ونغلقه
+      try {
+        const activeEgresses = await egressClient.listEgress({ roomName, active: true })
+        for (const e of activeEgresses) {
+          await egressClient.stopEgress(e.egressId)
+          console.log(`[CLEANUP] Stopped orphan egress for room ${roomName}: ${e.egressId}`)
+        }
+      } catch (e) {
+        console.warn('Cleanup check failed, proceeding anyway...', e.message)
+      }
+
       const filename = `rec_${sessionId}_${Date.now()}.mp4`
       const filepath = `recordings/${sessionId}/${filename}`
       
@@ -36,12 +48,9 @@ serve(async (req) => {
       const publicDomain = Deno.env.get('R2_PUBLIC_DOMAIN')?.replace(/\/$/, '') || ''
       const rawVideoUrl = `${publicDomain}/${filepath}`
 
-      const brandedUrl = `https://learning-system-jet.vercel.app/recording-template.html?video_url=${encodeURIComponent(rawVideoUrl)}&title=${encodeURIComponent(title || 'حصة مسجلة')}`
-
-      // تمرير كل البيانات اللازمة للقالب عشان يظهر الشات والسبورة وكل حاجة بالملي
       const templateUrl = `https://learning-system-jet.vercel.app/recording-template.html?title=${encodeURIComponent(title || 'حصة تعليمية')}&access_token=${recorderToken}&room=${roomName}&sb_url=${encodeURIComponent(supabaseUrl!)}&sb_key=${encodeURIComponent(supabaseAnonKey!)}&session_id=${sessionId}`
 
-      console.log(`[REC] Starting WebEgress with Template: ${templateUrl}`)
+      console.log(`[REC] Starting WebEgress: ${templateUrl}`)
 
       const info = await egressClient.startWebEgress(
         templateUrl,
@@ -64,7 +73,7 @@ serve(async (req) => {
         session_id: sessionId, 
         egress_id: info.egressId, 
         file_path: filepath, 
-        video_url: brandedUrl, 
+        video_url: rawVideoUrl, // تم تصحيحه ليكون رابط الفيديو المباشر وليس رابط القالب
         status: 'recording', 
         room_name: roomName
       })
@@ -76,10 +85,12 @@ serve(async (req) => {
     if (action === 'stop') {
       const active = await egressClient.listEgress({ roomName, active: true })
       if (active.length > 0) {
-        await egressClient.stopEgress(active[0].egressId)
-        await supabase.from('recordings').update({ status: 'processing' }).eq('egress_id', active[0].egressId)
+        for (const e of active) {
+          await egressClient.stopEgress(e.egressId)
+        }
+        await supabase.from('recordings').update({ status: 'processing' }).eq('room_name', roomName).eq('status', 'recording')
       }
-      await supabase.from('sessions').update({ is_recording: false }).eq('id', sessionId)
+      await supabase.from('sessions').update({ is_recording: false, is_recording_paused: false }).eq('id', sessionId)
       return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 

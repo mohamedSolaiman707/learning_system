@@ -52,7 +52,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
 
       if (auth.user != null) {
         final results = await Future.wait([
-          db.getTeacherSessions(auth.user!.id),
+          db.getTeacherSessionsAll(auth.user!.id),
           db.getTeacherStats(auth.user!.id),
         ]);
 
@@ -64,12 +64,12 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             final now = DateTime.now();
 
             _activeSession = _sessions.cast<SessionModel?>().firstWhere(
-                  (s) => s!.status == 'active' || (s.startTime.isBefore(now) && s.endTime.isAfter(now)),
+                  (s) => s!.status == 'active' || (s.startTime.isBefore(now) && s.endTime.isAfter(now) && s.status != 'ended'),
               orElse: () => null,
             );
 
             _nextSession = _sessions.cast<SessionModel?>().firstWhere(
-                  (s) => s!.startTime.isAfter(now) && s.id != _activeSession?.id,
+                  (s) => s!.startTime.isAfter(now) && s.id != _activeSession?.id && s.status != 'ended',
               orElse: () => null,
             );
 
@@ -82,19 +82,16 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
-  // دالة لتنظيف AM/PM من النصوص
   String _clean(String? text) {
     if (text == null) return "";
     return text.replaceAll("AM", "صباحاً").replaceAll("PM", "مساءً");
   }
 
-  // دالة مساعدة لتحويل الوقت إلى صباحاً ومساءً
   String _formatTimeArabic(DateTime time) {
     String formatted = intl.DateFormat('hh:mm').format(time.toLocal());
     return "$formatted ${time.toLocal().hour < 12 ? "صباحاً" : "مساءً"}";
   }
 
-  // --- دالة البث السريع ---
   Future<void> _createInstantLive() async {
     HapticFeedback.heavyImpact();
     final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -113,7 +110,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       final sessionData = {
         'subject_name': "بث مباشر سريع - ${_formatTimeArabic(now)}",
         'teacher_id': auth.user!.id,
-        'start_time': now.toUtc().toIso8601String(),
+        'start_time': now.toUtc().toIso8601String(), 
         'end_time': now.add(const Duration(hours: 1)).toUtc().toIso8601String(),
         'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString(),
         'status': 'active',
@@ -137,7 +134,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     }
   }
 
-  // --- دالة إضافة حصة مجدولة ---
   void _showAddSessionDialog() {
     final nameController = TextEditingController();
     DateTime selectedDate = DateTime.now();
@@ -217,20 +213,20 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                   onPressed: () async {
                     if (nameController.text.isEmpty) return;
                     
-                    final startDateTime = DateTime(
+                    final startLocal = DateTime(
                       selectedDate.year, selectedDate.month, selectedDate.day,
                       selectedTime.hour, selectedTime.minute
                     );
                     
-                    final endDateTime = startDateTime.add(Duration(hours: selectedDuration));
+                    final endLocal = startLocal.add(Duration(hours: selectedDuration));
 
                     final db = Provider.of<DatabaseService>(context, listen: false);
                     final auth = Provider.of<AuthProvider>(context, listen: false);
                     await db.saveSession({
-                      'subject_name': nameController.text,
+                      'subject_name': nameController.text.trim(),
                       'teacher_id': auth.user!.id,
-                      'start_time': startDateTime.toIso8601String(),
-                      'end_time': endDateTime.toIso8601String(),
+                      'start_time': startLocal.toUtc().toIso8601String(), 
+                      'end_time': endLocal.toUtc().toIso8601String(),
                       'status': 'waiting',
                       'class_code': (DateTime.now().millisecondsSinceEpoch % 1000000).toString(),
                     });

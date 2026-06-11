@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../presentation/screens/auth/login_screen.dart';
 import '../../presentation/screens/auth/register_screen.dart';
+import '../../presentation/screens/auth/reset_password_screen.dart';
 import '../../presentation/screens/splash/splash_screen.dart';
 import '../../presentation/screens/student/student_main_layout.dart';
 import '../../presentation/screens/teacher/teacher_main_layout.dart';
@@ -14,6 +15,7 @@ class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  static const String resetPassword = '/reset-password';
   static const String studentHome = '/student-home';
   static const String teacherHome = '/teacher-home';
   static const String adminHome = '/admin-home';
@@ -24,6 +26,7 @@ class AppRoutes {
     splash: (context) => const SplashScreen(),
     login: (context) => const LoginScreen(),
     register: (context) => const RegisterScreen(),
+    resetPassword: (context) => const ResetPasswordScreen(),
     studentHome: (context) => const StudentMainLayout(),
     teacherHome: (context) => const TeacherMainLayout(),
     adminHome: (context) => const AdminDashboard(),
@@ -33,7 +36,6 @@ class AppRoutes {
     String? routeName = settings.name;
     Map<String, dynamic> queryParams = {};
 
-    // دعم استخراج البارامترات من الرابط في الويب (مثل ?sessionId=...)
     if (routeName != null && routeName.contains('?')) {
       final uri = Uri.parse(routeName);
       routeName = uri.path;

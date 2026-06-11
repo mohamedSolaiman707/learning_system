@@ -94,8 +94,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
     super.initState();
     _capturedParams = _extractParams();
 
+    // إذا كان الرابط يحتوي على توكن استعادة أو دخول مباشر
     if (_capturedParams!.containsKey('access_token') ||
-        _capturedParams!.containsKey('lms_id')) {
+        _capturedParams!.containsKey('lms_id') ||
+        _capturedParams!['type'] == 'recovery') {
       _isRedirecting = true;
     }
 
@@ -108,7 +110,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final fullUri = Uri.base;
     Map<String, String> params = Map.from(fullUri.queryParameters);
 
-    // استخراج المعرف من المسار في حالة الروابط المباشرة مثل /join/699460
     if (fullUri.pathSegments.contains('join')) {
       final joinIndex = fullUri.pathSegments.indexOf('join');
       if (joinIndex < fullUri.pathSegments.length - 1) {
@@ -143,16 +144,27 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     try {
+      // 1. معالجة رابط إعادة تعيين كلمة المرور
+      if (params['type'] == 'recovery') {
+        _linkProcessed = true;
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.resetPassword, (route) => false);
+        }
+        return;
+      }
+
+      // 2. معالجة الدخول التلقائي (LTI أو غيره)
       final accessToken = params['access_token'];
       if (accessToken != null) {
         try {
           await Supabase.instance.client.auth.setSession(accessToken);
           await Future.delayed(const Duration(seconds: 1));
         } catch (e) {
-          debugPrint("LTI AutoLogin Error: $e");
+          debugPrint("AutoLogin Error: $e");
         }
       }
 
+      // 3. معالجة الدخول المباشر للقاعات
       final lmsId = params['lms_id'];
       if (lmsId != null && authProvider.isAuthenticated) {
         _linkProcessed = true;
@@ -210,7 +222,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
               const SizedBox(height: 16),
               const Text("جاري التحقق من الهوية...",
                   style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
-              const Text("يتم توجيهك الآن إلى القاعة التعليمية",
+              const Text("سيتم توجيهك الآن تلقائياً",
                   style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.grey)),
             ],
           ),

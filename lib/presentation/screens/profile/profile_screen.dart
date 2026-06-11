@@ -52,75 +52,107 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _showEditDialog(String title, String field, String currentValue) {
     final controller = TextEditingController(text: currentValue);
+    final confirmController = TextEditingController();
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final bool isPassword = field == 'password';
+    final formKey = GlobalKey<FormState>();
     
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isPassword ? "تغيير كلمة المرور" : "تعديل $title",
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, fontFamily: 'Cairo', color: Color(0xFF102A43)),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: controller,
-                  obscureText: isPassword,
-                  style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
-                  decoration: InputDecoration(
-                    hintText: isPassword ? "أدخل كلمة المرور الجديدة" : "أدخل $title الجديد",
-                    filled: true,
-                    fillColor: const Color(0xFFF0F4F8),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context), 
-                      child: const Text("إلغاء", style: TextStyle(color: Colors.blueGrey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                    Text(
+                      isPassword ? "تغيير كلمة المرور" : "تعديل $title",
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, fontFamily: 'Cairo', color: Color(0xFF102A43)),
                     ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: () async {
-                        if (controller.text.isEmpty) return;
-                        try {
-                          if (isPassword) {
-                            await authProvider.updatePassword(controller.text);
-                          } else {
-                            await authProvider.updateProfile({field: controller.text});
-                          }
-                          if (mounted) {
-                            Navigator.pop(context);
-                            _showSnackBar(isPassword ? "تم تغيير كلمة المرور بنجاح 🔒" : "تم تحديث البيانات بنجاح ✅", Colors.green);
-                          }
-                        } catch (e) {
-                          if (mounted) _showSnackBar("فشل التحديث: $e", Colors.red);
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF102A43),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      controller: controller,
+                      obscureText: isPassword,
+                      style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        hintText: isPassword ? "كلمة المرور الجديدة" : "أدخل $title الجديد",
+                        filled: true,
+                        fillColor: const Color(0xFFF0F4F8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                       ),
-                      child: const Text("حفظ", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return "هذا الحقل مطلوب";
+                        if (isPassword && value.length < 6) return "يجب أن تكون 6 أحرف على الأقل";
+                        return null;
+                      },
+                    ),
+                    if (isPassword) ...[
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: confirmController,
+                        obscureText: true,
+                        style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                        decoration: InputDecoration(
+                          hintText: "تأكيد كلمة المرور الجديدة",
+                          filled: true,
+                          fillColor: const Color(0xFFF0F4F8),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                        ),
+                        validator: (value) {
+                          if (value != controller.text) return "كلمات المرور غير متطابقة";
+                          return null;
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context), 
+                          child: const Text("إلغاء", style: TextStyle(color: Colors.blueGrey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: () async {
+                            if (!formKey.currentState!.validate()) return;
+                            
+                            try {
+                              if (isPassword) {
+                                await authProvider.updatePassword(controller.text);
+                              } else {
+                                await authProvider.updateProfile({field: controller.text});
+                              }
+                              if (mounted) {
+                                Navigator.pop(context);
+                                _showSnackBar(isPassword ? "تم تغيير كلمة المرور بنجاح 🔒" : "تم تحديث البيانات بنجاح ✅", Colors.green);
+                              }
+                            } catch (e) {
+                              if (mounted) _showSnackBar("فشل التحديث: $e", Colors.red);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF102A43),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          ),
+                          child: const Text("حفظ", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         ),

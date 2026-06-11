@@ -127,6 +127,110 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
+  void _showSettingsDialog() {
+    final controller = context.read<VideoRoomController>();
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("إعدادات وتحكم القاعة", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.isTeacher) ...[
+                  const Text("صلاحيات الطلاب (قفل جماعي)", style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.blue, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  _buildToggle(
+                    "قفل الميكروفونات", 
+                    controller.isAllMuted, 
+                    (val) {
+                      controller.muteAllParticipants(val);
+                      setDialogState(() {});
+                    },
+                    icon: Icons.mic_off,
+                  ),
+                  _buildToggle(
+                    "قفل الكاميرات", 
+                    controller.isCamLocked, 
+                    (val) {
+                      controller.disableAllCameras(val);
+                      setDialogState(() {});
+                    },
+                    icon: Icons.videocam_off,
+                  ),
+                  _buildToggle(
+                    "قفل الشات", 
+                    controller.isChatLocked, 
+                    (val) {
+                      controller.toggleChatLock();
+                      setDialogState(() {});
+                    },
+                    icon: Icons.speaker_notes_off_outlined,
+                  ),
+                  _buildToggle(
+                    "قفل السبورة", 
+                    controller.isWhiteboardLocked, 
+                    (val) {
+                      controller.toggleWhiteboardLock();
+                      setDialogState(() {});
+                    },
+                    icon: Icons.edit_outlined,
+                  ),
+                  _buildToggle(
+                    "قفل مشاركة الشاشة", 
+                    controller.isScreenShareLocked, 
+                    (val) {
+                      controller.toggleScreenShareLock();
+                      setDialogState(() {});
+                    },
+                    icon: Icons.screen_lock_landscape,
+                  ),
+                  const Divider(),
+                  _buildToggle(
+                    "وضع جدار الفيديو (Wall)", 
+                    controller.isVideoWallMode, 
+                    (val) {
+                      controller.toggleVideoWallMode();
+                      setDialogState(() {});
+                    },
+                    icon: Icons.grid_view_rounded,
+                  ),
+                  const Divider(),
+                ],
+                ListTile(
+                  leading: const Icon(Icons.refresh, color: Colors.blue),
+                  title: const Text("إعادة اتصال البث", style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
+                  onTap: () {
+                    controller.connectToRoom(widget.roomName);
+                    Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.info_outline, color: Colors.blue),
+                  title: const Text("معلومات الغرفة", style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
+                  subtitle: Text(widget.roomName, style: const TextStyle(fontSize: 12)),
+                  onTap: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggle(String title, bool value, Function(bool) onChanged, {IconData? icon}) {
+    return SwitchListTile(
+      secondary: icon != null ? Icon(icon, size: 20, color: value ? Colors.red : Colors.grey) : null,
+      title: Text(title, style: const TextStyle(fontFamily: 'Cairo', fontSize: 13)),
+      value: value,
+      activeColor: Colors.red,
+      onChanged: onChanged,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
@@ -146,10 +250,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         children: [
           Row(
             children: [
-              // 1. Left Sidebar: Channels
-              Selector<VideoRoomController, String>(
-                selector: (_, c) => c.selectedChannel,
-                builder: (context, selectedChannel, child) => _buildChannelSidebar(controller),
+              // 1. Sidebar: Channels & Whiteboard
+              Selector<VideoRoomController, (String, bool)>(
+                selector: (_, c) => (c.selectedChannel, c.isWhiteboardOpen),
+                builder: (context, data, child) => _buildChannelSidebar(controller),
               ),
 
               Expanded(
@@ -162,9 +266,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       bool isCamEnabled,
                       int participantCount,
                       String title,
-                      bool isRecording,
                       bool isChatOpen,
                       bool isQAOpen,
+                      bool isScreenSharing,
+                      bool isScreenShareLocked,
                     })>(
                       selector: (_, c) => (
                         isHandRaised: c.isHandRaised,
@@ -172,9 +277,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                         isCamEnabled: c.isCamEnabled,
                         participantCount: (c.room?.remoteParticipants.length ?? 0) + 1,
                         title: c.title,
-                        isRecording: c.isRecording,
                         isChatOpen: c.isChatOpen,
                         isQAOpen: c.isQAOpen,
+                        isScreenSharing: c.isScreenSharing,
+                        isScreenShareLocked: c.isScreenShareLocked,
                       ),
                       builder: (context, data, _) => _buildTopHeader(context, controller),
                     ),
@@ -182,26 +288,32 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                     Expanded(
                       child: Row(
                         children: [
-                          // 3. Center: View Content (Main Channel)
+                          // 3. Center Stage (Main Video or Whiteboard)
                           Expanded(
                             child: Stack(
                               children: [
-                                Selector<VideoRoomController, (String, bool)>(
-                                  selector: (_, c) => (c.selectedChannel, c.isPiPExpanded),
-                                  builder: (context, _, __) => _buildMainStage(controller),
+                                // Always render main stage
+                                Positioned.fill(
+                                  child: Selector<VideoRoomController, (String, bool)>(
+                                    selector: (_, c) => (c.selectedChannel, c.isPiPExpanded),
+                                    builder: (context, _, __) => _buildMainStage(controller),
+                                  ),
                                 ),
-                                Selector<VideoRoomController, bool>(
-                                  selector: (_, c) => c.isWhiteboardOpen,
-                                  builder: (_, isOpen, __) => isOpen
-                                      ? const Positioned.fill(child: WhiteboardPanel())
-                                      : const SizedBox(),
+                                // Whiteboard overlay correctly wrapped in Positioned.fill
+                                Positioned.fill(
+                                  child: Selector<VideoRoomController, bool>(
+                                    selector: (_, c) => c.isWhiteboardOpen,
+                                    builder: (_, isOpen, __) => isOpen
+                                        ? const WhiteboardPanel()
+                                        : const SizedBox(),
+                                  ),
                                 ),
                                 ..._reactions,
                               ],
                             ),
                           ),
 
-                          // 4. Right Sidebar: Chat / Q&A
+                          // 4. Right Sidebar: Chat / Q&A (Desktop Only)
                           Selector<VideoRoomController, ({
                             bool isChatOpen,
                             bool isQAOpen,
@@ -211,12 +323,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                               isQAOpen: c.isQAOpen,
                             ),
                             builder: (context, data, _) {
-                              final isOpen = data.isChatOpen || data.isQAOpen;
+                              final isOpen = (data.isChatOpen || data.isQAOpen) && isDesktop;
                               if (!isOpen) return const SizedBox();
                               return AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
-                                width: Responsive.isDesktop(context) ? 350 :
-                                MediaQuery.of(context).size.width * 0.85,
+                                width: 350,
                                 decoration: const BoxDecoration(
                                   color: Color(0xFF16171B),
                                   border: Border(
@@ -233,7 +344,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       ),
                     ),
 
-                    // 5. Bottom: All Students Cams
+                    // 5. Bottom: Students Cams
                     ListenableBuilder(
                       listenable: controller.room ?? ChangeNotifier(),
                       builder: (context, _) => _buildBottomParticipantBar(controller),
@@ -300,11 +411,13 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   context.read<VideoRoomController>()
               ),
             ),
-            Selector<VideoRoomController, bool>(
-              selector: (_, c) => c.isWhiteboardOpen,
-              builder: (_, isOpen, __) => isOpen
-                  ? const WhiteboardPanel()
-                  : const SizedBox(),
+            Positioned.fill(
+              child: Selector<VideoRoomController, bool>(
+                selector: (_, c) => c.isWhiteboardOpen,
+                builder: (_, isOpen, __) => isOpen
+                    ? const WhiteboardPanel()
+                    : const SizedBox(),
+              ),
             ),
             ..._reactions,
             Align(
@@ -392,9 +505,20 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               itemCount: channels.length,
               itemBuilder: (context, index) {
                 final ch = channels[index];
-                final isSelected = controller.selectedChannel == ch['id'];
+                final bool isWhiteboard = ch['id'] == 'whiteboard';
+                final isSelected = isWhiteboard 
+                    ? controller.isWhiteboardOpen 
+                    : (controller.selectedChannel == ch['id'] && !controller.isWhiteboardOpen);
+
                 return InkWell(
-                  onTap: () => controller.selectChannel(ch['id']!),
+                  onTap: () {
+                    if (isWhiteboard) {
+                      controller.toggleWhiteboard();
+                    } else {
+                      controller.selectChannel(ch['id']!);
+                      if (controller.isWhiteboardOpen) controller.toggleWhiteboard();
+                    }
+                  },
                   child: Container(
                     margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                     padding: const EdgeInsets.all(12),
@@ -405,7 +529,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                     ),
                     child: Column(
                       children: [
-                        Icon(Icons.video_camera_back_rounded, color: isSelected ? Colors.blue : Colors.white54, size: 24),
+                        Icon(
+                          isWhiteboard ? Icons.edit_note_rounded : Icons.video_camera_back_rounded, 
+                          color: isSelected ? Colors.blue : Colors.white54, 
+                          size: 24
+                        ),
                         const SizedBox(height: 8),
                         Text(ch['label']!, textAlign: TextAlign.center, style: TextStyle(color: isSelected ? Colors.blue : Colors.white54, fontSize: 10, fontWeight: FontWeight.bold)),
                       ],
@@ -474,6 +602,18 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 onPressed: controller.toggleQA,
                 label: "الأسئلة",
               ),
+              // Fixed: Always show Screen Share for student, but style it based on lock state
+              const SizedBox(width: 15),
+              _HeaderToolButton(
+                icon: controller.isScreenSharing ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
+                color: controller.isScreenSharing 
+                    ? Colors.greenAccent 
+                    : (controller.isScreenShareLocked && !widget.isTeacher ? Colors.white24 : Colors.white54),
+                onPressed: controller.isScreenShareLocked && !widget.isTeacher 
+                    ? () => controller.onNotification?.call("مشاركة الشاشة مقفلة من قبل المعلم 🔒", Colors.orange)
+                    : controller.toggleScreenShare,
+                label: "مشاركة الشاشة",
+              ),
               const SizedBox(width: 25),
               // User Count
               Container(
@@ -491,7 +631,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
           ),
           const Spacer(),
           // Menu Section
-          IconButton(onPressed: () {}, icon: const Icon(Icons.settings, color: Colors.white54)),
+          IconButton(onPressed: _showSettingsDialog, icon: const Icon(Icons.settings, color: Colors.white54)),
           IconButton(
             onPressed: () => _showExitConfirmation(context, controller),
             icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),

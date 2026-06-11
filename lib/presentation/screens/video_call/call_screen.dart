@@ -4,11 +4,13 @@ import '../../../core/utils/responsive.dart';
 class VideoCallScreen extends StatefulWidget {
   final String roomName;
   final String subject;
+  final bool isTeacher;
 
   const VideoCallScreen({
     super.key,
     required this.roomName,
-    required this.subject
+    required this.subject,
+    this.isTeacher = true, // افتراضياً معلم لأغراض العرض، يمكن تغييرها عند الاستدعاء
   });
 
   @override
@@ -20,10 +22,84 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   bool _isCameraOn = true;
   bool _isChatOpen = false;
 
+  // حالات التحكم الجماعي (للمعلم)
+  bool _isAllMuted = false;
+  bool _isAllVideoOff = false;
+  bool _isChatLocked = false;
+  bool _isWhiteboardLocked = false;
+
+  void _showSettingsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E2124),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("إعدادات وتحكم القاعة", 
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.isTeacher) ...[
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: Text("تحكم المعلم (للجميع)", 
+                      style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildDialogToggle("كتم صوت الجميع", _isAllMuted, (val) {
+                    setDialogState(() => _isAllMuted = val);
+                    setState(() => _isAllMuted = val);
+                    // هنا يتم استدعاء اللوجيك البرمجي لإرسال الأمر للسيرفر
+                  }),
+                  _buildDialogToggle("إيقاف كاميرات الجميع", _isAllVideoOff, (val) {
+                    setDialogState(() => _isAllVideoOff = val);
+                    setState(() => _isAllVideoOff = val);
+                  }),
+                  _buildDialogToggle("قفل الدردشة", _isChatLocked, (val) {
+                    setDialogState(() => _isChatLocked = val);
+                    setState(() => _isChatLocked = val);
+                  }),
+                  _buildDialogToggle("قفل السبورة", _isWhiteboardLocked, (val) {
+                    setDialogState(() => _isWhiteboardLocked = val);
+                    setState(() => _isWhiteboardLocked = val);
+                  }),
+                  const Divider(color: Colors.white10),
+                ],
+                ListTile(
+                  leading: const Icon(Icons.info_outline, color: Colors.blue),
+                  title: const Text("معلومات الغرفة", style: TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Cairo')),
+                  subtitle: Text(widget.roomName, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  onTap: () => Navigator.pop(context),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.refresh, color: Colors.blue),
+                  title: const Text("تحديث الاتصال", style: TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Cairo')),
+                  onTap: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDialogToggle(String title, bool value, Function(bool) onChanged) {
+    return SwitchListTile(
+      title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Cairo')),
+      value: value,
+      activeColor: Colors.blue,
+      contentPadding: EdgeInsets.zero,
+      onChanged: onChanged,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101214), // اللون الاحترافي الأصلي
+      backgroundColor: const Color(0xFF101214),
       body: SafeArea(
         child: Column(
           children: [
@@ -32,7 +108,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    flex: 4, // توسيع مساحة العرض الرئيسية
+                    flex: 4,
                     child: _buildMainContent(),
                   ),
                   if (_isChatOpen && !Responsive.isMobile(context))
@@ -49,7 +125,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   Widget _buildTopBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8), // تقليل الارتفاع الرأسي
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Row(
         children: [
           Container(
@@ -82,7 +158,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           const SizedBox(width: 15),
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.white70),
-            onPressed: () {},
+            onPressed: _showSettingsDialog,
           ),
         ],
       ),
@@ -95,13 +171,12 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
         return Column(
           children: [
             Expanded(
-              flex: 8, // المعلم يأخذ المساحة الأكبر
+              flex: 8,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(15, 5, 15, 10),
                 child: _buildParticipantCard(true, isMain: true),
               ),
             ),
-            // شريط الطلاب (تصغير الارتفاع لإعطاء مساحة للمعلم)
             SizedBox(
               height: constraints.maxHeight * 0.16,
               child: ListView.builder(
@@ -144,7 +219,6 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
               ),
             ),
           ),
-
           if (isTeacher)
             Positioned(
               top: 12,
@@ -165,8 +239,6 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                 ),
               ),
             ),
-
-          // تنبيه المايك المغلق (موجود ومفعل)
           if (isTeacher && !_isMicOn)
             const Positioned(
               top: 12,
@@ -177,7 +249,6 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                 child: Icon(Icons.mic_off, color: Colors.white, size: 16),
               ),
             ),
-
           Positioned(
             bottom: 12,
             left: 12,
@@ -225,8 +296,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             padding: const EdgeInsets.all(15),
             child: TextField(
               style: const TextStyle(color: Colors.white, fontSize: 14),
+              enabled: !_isChatLocked || widget.isTeacher,
               decoration: InputDecoration(
-                hintText: "اكتب رسالتك...",
+                hintText: _isChatLocked && !widget.isTeacher ? "الدردشة مقفلة" : "اكتب رسالتك...",
                 hintStyle: const TextStyle(color: Colors.grey),
                 fillColor: Colors.white.withOpacity(0.05),
                 filled: true,
@@ -242,7 +314,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   Widget _buildBottomControls() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 15), // تقليل الهامش لزيادة مساحة الفيديو
+      padding: const EdgeInsets.symmetric(vertical: 15),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

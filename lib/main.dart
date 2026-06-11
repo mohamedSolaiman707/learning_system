@@ -108,6 +108,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final fullUri = Uri.base;
     Map<String, String> params = Map.from(fullUri.queryParameters);
 
+    // استخراج المعرف من المسار في حالة الروابط المباشرة مثل /join/699460
+    if (fullUri.pathSegments.contains('join')) {
+      final joinIndex = fullUri.pathSegments.indexOf('join');
+      if (joinIndex < fullUri.pathSegments.length - 1) {
+        params['lms_id'] = fullUri.pathSegments[joinIndex + 1];
+      }
+    }
+
     if (fullUri.fragment.isNotEmpty) {
       String fragment = fullUri.fragment;
       if (fragment.contains('?')) {
@@ -135,7 +143,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     try {
-      // 1. هل يوجد توكين جديد يحتاج تفعيل؟
       final accessToken = params['access_token'];
       if (accessToken != null) {
         try {
@@ -146,7 +153,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
       }
 
-      // 2. هل يوجد lms_id يحتاج فتح الحصة مباشرة؟
       final lmsId = params['lms_id'];
       if (lmsId != null && authProvider.isAuthenticated) {
         _linkProcessed = true;

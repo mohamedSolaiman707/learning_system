@@ -45,10 +45,13 @@ class ParticipantGrid extends StatelessWidget {
                 return _buildHybridStudentLayout(context, screenSharingParticipant, channelParticipant);
               } else {
                 if (channelParticipant != null) {
-                  return ParticipantTile(
-                    key: ValueKey("channel_${channelParticipant.identity}"), 
-                    participant: channelParticipant, 
-                    isMainStage: true
+                  return GestureDetector(
+                    onTap: () => controller.cycleRoomCamera(),
+                    child: ParticipantTile(
+                      key: ValueKey("channel_${channelParticipant.identity}"), 
+                      participant: channelParticipant, 
+                      isMainStage: true
+                    ),
                   );
                 } else {
                   return Center(
@@ -204,6 +207,7 @@ class ParticipantGrid extends StatelessWidget {
 
   Widget _buildHybridStudentLayout(BuildContext context, Participant screenPart, Participant? camPart) {
     final bool isDesktop = Responsive.isDesktop(context);
+    final controller = context.read<VideoRoomController>();
     
     return Stack(
       children: [
@@ -220,20 +224,24 @@ class ParticipantGrid extends StatelessWidget {
           Positioned(
             top: isDesktop ? 40 : 20,
             right: 20,
-            child: Container(
-              width: isDesktop ? 280 : 140,
-              height: isDesktop ? 160 : 80,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 10)],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: ParticipantTile(
-                  key: ValueKey("student_side_cam_${camPart.identity}"),
-                  participant: camPart,
-                  isMainStage: false,
-                  forceShowScreen: false,
+            child: GestureDetector(
+              onTap: () => controller.cycleRoomCamera(),
+              child: Container(
+                width: isDesktop ? 280 : 140,
+                height: isDesktop ? 160 : 80,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.blue.withOpacity(0.5), width: 2),
+                  boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 10)],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(15),
+                  child: ParticipantTile(
+                    key: ValueKey("student_side_cam_${camPart.identity}"),
+                    participant: camPart,
+                    isMainStage: false,
+                    forceShowScreen: false,
+                  ),
                 ),
               ),
             ),
@@ -361,7 +369,7 @@ class ParticipantTile extends StatelessWidget {
       builder: (context, _) {
         final bool isMe = participant is LocalParticipant;
         final bool isTeacher = participant.identity.toLowerCase().contains('teacher');
-        final bool isRoomCam = participant.identity.contains('roomcam_');
+        final bool isRoomCam = participant.identity.contains('room-cam-');
         final bool isSpeaking = participant.isSpeaking;
 
         String displayName = participant.name ?? "";
@@ -373,7 +381,6 @@ class ParticipantTile extends StatelessWidget {
         VideoTrack? activeVideoTrack;
         bool isScreen = false;
 
-        // Logic to select the correct track, handling local participant correctly
         if (forceShowScreen == true) {
           final pub = participant.videoTrackPublications.where((p) => p.isScreenShare).firstOrNull;
           if (pub != null && (isMe || pub.subscribed)) activeVideoTrack = pub.track as VideoTrack?;
@@ -457,7 +464,6 @@ class ParticipantTile extends StatelessWidget {
                 ),
               ),
 
-              // Cinematic Spotlight Overlay
               if (isSpotlighted)
                 Positioned.fill(
                   child: Container(
@@ -487,13 +493,12 @@ class ParticipantTile extends StatelessWidget {
                     if (isHandRaised) const SizedBox(width: 8),
                     if (isSpotlighted) _buildBadge("مشاركة مميزة", Colors.amber.shade700, Icons.star),
                     if (isSpotlighted) const SizedBox(width: 8),
-                    if (isRoomCam) _buildBadge("كاميرا القاعة", Colors.teal, Icons.videocam)
+                    if (isRoomCam) _buildBadge(displayName, Colors.teal, Icons.videocam)
                     else if (isTeacher) _buildBadge(isScreen ? "شاشة المعلم" : "المعلم", Colors.blueAccent, isScreen ? Icons.desktop_windows : Icons.school),
                   ],
                 ),
               ),
 
-              // Audio Visualizer for speaking
               if (isSpeaking && !isScreen)
                 Positioned(
                   bottom: 10,
@@ -503,7 +508,6 @@ class ParticipantTile extends StatelessWidget {
 
               if (isSpeaking) Positioned(top: 0, left: 0, right: 0, child: Container(height: 3, color: Colors.greenAccent)),
 
-              // Answer overlay — only in teacher Video Wall mode
               Consumer<VideoRoomController>(
                 builder: (context, ctrl, _) {
                   if (!ctrl.isTeacher) return const SizedBox();

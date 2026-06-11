@@ -141,6 +141,18 @@ class VideoRoomController extends ChangeNotifier {
     'room-cam-screen',
   ];
 
+  void cycleRoomCamera() {
+    int currentIndex = roomCameraOrder.indexOf(_selectedChannel);
+    if (currentIndex == -1) {
+      _selectedChannel = roomCameraOrder.first;
+    } else {
+      _selectedChannel = roomCameraOrder[(currentIndex + 1) % roomCameraOrder.length];
+    }
+    _isWhiteboardOpen = false;
+    _triggerHaptic();
+    notifyListeners();
+  }
+
   void checkAndFallbackChannel() {
     if (_room == null || isTeacher) return;
     
@@ -175,9 +187,9 @@ class VideoRoomController extends ChangeNotifier {
   
   String getCameraLabel(String channel) {
     switch (channel) {
-      case 'room-cam-right': return 'كاميرا اليمين';
-      case 'room-cam-left': return 'كاميرا الشمال';
-      case 'room-cam-screen': return 'الشاشة الرئيسية';
+      case 'room-cam-right': return 'كاميرا القاعة 1';
+      case 'room-cam-left': return 'كاميرا القاعة 2';
+      case 'room-cam-screen': return 'كاميرا القاعة 3';
       default: return 'كاميرا القاعة';
     }
   }
@@ -196,8 +208,13 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void selectChannel(String trackName) {
-    _selectedChannel = trackName;
-    notifyListeners();
+    if (_selectedChannel == trackName) {
+      cycleRoomCamera();
+    } else {
+      _selectedChannel = trackName;
+      _isWhiteboardOpen = false;
+      notifyListeners();
+    }
   }
 
   Room? get room => _room;

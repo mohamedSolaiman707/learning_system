@@ -574,65 +574,66 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             ],
           ),
           const Spacer(),
-          Row(
-            children: [
-              _HeaderToolButton(
-                icon: controller.isHandRaised ? Icons.front_hand : Icons.front_hand_outlined,
-                color: controller.isHandRaised ? Colors.amber : Colors.white54,
-                onPressed: controller.toggleHand,
-                label: "رفع اليد",
-              ),
-              const SizedBox(width: 15),
-              _HeaderToolButton(
-                icon: controller.isMicEnabled ? Icons.mic : Icons.mic_off,
-                color: controller.isMicEnabled ? Colors.blue : Colors.redAccent,
-                onPressed: controller.toggleMic,
-              ),
-              const SizedBox(width: 15),
-              _HeaderToolButton(
-                icon: controller.isCamEnabled ? Icons.videocam : Icons.videocam_off,
-                color: controller.isCamEnabled ? Colors.blue : Colors.redAccent,
-                onPressed: controller.toggleCam,
-              ),
-              const SizedBox(width: 15),
-              _HeaderToolButton(
-                icon: Icons.chat_bubble_rounded,
-                color: controller.isChatOpen ? Colors.blue : Colors.white54,
-                onPressed: controller.toggleChat,
-                label: "الشات",
-              ),
-              const SizedBox(width: 15),
-              _HeaderToolButton(
-                icon: Icons.help_outline_rounded,
-                color: controller.isQAOpen ? Colors.orange : Colors.white54,
-                onPressed: controller.toggleQA,
-                label: "الأسئلة",
-              ),
-              const SizedBox(width: 15),
-              _HeaderToolButton(
-                icon: controller.isScreenSharing ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
-                color: controller.isScreenSharing 
-                    ? Colors.greenAccent 
-                    : (controller.isScreenShareLocked && !widget.isTeacher ? Colors.white24 : Colors.white54),
-                onPressed: controller.isScreenShareLocked && !widget.isTeacher 
-                    ? () => controller.onNotification?.call("مشاركة الشاشة مقفلة من قبل المعلم 🔒", Colors.orange)
-                    : controller.toggleScreenShare,
-                label: "مشاركة الشاشة",
-              ),
-              const SizedBox(width: 25),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(20)),
-                child: Row(
-                  children: [
-                    const Icon(Icons.people_alt_rounded, color: Colors.blue, size: 16),
-                    const SizedBox(width: 8),
-                    Text("${(controller.room?.remoteParticipants.length ?? 0) + 1}", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                  ],
+          if (!widget.isTeacher)
+            Row(
+              children: [
+                _HeaderToolButton(
+                  icon: controller.isHandRaised ? Icons.front_hand : Icons.front_hand_outlined,
+                  color: controller.isHandRaised ? Colors.amber : Colors.white54,
+                  onPressed: controller.toggleHand,
+                  label: "رفع اليد",
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 15),
+                _HeaderToolButton(
+                  icon: controller.isMicEnabled ? Icons.mic : Icons.mic_off,
+                  color: controller.isMicEnabled ? Colors.blue : Colors.redAccent,
+                  onPressed: controller.toggleMic,
+                ),
+                const SizedBox(width: 15),
+                _HeaderToolButton(
+                  icon: controller.isCamEnabled ? Icons.videocam : Icons.videocam_off,
+                  color: controller.isCamEnabled ? Colors.blue : Colors.redAccent,
+                  onPressed: controller.toggleCam,
+                ),
+                const SizedBox(width: 15),
+                _HeaderToolButton(
+                  icon: Icons.chat_bubble_rounded,
+                  color: controller.isChatOpen ? Colors.blue : Colors.white54,
+                  onPressed: controller.toggleChat,
+                  label: "الشات",
+                ),
+                const SizedBox(width: 15),
+                _HeaderToolButton(
+                  icon: Icons.help_outline_rounded,
+                  color: controller.isQAOpen ? Colors.orange : Colors.white54,
+                  onPressed: controller.toggleQA,
+                  label: "الأسئلة",
+                ),
+                const SizedBox(width: 15),
+                _HeaderToolButton(
+                  icon: controller.isScreenSharing ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
+                  color: controller.isScreenSharing 
+                      ? Colors.greenAccent 
+                      : (controller.isScreenShareLocked && !widget.isTeacher ? Colors.white24 : Colors.white54),
+                  onPressed: controller.isScreenShareLocked && !widget.isTeacher 
+                      ? () => controller.onNotification?.call("مشاركة الشاشة مقفلة من قبل المعلم 🔒", Colors.orange)
+                      : controller.toggleScreenShare,
+                  label: "مشاركة الشاشة",
+                ),
+                const SizedBox(width: 25),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(20)),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.people_alt_rounded, color: Colors.blue, size: 16),
+                      const SizedBox(width: 8),
+                      Text("${(controller.room?.remoteParticipants.length ?? 0) + 1}", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           const Spacer(),
           IconButton(onPressed: _showSettingsDialog, icon: const Icon(Icons.settings, color: Colors.white54)),
           IconButton(

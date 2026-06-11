@@ -73,11 +73,11 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                   subtitle: Text(widget.roomName, style: const TextStyle(color: Colors.grey, fontSize: 12)),
                   onTap: () => Navigator.pop(context),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.refresh, color: Colors.blue),
-                  title: const Text("تحديث الاتصال", style: TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Cairo')),
-                  onTap: () => Navigator.pop(context),
-                ),
+                // ListTile(
+                //   leading: const Icon(Icons.refresh, color: Colors.blue),
+                //   title: const Text("تحديث الاتصال", style: TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Cairo')),
+                //   onTap: () => Navigator.pop(context),
+                // ),
               ],
             ),
           ),

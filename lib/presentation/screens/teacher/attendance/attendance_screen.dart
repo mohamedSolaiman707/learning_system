@@ -153,62 +153,62 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
-        title: Text("تحضير ${widget.subjectName}", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo')),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("كشف الحضور والغياب", style: const TextStyle(color: Color(0xFF102A43), fontWeight: FontWeight.w900, fontSize: 18, fontFamily: 'Cairo')),
+            Text(widget.subjectName, style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 12, fontFamily: 'Cairo')),
+          ],
+        ),
         backgroundColor: Colors.white, elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
+        iconTheme: const IconThemeData(color: Color(0xFF102A43)),
         actions: [
           if (!_isLoading && _students.isNotEmpty) ...[
-            IconButton(
-              onPressed: _exportToPdf,
-              icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.redAccent),
-              tooltip: "تحميل التقرير PDF",
-            ),
-            const SizedBox(width: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
-              child: ElevatedButton.icon(
-                onPressed: _saveAttendance,
-                icon: const Icon(Icons.done_all, size: 18),
-                label: const Text("اعتماد الكشف", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF102A43),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
+            _buildActionIcon(Icons.picture_as_pdf_rounded, Colors.red, _exportToPdf, "PDF"),
+            const SizedBox(width: 10),
+            _buildPremiumActionBtn(),
+            const SizedBox(width: 20),
           ]
         ],
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1000),
+          constraints: const BoxConstraints(maxWidth: 1200),
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Column(
-                  children: [
-                    _buildHeader(presentCount, total, isDesktop),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 24),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline, size: 16, color: Colors.blue),
-                          SizedBox(width: 8),
-                          Text("الطلاب المسجل دخولهم تلقائياً تظهر بيانات انضمامهم في تقرير PDF", style: TextStyle(fontSize: 12, color: Colors.blueGrey, fontFamily: 'Cairo')),
-                        ],
+              ? const Center(child: CircularProgressIndicator(color: Color(0xFF102A43), strokeWidth: 2))
+              : CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildHeader(presentCount, total, isDesktop)),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
+                              child: const Icon(Icons.info_outline_rounded, size: 14, color: Colors.blue),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text("الطلاب الذين سجلوا دخولهم تظهر بياناتهم مفصلة في التقرير", 
+                              style: TextStyle(fontSize: 11, color: Colors.blueGrey, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+                          ],
+                        ),
                       ),
                     ),
-                    Expanded(
-                      child: _students.isEmpty
-                          ? _buildEmptyState()
-                          : ListView.builder(
-                              padding: EdgeInsets.all(isDesktop ? 24 : 16),
-                              itemCount: _students.length,
-                              itemBuilder: (context, index) => _buildStudentTile(index),
+                    _students.isEmpty
+                        ? SliverFillRemaining(child: _buildEmptyState())
+                        : SliverPadding(
+                            padding: EdgeInsets.symmetric(horizontal: isDesktop ? 30 : 20, vertical: 20),
+                            sliver: SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) => _buildStudentTile(index, isDesktop),
+                                itemCount: _students.length,
+                              ),
                             ),
-                    ),
+                          ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 50)),
                   ],
                 ),
         ),
@@ -216,88 +216,187 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
+  Widget _buildActionIcon(IconData icon, Color color, VoidCallback onTap, String tooltip) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: color, size: 22),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumActionBtn() {
+    return ElevatedButton.icon(
+      onPressed: _saveAttendance,
+      icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+      label: const Text("اعتماد الكشف", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w900)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF102A43),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
   Widget _buildHeader(int present, int total, bool isDesktop) {
+    double percentage = total > 0 ? (present / total) : 0;
     return Container(
-      padding: EdgeInsets.all(isDesktop ? 32 : 24),
-      margin: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(30),
+      margin: const EdgeInsets.all(30),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF102A43), Color(0xFF243B53)]),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: const Color(0xFF102A43).withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))],
+        gradient: const LinearGradient(
+          colors: [Color(0xFF102A43), Color(0xFF243B53), Color(0xFF334E68)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF102A43).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10)),
+        ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text("حالة الحضور اللحظية", style: TextStyle(color: Colors.white70, fontSize: 14, fontFamily: 'Cairo')),
-            const SizedBox(height: 8),
-            Text("$present طالب حاضر من أصل $total", style: TextStyle(color: Colors.white, fontSize: isDesktop ? 24 : 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-          ]),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
-            child: const Icon(Icons.groups_rounded, color: Colors.white, size: 40),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text("إحصائيات الحضور", style: TextStyle(color: Colors.white70, fontSize: 14, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+              const SizedBox(height: 10),
+              Text("$present طالب حاضر", style: TextStyle(color: Colors.white, fontSize: isDesktop ? 28 : 22, fontWeight: FontWeight.w900, fontFamily: 'Cairo')),
+              Text("من إجمالي $total طلاب مسجلين", style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13, fontFamily: 'Cairo')),
+            ]),
+          ),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 70, height: 70,
+                child: CircularProgressIndicator(
+                  value: percentage,
+                  strokeWidth: 8,
+                  backgroundColor: Colors.white.withOpacity(0.1),
+                  color: const Color(0xFF00C853),
+                ),
+              ),
+              Text("${(percentage * 100).toInt()}%", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStudentTile(int index) {
+  Widget _buildStudentTile(int index, bool isDesktop) {
     final s = _students[index];
     final bool isAuto = s['isAutoMarked'] ?? false;
+    final bool isPresent = s['present'];
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white, 
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
-        border: isAuto ? Border.all(color: Colors.green.withOpacity(0.2), width: 1.5) : null,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15, offset: const Offset(0, 8))],
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: CircleAvatar(
-          radius: 24,
-          backgroundColor: isAuto ? Colors.green.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
-          child: Text(s['name'][0].toUpperCase(), style: TextStyle(color: isAuto ? Colors.green : Colors.blue, fontWeight: FontWeight.bold, fontSize: 18)),
-        ),
-        title: Text(s['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Cairo')),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(color: s['present'] ? Colors.green : Colors.red, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  isAuto ? "تم التحضير تلقائياً" : (s['present'] ? "حاضر" : "غائب"),
-                  style: TextStyle(color: s['present'] ? Colors.green : Colors.red, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
-                ),
-              ],
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          leading: Container(
+            width: 50, height: 50,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isPresent 
+                  ? [const Color(0xFF00C853).withOpacity(0.1), const Color(0xFF00C853).withOpacity(0.2)]
+                  : [Colors.red.withOpacity(0.1), Colors.red.withOpacity(0.2)],
+              ),
+              shape: BoxShape.circle,
             ),
-            if (isAuto && s['duration'] != null)
+            child: Center(
+              child: Text(s['name'][0].toUpperCase(), 
+                style: TextStyle(color: isPresent ? const Color(0xFF00C853) : Colors.red, fontWeight: FontWeight.w900, fontSize: 20)),
+            ),
+          ),
+          title: Text(s['name'], style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, fontFamily: 'Cairo', color: Color(0xFF102A43))),
+          subtitle: Row(
+            children: [
+              _buildStatusBadge(isPresent, isAuto),
+              if (isAuto && s['duration'] != null) ...[
+                const SizedBox(width: 8),
+                Text("${s['duration']} دقيقة", style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade300, fontFamily: 'Cairo')),
+              ]
+            ],
+          ),
+          trailing: Transform.scale(
+            scale: 0.8,
+            child: Switch(
+              value: isPresent,
+              activeColor: const Color(0xFF00C853),
+              inactiveThumbColor: Colors.red,
+              inactiveTrackColor: Colors.red.withOpacity(0.2),
+              onChanged: (val) => setState(() => _students[index]['present'] = val),
+            ),
+          ),
+          children: [
+            if (isAuto)
               Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text("مدة الحضور: ${s['duration']} دقيقة", style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontFamily: 'Cairo')),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildInfoItem(Icons.login_rounded, "الدخول", _formatTime(s['joined_at'])),
+                    _buildInfoItem(Icons.logout_rounded, "الخروج", _formatTime(s['left_at'])),
+                  ],
+                ),
               ),
           ],
         ),
-        trailing: Transform.scale(
-          scale: 0.9,
-          child: Switch(
-            value: s['present'],
-            activeColor: Colors.green,
-            onChanged: (val) => setState(() => _students[index]['present'] = val),
-          ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(bool isPresent, bool isAuto) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: isPresent ? const Color(0xFF00C853).withOpacity(0.1) : Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        isAuto ? "تحضير نظام" : (isPresent ? "حاضر" : "غائب"),
+        style: TextStyle(
+          color: isPresent ? const Color(0xFF00C853) : Colors.red, 
+          fontSize: 10, 
+          fontFamily: 'Cairo', 
+          fontWeight: FontWeight.w800
         ),
       ),
     );
+  }
+
+  Widget _buildInfoItem(IconData icon, String label, String value) {
+    return Column(
+      children: [
+        Icon(icon, size: 16, color: Colors.blueGrey.shade200),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade300, fontFamily: 'Cairo')),
+        Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF102A43), fontFamily: 'Cairo')),
+      ],
+    );
+  }
+
+  String _formatTime(String? iso) {
+    if (iso == null) return "--:--";
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      return DateFormat('hh:mm a').format(dt).replaceAll("AM", "ص").replaceAll("PM", "م");
+    } catch (_) { return "--:--"; }
   }
 
   Widget _buildEmptyState() {
@@ -305,9 +404,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.person_off_outlined, size: 80, color: Colors.grey.shade300),
-          const SizedBox(height: 16),
-          const Text("لا يوجد طلاب مسجلين حالياً", style: TextStyle(color: Colors.grey, fontSize: 16, fontFamily: 'Cairo')),
+          Container(
+            padding: const EdgeInsets.all(40),
+            decoration: BoxDecoration(color: Colors.blueGrey.withOpacity(0.05), shape: BoxShape.circle),
+            child: Icon(Icons.person_off_rounded, size: 80, color: Colors.blueGrey.shade200),
+          ),
+          const SizedBox(height: 24),
+          const Text("لا يوجد طلاب مسجلين في هذه الحصة", 
+            style: TextStyle(color: Colors.blueGrey, fontSize: 16, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
         ],
       ),
     );

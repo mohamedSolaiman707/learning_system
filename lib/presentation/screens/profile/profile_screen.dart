@@ -23,105 +23,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       if (result != null && result.files.first.bytes != null) {
-        setState(() {
-          _isUploading = true;
-        });
-
+        setState(() => _isUploading = true);
         final file = result.files.first;
         await authProvider.uploadAvatar(file.bytes!, file.name);
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("تم تحديث صورة الملف الشخصي بنجاح ✅", style: TextStyle(fontFamily: 'Cairo')),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+          _showSnackBar("تم تحديث صورة الملف الشخصي بنجاح ✅", Colors.green);
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("فشل رفع الصورة: $e", style: const TextStyle(fontFamily: 'Cairo')),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      if (mounted) _showSnackBar("فشل رفع الصورة: $e", Colors.red);
     } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
+      if (mounted) setState(() => _isUploading = false);
     }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        margin: const EdgeInsets.all(20),
+      ),
+    );
   }
 
   void _showEditDialog(String title, String field, String currentValue) {
     final controller = TextEditingController(text: currentValue);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final bool isPassword = field == 'password';
     
     showDialog(
       context: context,
       builder: (context) => Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 500),
+          constraints: const BoxConstraints(maxWidth: 450),
           child: AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            title: Text("تعديل $title", style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+            title: Text(isPassword ? "تغيير كلمة المرور" : "تعديل $title", style: const TextStyle(fontWeight: FontWeight.w900, fontFamily: 'Cairo', color: Color(0xFF102A43))),
             content: TextField(
               controller: controller,
-              style: const TextStyle(fontFamily: 'Cairo'),
+              obscureText: isPassword,
+              style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
               decoration: InputDecoration(
-                hintText: "أدخل $title الجديد",
+                hintText: isPassword ? "أدخل كلمة المرور الجديدة" : "أدخل $title الجديد",
                 filled: true,
-                fillColor: Colors.grey.withOpacity(0.05),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                fillColor: const Color(0xFFF0F4F8),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
               ),
             ),
+            actionsPadding: const EdgeInsets.all(20),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context), 
-                child: const Text("إلغاء", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo')),
+                child: const Text("إلغاء", style: TextStyle(color: Colors.blueGrey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
               ),
               ElevatedButton(
                 onPressed: () async {
+                  if (controller.text.isEmpty) return;
                   try {
-                    await authProvider.updateProfile({field: controller.text});
+                    if (isPassword) {
+                      await authProvider.updatePassword(controller.text);
+                    } else {
+                      await authProvider.updateProfile({field: controller.text});
+                    }
                     if (mounted) {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("تم تحديث البيانات بنجاح ✅", style: TextStyle(fontFamily: 'Cairo')), 
-                          backgroundColor: Colors.green,
-                          behavior: SnackBarBehavior.floating,
-                        )
-                      );
+                      _showSnackBar(isPassword ? "تم تغيير كلمة المرور بنجاح 🔒" : "تم تحديث البيانات بنجاح ✅", Colors.green);
                     }
                   } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text("فشل التحديث: $e", style: const TextStyle(fontFamily: 'Cairo')), 
-                          backgroundColor: Colors.red,
-                          behavior: SnackBarBehavior.floating,
-                        )
-                      );
-                    }
+                    if (mounted) _showSnackBar("فشل التحديث: $e", Colors.red);
                   }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF102A43),
                   foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text("حفظ التعديلات", style: TextStyle(fontFamily: 'Cairo')),
+                child: const Text("حفظ التعديلات", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -136,251 +119,172 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profile = authProvider.profile;
     
     if (profile == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: CircularProgressIndicator(color: Color(0xFF102A43))));
     }
 
+    final bool isDesktop = Responsive.isDesktop(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
-      appBar: Responsive.isMobile(context) 
-          ? AppBar(
-              title: const Text("الملف الشخصي", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')), 
-              elevation: 0,
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
-            )
-          : null,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1400),
-          child: Responsive(
-            mobile: _buildMobileLayout(profile, authProvider),
-            desktop: _buildDesktopLayout(profile, authProvider),
+      backgroundColor: Colors.transparent,
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: Padding(
+              padding: EdgeInsets.all(isDesktop ? 40 : 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isDesktop) ...[
+                    const Text("الملف الشخصي", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF102A43), fontFamily: 'Cairo')),
+                    const SizedBox(height: 8),
+                    const Text("إدارة معلوماتك الشخصية وإعدادات الحساب", style: TextStyle(color: Colors.blueGrey, fontSize: 16, fontFamily: 'Cairo')),
+                    const SizedBox(height: 40),
+                  ],
+                  
+                  if (isDesktop)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 2, child: _buildInfoSection(profile)),
+                        const SizedBox(width: 40),
+                        Expanded(flex: 1, child: _buildSideSummary(profile, authProvider)),
+                      ],
+                    )
+                  else ...[
+                    _buildSideSummary(profile, authProvider),
+                    const SizedBox(height: 30),
+                    _buildInfoSection(profile),
+                  ],
+                  const SizedBox(height: 40),
+                  _buildLogoutButton(authProvider),
+                  const SizedBox(height: 60),
+                ],
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildMobileLayout(Map<String, dynamic> profile, AuthProvider auth) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          _buildSummaryCard(profile, auth),
-          const SizedBox(height: 24),
-          _buildSettingsSection(profile),
-          const SizedBox(height: 32),
-          _buildLogoutButton(auth),
-          const SizedBox(height: 40),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDesktopLayout(Map<String, dynamic> profile, AuthProvider auth) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Left Side: Settings
-        Expanded(
-          flex: 3,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(60),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "إعدادات الحساب الشخصي", 
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E), fontFamily: 'Cairo')
-                ),
-                const SizedBox(height: 8),
-                const Text("تحكم في بياناتك الشخصية وإعدادات الأمان الخاصة بك", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontSize: 16)),
-                const SizedBox(height: 48),
-                _buildSettingsSection(profile),
-              ],
-            ),
-          ),
-        ),
-        
-        const VerticalDivider(width: 1, color: Colors.black12),
-        
-        // Right Side: Summary
-        Expanded(
-          flex: 2,
-          child: Container(
-            color: Colors.white,
-            padding: const EdgeInsets.all(60),
-            child: Column(
-              children: [
-                _buildSummaryCard(profile, auth),
-                const Spacer(),
-                _buildLogoutButton(auth),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSummaryCard(Map<String, dynamic> profile, AuthProvider auth) {
+  Widget _buildSideSummary(Map<String, dynamic> profile, AuthProvider auth) {
     final String name = profile['full_name'] ?? 'مستخدم';
     final String role = profile['role'] ?? 'student';
     final String? avatarUrl = profile['avatar_url'];
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      padding: const EdgeInsets.all(30),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04), 
-            blurRadius: 30, 
-            offset: const Offset(0, 10)
-          )
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 20, offset: const Offset(0, 10))],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              GestureDetector(
-                onTap: _isUploading ? null : () => _pickAndUploadImage(auth),
-                child: Container(
-                  width: 140,
-                  height: 140,
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.05),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 4),
-                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
-                    image: avatarUrl != null 
-                        ? DecorationImage(
-                            image: NetworkImage(avatarUrl), 
-                            fit: BoxFit.cover,
-                            opacity: _isUploading ? 0.5 : 1.0,
-                          )
-                        : null,
-                  ),
-                  child: avatarUrl == null 
-                      ? Center(
-                          child: Text(
-                            name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "U",
-                            style: TextStyle(
-                              fontSize: 56, 
-                              fontWeight: FontWeight.bold, 
-                              fontFamily: 'Cairo',
-                              color: const Color(0xFF102A43).withOpacity(_isUploading ? 0.3 : 1.0),
-                            ),
-                          ),
-                        )
-                      : null,
-                ),
-              ),
-              if (_isUploading)
-                const SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFF102A43)),
-                ),
-              Positioned(
-                bottom: 5,
-                right: 5,
-                child: GestureDetector(
-                  onTap: _isUploading ? null : () => _pickAndUploadImage(auth),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: _isUploading ? Colors.grey : const Color(0xFF102A43),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
-                    ),
-                    child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Text(
-            name, 
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E), fontFamily: 'Cairo'),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF102A43).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: Text(
-              role == 'admin' ? "مدير النظام" : (role == 'teacher' ? "مدرس معتمد" : "طالب"),
-              style: const TextStyle(
-                color: Color(0xFF102A43),
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                fontFamily: 'Cairo',
-              ),
-            ),
-          ),
+          _buildAvatarStack(name, avatarUrl, auth),
+          const SizedBox(height: 20),
+          Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF102A43), fontFamily: 'Cairo'), textAlign: TextAlign.center),
+          const SizedBox(height: 10),
+          _buildRoleBadge(role),
+          const SizedBox(height: 30),
+          const Divider(height: 1),
+          const SizedBox(height: 30),
+          _buildQuickStats(role),
         ],
       ),
     );
   }
 
-  Widget _buildSettingsSection(Map<String, dynamic> profile) {
+  Widget _buildAvatarStack(String name, String? avatarUrl, AuthProvider auth) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 130, height: 130,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0F4F8),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 4),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 15)],
+            image: avatarUrl != null ? DecorationImage(image: NetworkImage(avatarUrl), fit: BoxFit.cover, opacity: _isUploading ? 0.3 : 1.0) : null,
+          ),
+          child: avatarUrl == null 
+            ? Center(child: Text(name.isNotEmpty ? name[0].toUpperCase() : "U", style: TextStyle(fontSize: 50, fontWeight: FontWeight.w900, color: const Color(0xFF102A43).withOpacity(_isUploading ? 0.2 : 1.0))))
+            : null,
+        ),
+        if (_isUploading) const CircularProgressIndicator(color: Color(0xFF102A43), strokeWidth: 3),
+        Positioned(
+          bottom: 2, right: 2,
+          child: InkWell(
+            onTap: () => _pickAndUploadImage(auth),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: const Color(0xFF102A43), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 3)),
+              child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 18),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoleBadge(String role) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(color: const Color(0xFF102A43).withOpacity(0.06), borderRadius: BorderRadius.circular(20)),
+      child: Text(
+        role == 'admin' ? "مدير النظام" : (role == 'teacher' ? "معلم معتمد" : "طالب"),
+        style: const TextStyle(color: Color(0xFF102A43), fontWeight: FontWeight.w800, fontSize: 12, fontFamily: 'Cairo'),
+      ),
+    );
+  }
+
+  Widget _buildQuickStats(String role) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        _buildStatItem(role == 'teacher' ? "حصة" : "درس", "12"),
+        _buildStatItem("ساعة", "48"),
+        _buildStatItem("تقييم", "4.9"),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF102A43))),
+        Text(label, style: const TextStyle(fontSize: 11, color: Colors.blueGrey, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  Widget _buildInfoSection(Map<String, dynamic> profile) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("المعلومات الأساسية", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Cairo')),
+        _buildSectionHeader("المعلومات الشخصية"),
         const SizedBox(height: 20),
         _buildInfoCard([
-          _buildInfoItem(
-            icon: Icons.person_outline_rounded, 
-            label: "الاسم الكامل", 
-            value: profile['full_name'] ?? '', 
-            onEdit: () => _showEditDialog("الاسم", "full_name", profile['full_name'] ?? ""),
-          ),
-          const Divider(height: 1, indent: 70),
-          _buildInfoItem(
-            icon: Icons.email_outlined, 
-            label: "البريد الإلكتروني", 
-            value: profile['email'] ?? 'جاري التحميل...', 
-          ),
+          _buildInfoItem(Icons.person_outline_rounded, "الاسم الكامل", profile['full_name'] ?? '', onEdit: () => _showEditDialog("الاسم", "full_name", profile['full_name'] ?? "")),
+          _buildInfoItem(Icons.alternate_email_rounded, "اسم المستخدم", "@${profile['username'] ?? 'user'}", onEdit: () => _showEditDialog("اسم المستخدم", "username", profile['username'] ?? "")),
+          _buildInfoItem(Icons.email_outlined, "البريد الإلكتروني", profile['email'] ?? '', isReadOnly: true),
         ]),
-        
         const SizedBox(height: 40),
-        
-        const Text("الأمان والحساب", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Cairo')),
+        _buildSectionHeader("الأمان والخصوصية"),
         const SizedBox(height: 20),
         _buildInfoCard([
-          _buildInfoItem(
-            icon: Icons.lock_outline_rounded, 
-            label: "كلمة المرور", 
-            value: "********", 
-            onEdit: () {
-               ScaffoldMessenger.of(context).showSnackBar(
-                 const SnackBar(
-                   content: Text("يمكنك تغيير كلمة المرور من خلال بريدك الإلكتروني", style: TextStyle(fontFamily: 'Cairo')),
-                   behavior: SnackBarBehavior.floating,
-                 )
-               );
-            },
-          ),
-          const Divider(height: 1, indent: 70),
-          _buildInfoItem(
-            icon: Icons.verified_user_outlined, 
-            label: "حالة الحساب", 
-            value: "نشط وموثق", 
-          ),
+          _buildInfoItem(Icons.lock_open_rounded, "كلمة المرور", "••••••••", onEdit: () => _showEditDialog("كلمة المرور", "password", "")),
+          _buildInfoItem(Icons.verified_user_outlined, "حالة الحساب", "حساب موثق ونشط ✅", isReadOnly: true),
         ]),
       ],
     );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF102A43), fontFamily: 'Cairo'));
   }
 
   Widget _buildInfoCard(List<Widget> children) {
@@ -388,56 +292,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02), 
-            blurRadius: 20, 
-            offset: const Offset(0, 4)
-          )
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: Column(children: children),
     );
   }
 
-  Widget _buildInfoItem({
-    required IconData icon, 
-    required String label, 
-    required String value, 
-    VoidCallback? onEdit
-  }) {
+  Widget _buildInfoItem(IconData icon, String label, String value, {VoidCallback? onEdit, bool isReadOnly = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF102A43).withOpacity(0.05), 
-              borderRadius: BorderRadius.circular(14)
-            ),
-            child: Icon(icon, size: 24, color: const Color(0xFF102A43)),
+            decoration: BoxDecoration(color: const Color(0xFF102A43).withOpacity(0.05), borderRadius: BorderRadius.circular(15)),
+            child: Icon(icon, color: const Color(0xFF102A43), size: 24),
           ),
           const SizedBox(width: 20),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500, fontFamily: 'Cairo')),
-                const SizedBox(height: 4),
-                Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1A1C1E), fontFamily: 'Cairo')),
+                Text(label, style: const TextStyle(fontSize: 12, color: Colors.blueGrey, fontFamily: 'Cairo')),
+                Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF102A43), fontFamily: 'Cairo')),
               ],
             ),
           ),
-          if (onEdit != null)
+          if (!isReadOnly)
             IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.edit_note_rounded, size: 22, color: Color(0xFF102A43)),
-              ),
+              icon: const Icon(Icons.edit_note_rounded, color: Colors.blueGrey),
               onPressed: onEdit,
-              tooltip: "تعديل",
             ),
         ],
       ),
@@ -445,21 +329,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildLogoutButton(AuthProvider auth) {
-    return SizedBox(
+    return Container(
       width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: () async {
-          await auth.logout();
-          if (mounted) Navigator.pushReplacementNamed(context, AppRoutes.login);
-        },
-        icon: const Icon(Icons.logout_rounded, size: 20),
-        label: const Text("تسجيل الخروج من الحساب", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFFFEBEE),
-          foregroundColor: Colors.red,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            await auth.logout();
+            if (mounted) Navigator.pushReplacementNamed(context, AppRoutes.login);
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.logout_rounded, color: Colors.red),
+                SizedBox(width: 15),
+                Text("تسجيل الخروج من الحساب", style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontFamily: 'Cairo', fontSize: 16)),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -5,6 +5,7 @@ import '../../../../core/services/database_service.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/services/attendance_pdf_service.dart';
 import '../attendance/attendance_screen.dart';
+import '../../../../core/utils/responsive.dart';
 
 class TeacherReportsScreen extends StatefulWidget {
   const TeacherReportsScreen({super.key});
@@ -38,7 +39,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       for (var session in teacherSessions) {
         final sessionId = session['id'];
         
-        // جلب كافة البيانات المرتبطة بالحصة في وقت واحد
         final results = await Future.wait([
           db.getSessionEnrollments(sessionId),
           db.getAttendanceReportData(sessionId),
@@ -49,7 +49,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         final attendance = results[1] as List;
         final quizzes = results[2] as List;
 
-        // منطق الحضور الصحيح: أي طالب لديه سجل حضور ولم يتم طرده يعتبر "حضر"
         final presentCount = attendance.where((a) => a['status'] != 'kicked').length;
         totalAttendance += presentCount;
 
@@ -76,7 +75,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint("Error loading reports: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -88,7 +86,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     
     final List<Map<String, dynamic>> fullStudentsReport = [];
     
-    // 1. معالجة الطلاب المسجلين رسمياً في الحصة
     for (var enrollment in enrollments) {
       final studentId = enrollment['student_id'];
       final profile = enrollment['profiles'] as Map<String, dynamic>?;
@@ -107,7 +104,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       });
     }
 
-    // 2. إضافة أي طالب حضر القاعة ولكنه لم يكن مسجلاً رسمياً (Visitor)
     for (var att in attendanceData) {
       if (!enrollments.any((e) => e['student_id'] == att['student_id'])) {
         final profile = att['profiles'] as Map<String, dynamic>?;
@@ -131,62 +127,92 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = Responsive.isDesktop(context);
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
-        title: const Text("مركز التقارير والإحصاء", 
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Cairo')),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("مركز التقارير الذكي", 
+                style: TextStyle(color: Color(0xFF102A43), fontWeight: FontWeight.w900, fontSize: 18, fontFamily: 'Cairo')),
+            Text("تحليل أداء الحصص والطلاب", 
+                style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 12, fontFamily: 'Cairo')),
+          ],
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
+        iconTheme: const IconThemeData(color: Color(0xFF102A43)),
+        actions: [
+          IconButton(
+            onPressed: _loadReports, 
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFF102A43).withOpacity(0.05), shape: BoxShape.circle),
+              child: const Icon(Icons.refresh_rounded, color: Color(0xFF102A43), size: 20)
+            )
+          ),
+          const SizedBox(width: 20),
+        ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : CustomScrollView(
-              slivers: [
-                _buildSummaryHeader(),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  sliver: _reports.isEmpty 
-                    ? SliverToBoxAdapter(child: _buildEmptyState())
-                    : SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) => _buildReportCard(_reports[index]),
-                          childCount: _reports.length,
-                        ),
-                      ),
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF102A43), strokeWidth: 2))
+          : Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildSummaryHeader(isDesktop)),
+                    SliverPadding(
+                      padding: EdgeInsets.symmetric(horizontal: isDesktop ? 30 : 20),
+                      sliver: _reports.isEmpty 
+                        ? SliverFillRemaining(child: _buildEmptyState())
+                        : SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) => _buildReportCard(_reports[index], isDesktop),
+                              childCount: _reports.length,
+                            ),
+                          ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                  ],
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 100)),
-              ],
+              ),
             ),
     );
   }
 
-  Widget _buildSummaryHeader() {
-    return SliverToBoxAdapter(
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        margin: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFF2E3192), Color(0xFF1BFFFF)]),
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+  Widget _buildSummaryHeader(bool isDesktop) {
+    return Container(
+      padding: const EdgeInsets.all(35),
+      margin: const EdgeInsets.all(30),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF102A43), Color(0xFF243B53), Color(0xFF334E68)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Column(
-          children: [
-            const Text("الملخص العام للأداء", 
-                style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem("إجمالي الحصص", _reports.length.toString(), Icons.video_collection_rounded),
-                _buildStatItem("إجمالي الحضور", _totalAttendanceCount.toString(), Icons.people_alt_rounded),
-                _buildStatItem("كفاءة الاختبارات", "${_calculateOverallQuizAvg()}%", Icons.quiz_rounded),
-              ],
-            ),
-          ],
-        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF102A43).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("الملخص العام للأداء", 
+              style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          const SizedBox(height: 30),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatItem("إجمالي الحصص", _reports.length.toString(), Icons.video_collection_rounded, Colors.blueAccent),
+              _buildStatItem("إجمالي الحضور", _totalAttendanceCount.toString(), Icons.people_alt_rounded, Colors.greenAccent),
+              _buildStatItem("كفاءة الاختبارات", "${_calculateOverallQuizAvg()}%", Icons.quiz_rounded, Colors.orangeAccent),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -204,97 +230,99 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     return count == 0 ? "0" : (sum / count).toStringAsFixed(0);
   }
 
-  Widget _buildStatItem(String label, String value, IconData icon) {
+  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-          child: Icon(icon, color: Colors.white, size: 20),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
+          child: Icon(icon, color: color, size: 24),
         ),
-        const SizedBox(height: 8),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'Cairo')),
+        const SizedBox(height: 15),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, height: 1)),
+        const SizedBox(height: 5),
+        Text(label, style: const TextStyle(color: Colors.white60, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.w500)),
       ],
     );
   }
 
-  Widget _buildReportCard(Map<String, dynamic> report) {
+  Widget _buildReportCard(Map<String, dynamic> report, bool isDesktop) {
     final session = report['session'];
     final startTime = DateTime.parse(session['start_time']);
     final double quizScore = report['avgQuizScore'];
+    final bool isEnded = session['status'] == 'archived' || session['status'] == 'ended';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Column(
         children: [
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            leading: CircleAvatar(
-              backgroundColor: Colors.blue.shade50,
-              child: const Icon(Icons.description, color: Colors.blue, size: 20),
-            ),
-            title: Text(session['subject_name'] ?? session['title'] ?? 'بدون عنوان', 
-                style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-            subtitle: Text(DateFormat('EEEE, d MMMM', 'ar_EG').format(startTime), 
-                style: const TextStyle(fontSize: 12, fontFamily: 'Cairo')),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: session['status'] == 'archived' || session['status'] == 'ended' ? Colors.grey.shade100 : Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                session['status'] == 'archived' ? "مؤرشفة" : (session['status'] == 'ended' ? "منتهية" : "نشطة"),
-                style: TextStyle(
-                  color: session['status'] == 'archived' || session['status'] == 'ended' ? Colors.grey : Colors.green, 
-                  fontSize: 10, 
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Cairo'
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFFF0F4F8), borderRadius: BorderRadius.circular(15)),
+                  child: const Icon(Icons.description_rounded, color: Color(0xFF102A43), size: 26),
                 ),
-              ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(session['subject_name'] ?? session['title'] ?? 'بدون عنوان', 
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, fontFamily: 'Cairo', color: Color(0xFF102A43))),
+                      Text(DateFormat('EEEE, d MMMM yyyy', 'ar_EG').format(startTime), 
+                          style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade300, fontFamily: 'Cairo')),
+                    ],
+                  ),
+                ),
+                _buildStatusBadge(isEnded),
+              ],
             ),
           ),
+          const Divider(height: 1, color: Color(0xFFF0F4F8)),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            padding: const EdgeInsets.all(20),
             child: Column(
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildMetric("الحضور", "${report['presentCount']}/${report['totalEnrolled']}", Colors.blue),
-                    _buildMetric("الغياب", "${report['absentCount']}", Colors.red),
-                    _buildMetric("درجة الكويز", "${quizScore.toInt()}%", Colors.orange),
+                    _buildMetric("الحضور", "${report['presentCount']}", Colors.blue, Icons.person_add_rounded),
+                    _buildMetric("الغياب", "${report['absentCount']}", Colors.redAccent, Icons.person_remove_rounded),
+                    _buildMetric("درجة الكويز", "${quizScore.toInt()}%", Colors.orange, Icons.insights_rounded),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 25),
                 Row(
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () => _downloadPdf(report),
-                        icon: const Icon(Icons.picture_as_pdf, size: 18),
-                        label: const Text("تقرير الحضور PDF", style: TextStyle(fontFamily: 'Cairo')),
+                        icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                        label: const Text("تصدير تقرير PDF", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent.shade400,
-                          foregroundColor: Colors.white,
+                          backgroundColor: const Color(0xFFF0F4F8),
+                          foregroundColor: const Color(0xFF102A43),
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 15),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 15),
                     InkWell(
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => AttendanceScreen(sessionId: session['id'], subjectName: session['subject_name'] ?? 'حصة تعليمية'))),
                       child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
-                        child: const Icon(Icons.open_in_new, color: Colors.blue, size: 20),
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(color: const Color(0xFF102A43), borderRadius: BorderRadius.circular(12)),
+                        child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 20),
                       ),
                     ),
                   ],
@@ -307,15 +335,39 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     );
   }
 
-  Widget _buildMetric(String label, String value, Color color) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 4),
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10, fontFamily: 'Cairo')),
-        ],
+  Widget _buildStatusBadge(bool isEnded) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isEnded ? Colors.grey.shade100 : Colors.green.shade50,
+        borderRadius: BorderRadius.circular(8),
       ),
+      child: Text(
+        isEnded ? "مكتملة" : "نشطة الآن",
+        style: TextStyle(
+          color: isEnded ? Colors.grey : Colors.green, 
+          fontSize: 10, 
+          fontWeight: FontWeight.w800,
+          fontFamily: 'Cairo'
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetric(String label, String value, Color color, IconData icon) {
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color.withOpacity(0.5)),
+            const SizedBox(width: 6),
+            Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 18)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(color: Colors.blueGrey.shade300, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+      ],
     );
   }
 
@@ -324,13 +376,14 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(height: 60),
-          Icon(Icons.bar_chart, size: 80, color: Colors.grey.shade200),
+          Container(
+            padding: const EdgeInsets.all(40),
+            decoration: BoxDecoration(color: Colors.blueGrey.withOpacity(0.05), shape: BoxShape.circle),
+            child: Icon(Icons.analytics_outlined, size: 60, color: Colors.blueGrey.shade200),
+          ),
           const SizedBox(height: 20),
-          const Text("لا توجد بيانات كافية للتقارير", 
-              style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-          const Text("ابدأ حصصك ليتم تجميع البيانات هنا", 
-              style: TextStyle(color: Colors.grey, fontSize: 12, fontFamily: 'Cairo')),
+          const Text("لا توجد تقارير متاحة حالياً", 
+            style: TextStyle(color: Colors.blueGrey, fontSize: 15, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
         ],
       ),
     );

@@ -120,9 +120,17 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> updatePassword(String newPassword) async {
+    if (_user == null) return;
+    try {
+      await _supabase.auth.updateUser(UserAttributes(password: newPassword));
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<String?> uploadAvatar(Uint8List bytes, String fileName) async {
     if (_user == null) return null;
-    // تم إزالة _isLoading هنا لعدم تفعيل شاشة التحميل العالمية
     try {
       final fileExt = fileName.split('.').last;
       final path = '${_user!.id}/avatar_${DateTime.now().millisecondsSinceEpoch}.$fileExt';

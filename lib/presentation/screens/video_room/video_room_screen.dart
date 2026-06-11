@@ -197,22 +197,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                     },
                     icon: Icons.grid_view_rounded,
                   ),
-                  const Divider(),
                 ],
-                ListTile(
-                  leading: const Icon(Icons.refresh, color: Colors.blue),
-                  title: const Text("إعادة اتصال البث", style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
-                  onTap: () {
-                    controller.connectToRoom(widget.roomName);
-                    Navigator.pop(context);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.info_outline, color: Colors.blue),
-                  title: const Text("معلومات الغرفة", style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
-                  subtitle: Text(widget.roomName, style: const TextStyle(fontSize: 12)),
-                  onTap: () => Navigator.pop(context),
-                ),
               ],
             ),
           ),

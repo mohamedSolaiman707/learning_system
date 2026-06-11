@@ -48,9 +48,9 @@ class ParticipantGrid extends StatelessWidget {
                   return GestureDetector(
                     onTap: () => controller.cycleRoomCamera(),
                     child: ParticipantTile(
-                      key: ValueKey("channel_${channelParticipant.identity}"), 
-                      participant: channelParticipant, 
-                      isMainStage: true
+                        key: ValueKey("channel_${channelParticipant.identity}"),
+                        participant: channelParticipant,
+                        isMainStage: true
                     ),
                   );
                 } else {
@@ -65,8 +65,8 @@ class ParticipantGrid extends StatelessWidget {
                         const Text(
                           "جاري تحميل بث القاعة...",
                           style: TextStyle(
-                            color: Colors.white, 
-                            fontFamily: 'Cairo', 
+                            color: Colors.white,
+                            fontFamily: 'Cairo',
                             fontSize: 16,
                           ),
                         ),
@@ -77,13 +77,13 @@ class ParticipantGrid extends StatelessWidget {
                             ctrl.checkAndFallbackChannel();
                           },
                           icon: const Icon(
-                            Icons.refresh_rounded, 
+                            Icons.refresh_rounded,
                             color: Colors.blue, size: 18,
                           ),
                           label: const Text(
                             "تحديث",
                             style: TextStyle(
-                              color: Colors.blue, 
+                              color: Colors.blue,
                               fontFamily: 'Cairo',
                             ),
                           ),
@@ -98,22 +98,19 @@ class ParticipantGrid extends StatelessWidget {
             final bool isDesktop = Responsive.isDesktop(context);
 
             if (controller.isVideoWallMode) {
-              // Paginated Video Wall
               final int pageSize = VideoRoomController.wallPageSize;
               final int currentPage = controller.wallPage;
               final int totalCount = allParticipants.length;
               final int maxPage = ((totalCount - 1) / pageSize).floor();
-              
-              // Get only current page participants
+
               final int startIndex = currentPage * pageSize;
               final int endIndex = (startIndex + pageSize).clamp(0, totalCount);
               final pageParticipants = allParticipants.sublist(startIndex, endIndex);
-              
+
               int crossAxisCount = isDesktop ? 4 : (Responsive.isTablet(context) ? 3 : 2);
-              
+
               return Column(
                 children: [
-                  // Page info bar
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     color: Colors.black54,
@@ -123,42 +120,40 @@ class ParticipantGrid extends StatelessWidget {
                         Text(
                           "المشاركون ${startIndex + 1}–$endIndex من $totalCount",
                           style: const TextStyle(
-                            color: Colors.white70, 
-                            fontSize: 12, 
-                            fontFamily: 'Cairo'
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontFamily: 'Cairo'
                           ),
                         ),
                         Row(
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.arrow_back_ios, 
-                                color: Colors.white, size: 18),
-                              onPressed: currentPage > 0 
-                                ? () => controller.prevWallPage() 
-                                : null,
+                              icon: const Icon(Icons.arrow_back_ios,
+                                  color: Colors.white, size: 18),
+                              onPressed: currentPage > 0
+                                  ? () => controller.prevWallPage()
+                                  : null,
                             ),
                             Text(
                               "${currentPage + 1} / ${maxPage + 1}",
                               style: const TextStyle(
-                                color: Colors.white, 
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.arrow_forward_ios, 
-                                color: Colors.white, size: 18),
-                              onPressed: currentPage < maxPage 
-                                ? () => controller.nextWallPage(totalCount) 
-                                : null,
+                              icon: const Icon(Icons.arrow_forward_ios,
+                                  color: Colors.white, size: 18),
+                              onPressed: currentPage < maxPage
+                                  ? () => controller.nextWallPage(totalCount)
+                                  : null,
                             ),
                           ],
                         ),
                       ],
                     ),
                   ),
-                  
-                  // Grid — only current page
                   Expanded(
                     child: GridView.builder(
                       padding: const EdgeInsets.all(8),
@@ -171,7 +166,7 @@ class ParticipantGrid extends StatelessWidget {
                       itemCount: pageParticipants.length,
                       itemBuilder: (context, index) => ParticipantTile(
                         key: ValueKey(
-                          "wall_${pageParticipants[index].identity}_p$currentPage"
+                            "wall_${pageParticipants[index].identity}_p$currentPage"
                         ),
                         participant: pageParticipants[index],
                         isMainStage: false,
@@ -184,21 +179,25 @@ class ParticipantGrid extends StatelessWidget {
 
             Participant? mainParticipant = screenSharingParticipant;
             if (mainParticipant == null) {
-              try {
-                mainParticipant = allParticipants.firstWhere((p) => p.identity.toLowerCase().contains('teacher'));
-              } catch (_) {
-                mainParticipant = allParticipants.first;
+              mainParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
+              
+              if (mainParticipant == null) {
+                try {
+                  mainParticipant = allParticipants.firstWhere((p) => !p.identity.toLowerCase().contains('teacher'));
+                } catch (_) {
+                  mainParticipant = allParticipants.firstOrNull;
+                }
               }
             }
 
-            final bool isMainSharingScreen = mainParticipant.isScreenShareEnabled();
+            final bool isMainSharingScreen = mainParticipant?.isScreenShareEnabled() ?? false;
             final otherParticipants = allParticipants.where((p) {
               if (isMainSharingScreen) return true;
               return p.identity != mainParticipant?.identity;
             }).toList();
 
-            if (isDesktop) return _buildProfessionalDesktopLayout(context, mainParticipant, otherParticipants, isMainSharingScreen);
-            return _buildMobileLayout(context, mainParticipant, otherParticipants, isMainSharingScreen);
+            if (isDesktop) return _buildProfessionalDesktopLayout(context, mainParticipant!, otherParticipants, isMainSharingScreen);
+            return _buildMobileLayout(context, mainParticipant!, otherParticipants, isMainSharingScreen);
           },
         );
       },
@@ -208,7 +207,7 @@ class ParticipantGrid extends StatelessWidget {
   Widget _buildHybridStudentLayout(BuildContext context, Participant screenPart, Participant? camPart) {
     final bool isDesktop = Responsive.isDesktop(context);
     final controller = context.read<VideoRoomController>();
-    
+
     return Stack(
       children: [
         Positioned.fill(
@@ -219,7 +218,7 @@ class ParticipantGrid extends StatelessWidget {
             forceShowScreen: true,
           ),
         ),
-        
+
         if (camPart != null)
           Positioned(
             top: isDesktop ? 40 : 20,
@@ -257,13 +256,13 @@ class ParticipantGrid extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            flex: 4, 
-            child: ParticipantTile(
-              key: ValueKey("main_${main.identity}"), 
-              participant: main, 
-              isMainStage: true,
-              forceShowScreen: isMainSharingScreen ? true : null,
-            )
+              flex: 4,
+              child: ParticipantTile(
+                key: ValueKey("main_${main.identity}"),
+                participant: main,
+                isMainStage: true,
+                forceShowScreen: isMainSharingScreen ? true : null,
+              )
           ),
           if (others.isNotEmpty)
             Container(
@@ -277,13 +276,13 @@ class ParticipantGrid extends StatelessWidget {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: AspectRatio(
-                      aspectRatio: 16 / 10, 
-                      child: ParticipantTile(
-                        key: ValueKey("side_${p.identity}"), 
-                        participant: p, 
-                        isMainStage: false,
-                        forceShowScreen: forceCam ? false : null,
-                      )
+                        aspectRatio: 16 / 10,
+                        child: ParticipantTile(
+                          key: ValueKey("side_${p.identity}"),
+                          participant: p,
+                          isMainStage: false,
+                          forceShowScreen: forceCam ? false : null,
+                        )
                     ),
                   );
                 },
@@ -298,14 +297,14 @@ class ParticipantGrid extends StatelessWidget {
     return Column(
       children: [
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(8), 
-            child: ParticipantTile(
-              participant: main, 
-              isMainStage: true,
-              forceShowScreen: isMainSharingScreen ? true : null,
+            child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: ParticipantTile(
+                  participant: main,
+                  isMainStage: true,
+                  forceShowScreen: isMainSharingScreen ? true : null,
+                )
             )
-          )
         ),
         if (others.isNotEmpty)
           Container(
@@ -319,13 +318,13 @@ class ParticipantGrid extends StatelessWidget {
                 final p = others[index];
                 final bool forceCam = isMainSharingScreen && p.identity == main.identity;
                 return Container(
-                  width: 160, 
-                  margin: const EdgeInsets.only(right: 8), 
-                  child: ParticipantTile(
-                    participant: p, 
-                    isMainStage: false,
-                    forceShowScreen: forceCam ? false : null,
-                  )
+                    width: 160,
+                    margin: const EdgeInsets.only(right: 8),
+                    child: ParticipantTile(
+                      participant: p,
+                      isMainStage: false,
+                      forceShowScreen: forceCam ? false : null,
+                    )
                 );
               },
             ),
@@ -355,13 +354,13 @@ class ParticipantTile extends StatelessWidget {
     if (forceHandRaised == null) {
       try {
         isHandRaised = context.select<VideoRoomController, bool>(
-          (c) => c.remoteHandStates[participant.identity] ?? false,
+              (c) => c.remoteHandStates[participant.identity] ?? false,
         );
       } catch (_) {}
     }
 
     final isSpotlighted = context.select<VideoRoomController, bool>(
-      (c) => c.spotlightUserId == participant.identity,
+          (c) => c.spotlightUserId == participant.identity,
     );
 
     return ListenableBuilder(
@@ -410,8 +409,8 @@ class ParticipantTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(isMainStage ? 20 : 12),
             color: const Color(0xFF1A1B1F),
             border: Border.all(
-              color: isSpotlighted 
-                  ? Colors.amber 
+              color: isSpotlighted
+                  ? Colors.amber
                   : (isSpeaking ? Colors.greenAccent : Colors.white.withOpacity(0.05)),
               width: (isSpotlighted || isSpeaking) ? 3 : 1,
             ),
@@ -427,39 +426,12 @@ class ParticipantTile extends StatelessWidget {
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 500),
                   child: hasVideo
-                      ? (isScreen || !isMainStage
-                          ? VideoTrackRenderer(activeVideoTrack, fit: VideoViewFit.contain, key: ValueKey(activeVideoTrack!.sid))
-                          : Stack(
-                              key: ValueKey(activeVideoTrack.sid),
-                              children: [
-                                Positioned.fill(
-                                  child: VideoTrackRenderer(
-                                    activeVideoTrack,
-                                    fit: VideoViewFit.cover,
-                                  ),
-                                ),
-                                Positioned.fill(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Colors.transparent,
-                                          Colors.black.withOpacity(0.5),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Positioned.fill(
-                                  child: VideoTrackRenderer(
-                                    activeVideoTrack,
-                                    fit: VideoViewFit.contain,
-                                  ),
-                                ),
-                              ],
-                            ))
+                      ? VideoTrackRenderer(
+                          activeVideoTrack!,
+                          fit: isScreen || !isMainStage ? VideoViewFit.contain : VideoViewFit.contain,
+                          mirrorMode: isMe ? VideoViewMirrorMode.mirror : VideoViewMirrorMode.off,
+                          key: ValueKey(activeVideoTrack.sid),
+                        )
                       : _buildAvatar(displayName, isMainStage),
                 ),
               ),
@@ -482,7 +454,7 @@ class ParticipantTile extends StatelessWidget {
                 ),
 
               Positioned(bottom: 10, left: 10, child: _buildNameLabel(displayName, isMe, participant.isMicrophoneEnabled(), isScreen)),
-              
+
               Positioned(
                 top: 10,
                 right: 10,
@@ -513,19 +485,19 @@ class ParticipantTile extends StatelessWidget {
                   if (!ctrl.isTeacher) return const SizedBox();
                   if (!ctrl.isVideoWallMode) return const SizedBox();
                   if (ctrl.activeQuestion == null) return const SizedBox();
-                  
+
                   final answer = ctrl.getAnswerForParticipant(
-                    participant.identity);
+                      participant.identity);
                   if (answer == null) return const SizedBox();
-                  
+
                   final correctAnswer = ctrl.activeQuestionCorrectAnswer;
-                  final bool hasCorrect = correctAnswer != null && 
-                                          correctAnswer.isNotEmpty;
-                  
+                  final bool hasCorrect = correctAnswer != null &&
+                      correctAnswer.isNotEmpty;
+
                   Color bgColor = Colors.black54;
                   Color textColor = Colors.white;
                   IconData? icon;
-                  
+
                   if (hasCorrect) {
                     if (answer == correctAnswer) {
                       bgColor = Colors.green.withOpacity(0.85);
@@ -547,7 +519,7 @@ class ParticipantTile extends StatelessWidget {
                     right: 0,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
+                          horizontal: 10, vertical: 8),
                       decoration: BoxDecoration(
                         color: bgColor,
                         borderRadius: const BorderRadius.only(

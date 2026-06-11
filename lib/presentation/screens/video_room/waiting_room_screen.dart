@@ -116,11 +116,56 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     super.dispose();
   }
 
+  Widget _buildTimeUnit(String value, String label) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 48,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'Cairo',
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white38,
+            fontSize: 14,
+            fontFamily: 'Cairo',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            ":",
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.2),
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 20), // Spacer to align with labels
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final timeStr = _timeLeft.inHours > 0 
-      ? "${_timeLeft.inHours}:${(_timeLeft.inMinutes % 60).toString().padLeft(2, '0')}:${(_timeLeft.inSeconds % 60).toString().padLeft(2, '0')}"
-      : "${_timeLeft.inMinutes}:${(_timeLeft.inSeconds % 60).toString().padLeft(2, '0')}";
+    final hours = _timeLeft.inHours;
+    final minutes = _timeLeft.inMinutes % 60;
+    final seconds = _timeLeft.inSeconds % 60;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
@@ -147,7 +192,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.blue.withOpacity(0.1), width: 2),
                     ),
-                    child: const Icon(Icons.access_time_rounded, color: Colors.blue, size: 80),
+                    child: const Icon(Icons.access_time_rounded, color: Colors.blue, size: 65),
                   ),
                   const SizedBox(height: 48),
                   const Text(
@@ -185,20 +230,23 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                           style: TextStyle(color: Colors.white70, fontSize: 14, fontFamily: 'Cairo'),
                         ),
                         const SizedBox(height: 20),
-                        Text(
-                          timeStr,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 64,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 4,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (hours > 0) ...[
+                              _buildTimeUnit(hours.toString().padLeft(2, '0'), "ساعة"),
+                              _buildTimeDivider(),
+                            ],
+                            _buildTimeUnit(minutes.toString().padLeft(2, '0'), "دقيقة"),
+                            _buildTimeDivider(),
+                            _buildTimeUnit(seconds.toString().padLeft(2, '0'), "ثانية"),
+                          ],
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 60),
-                  const CircularProgressIndicator(strokeWidth: 3, color: Colors.blue),
+                  const _WaitingHourglass(),
                   const SizedBox(height: 32),
                   const Text(
                     "يرجى البقاء في هذه الصفحة، سيتم توجيهك تلقائياً فور بدء المعلم للحصة",
@@ -216,6 +264,53 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _WaitingHourglass extends StatefulWidget {
+  const _WaitingHourglass();
+
+  @override
+  State<_WaitingHourglass> createState() => _WaitingHourglassState();
+}
+
+class _WaitingHourglassState extends State<_WaitingHourglass> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.3, end: 1.0).animate(_controller),
+      child: Column(
+        children: [
+          const Icon(Icons.hourglass_bottom_rounded, color: Colors.blue, size: 40),
+          const SizedBox(height: 12),
+          Container(
+            width: 30,
+            height: 3,
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+          )
+        ],
       ),
     );
   }

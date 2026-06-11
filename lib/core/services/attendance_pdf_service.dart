@@ -13,7 +13,6 @@ class AttendancePdfService {
     final arabicFont = await PdfGoogleFonts.cairoRegular();
     final boldFont = await PdfGoogleFonts.cairoBold();
     
-    // إزالة الساعة من التاريخ (yyyy-MM-dd فقط)
     final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     pdf.addPage(
@@ -70,29 +69,56 @@ class AttendancePdfService {
     );
   }
 
+  String _formatTime(dynamic value) {
+    if (value == null || value == '---' || value == '') return '---';
+    try {
+      String valStr = value.toString();
+      
+      // التحقق إذا كان النص بتنسيق التاريخ ISO (يحتوي على T)
+      if (valStr.contains('T')) {
+        final dt = DateTime.parse(valStr).toLocal();
+        return DateFormat('hh:mm a').format(dt)
+            .replaceAll('AM', 'صباحاً')
+            .replaceAll('PM', 'مساءً');
+      }
+      
+      // إذا كان النص يحتوي بالفعل على "ص" أو "م" كأحرف منفصلة للتوقيت
+      // نستخدم المسافات لضمان عدم استبدال أحرف داخل الكلمات (مثل "لم يحضر")
+      return valStr
+          .replaceAll(' ص', ' صباحاً')
+          .replaceAll(' م', ' مساءً');
+    } catch (_) {
+      return '---';
+    }
+  }
+
   pw.Widget _buildTable(List<Map<String, dynamic>> students) {
     final headers = ['المدة', 'وقت المغادرة', 'وقت الانضمام', 'الحالة', 'اسم الطالب'];
 
     return pw.TableHelper.fromTextArray(
       headers: headers,
       data: students.map((s) {
-        // تحويل "ص" إلى "صباحاً" و "م" إلى "مساءً" ليكون التقرير احترافي
-        String formatTimeForPdf(String time) {
-          if (time == '---') return time;
-          return time.replaceAll('ص', 'صباحاً').replaceAll('م', 'مساءً');
-        }
-
+        final bool isPresent = s['present'] == true;
+        
         return [
-          '${s['duration'] ?? 0} د',
-          formatTimeForPdf(s['left_at'] ?? '---'),
-          formatTimeForPdf(s['joined_at'] ?? '---'),
-          s['present'] ? 'حاضر' : 'غائب',
+          isPresent ? '${s['duration'] ?? 0} د' : '---',
+          isPresent ? _formatTime(s['left_at']) : '---',
+          isPresent ? _formatTime(s['joined_at']) : '---',
+          isPresent ? 'حاضر' : 'غائب',
           s['name'] ?? 'غير معروف',
         ];
       }).toList(),
-      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+      cellStyle: const pw.TextStyle(fontSize: 10),
       headerDecoration: const pw.BoxDecoration(color: PdfColors.blue800),
-      cellHeight: 30,
+      cellHeight: 35,
+      columnWidths: {
+        0: const pw.FixedColumnWidth(45),
+        1: const pw.FixedColumnWidth(100),
+        2: const pw.FixedColumnWidth(100),
+        3: const pw.FixedColumnWidth(55),
+        4: const pw.FlexColumnWidth(),
+      },
       cellAlignments: {
         0: pw.Alignment.center,
         1: pw.Alignment.center,

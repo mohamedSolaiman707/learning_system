@@ -538,8 +538,6 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
     final actions = [
       (label: "التحضير", icon: Icons.fact_check_rounded, color: const Color(0xFF2196F3), type: 'attendance'),
       (label: "التقارير", icon: Icons.analytics_rounded, color: const Color(0xFF00C853), type: 'reports'),
-      (label: "الجدول", icon: Icons.view_timeline_rounded, color: const Color(0xFF6200EA), type: 'schedule'),
-      (label: "الإعدادات", icon: Icons.tune_rounded, color: const Color(0xFF37474F), type: 'settings'),
     ];
 
     return GridView.builder(

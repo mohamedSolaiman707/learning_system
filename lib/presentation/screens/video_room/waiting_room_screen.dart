@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart' as intl;
 import 'package:provider/provider.dart';
 import '../../../core/models/session_model.dart';
 import '../../../core/services/database_service.dart';
@@ -29,11 +28,6 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   Duration _timeLeft = Duration.zero;
   StreamSubscription? _statusSubscription;
 
-  bool _seatSelected = false;
-  int? _selectedSeat;
-  List<Map<String, dynamic>> _seats = [];
-  bool _seatsLoading = true;
-
   @override
   void initState() {
     super.initState();
@@ -41,9 +35,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _calculateTimeLeft());
     
     final db = Provider.of<DatabaseService>(context, listen: false);
-    
     db.joinWaitingRoom(widget.session.id, widget.userId);
-    _initAndLoadSeats();
 
     _statusSubscription = db.watchSessionStatus(widget.session.id).listen((data) {
       if (data.isEmpty || data.first['status'] == 'ended') {
@@ -65,40 +57,10 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
       }
 
       final String status = data.first['status'];
-
       if (status == 'active') {
         _navigateToRoom();
       }
     });
-  }
-
-  Future<void> _initAndLoadSeats() async {
-    final db = Provider.of<DatabaseService>(context, listen: false);
-    // Ensuring seats are initialized for the session
-    await db.initializeSeats(widget.session.id);
-    final seats = await db.getSeats(widget.session.id);
-    if (mounted) {
-      // Check if student already has a seat
-      final mySeat = seats.firstWhere(
-        (s) => s['student_id'] == widget.userId,
-        orElse: () => {},
-      );
-
-      if (mySeat.isNotEmpty) {
-        // Student already has a seat — skip picker
-        setState(() {
-          _seats = seats;
-          _selectedSeat = mySeat['seat_number'];
-          _seatSelected = true;
-          _seatsLoading = false;
-        });
-      } else {
-        setState(() {
-          _seats = seats;
-          _seatsLoading = false;
-        });
-      }
-    }
   }
 
   void _calculateTimeLeft() {
@@ -154,167 +116,8 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     super.dispose();
   }
 
-  Widget _buildSeatPicker() {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F1014),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0F1014), Color(0xFF1A1C1E)],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 40),
-              const Text("اختر مقعدك في القاعة",
-                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24),
-                child: Text("اختر المقعد المناسب لمكانك الفعلي في القاعة لسهولة تواصل المعلم معك",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, fontSize: 14, fontFamily: 'Cairo')),
-              ),
-              const SizedBox(height: 40),
-              if (_seatsLoading)
-                const Expanded(child: Center(child: CircularProgressIndicator()))
-              else
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildZoneColumn("يمين القاعة 📷", "right"),
-                        const SizedBox(width: 12),
-                        _buildZoneColumn("وسط القاعة", "center"),
-                        const SizedBox(width: 12),
-                        _buildZoneColumn("يسار القاعة 📷", "left"),
-                      ],
-                    ),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton(
-                    onPressed: _selectedSeat == null ? null : () async {
-                      final db = Provider.of<DatabaseService>(context, listen: false);
-                      final result = await db.claimSeat(
-                        sessionId: widget.session.id,
-                        seatNumber: _selectedSeat!,
-                        studentId: widget.userId,
-                        studentName: widget.userName,
-                      );
-
-                      if (result['success'] == true) {
-                        setState(() => _seatSelected = true);
-                      } else {
-                        // Show error and refresh seats
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                result['error'] ?? 'المقعد محجوز، اختر مقعداً آخر',
-                                style: const TextStyle(fontFamily: 'Cairo'),
-                              ),
-                              backgroundColor: Colors.red,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                          await _initAndLoadSeats(); // refresh the seat map
-                          setState(() => _selectedSeat = null);
-                        }
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      disabledBackgroundColor: Colors.white.withOpacity(0.05),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                    ),
-                    child: const Text("تأكيد المقعد والمتابعة",
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildZoneColumn(String label, String zoneKey) {
-    final zoneSeats = _seats.where((s) => s['zone'] == zoneKey).toList();
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-          ),
-          const SizedBox(height: 16),
-          ...zoneSeats.map((seat) {
-            final int seatNum = seat['seat_number'];
-            final bool isOccupied = seat['student_id'] != null;
-            final bool isSelected = _selectedSeat == seatNum;
-            final String studentName = seat['student_name'] ?? "";
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: GestureDetector(
-                onTap: isOccupied ? null : () => setState(() => _selectedSeat = seatNum),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
-                  decoration: BoxDecoration(
-                    color: isSelected ? Colors.blue : (isOccupied ? Colors.white.withOpacity(0.05) : Colors.transparent),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isSelected ? Colors.blue : (isOccupied ? Colors.transparent : Colors.white24),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    isOccupied ? studentName : seatNum.toString(),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isOccupied ? Colors.white24 : Colors.white,
-                      fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (!_seatSelected) return _buildSeatPicker();
-
-    final bool isDesktop = Responsive.isDesktop(context);
     final timeStr = _timeLeft.inHours > 0 
       ? "${_timeLeft.inHours}:${(_timeLeft.inMinutes % 60).toString().padLeft(2, '0')}:${(_timeLeft.inSeconds % 60).toString().padLeft(2, '0')}"
       : "${_timeLeft.inMinutes}:${(_timeLeft.inSeconds % 60).toString().padLeft(2, '0')}";
@@ -347,9 +150,9 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                     child: const Icon(Icons.access_time_rounded, color: Colors.blue, size: 80),
                   ),
                   const SizedBox(height: 48),
-                  Text(
+                  const Text(
                     "غرفة الانتظار الرقمية",
-                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 16, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+                    style: TextStyle(color: Colors.white70, fontSize: 16, fontFamily: 'Cairo', fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -377,9 +180,9 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                     ),
                     child: Column(
                       children: [
-                        Text(
+                        const Text(
                           "ستبدأ الحصة التعليمية خلال",
-                          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14, fontFamily: 'Cairo'),
+                          style: TextStyle(color: Colors.white70, fontSize: 14, fontFamily: 'Cairo'),
                         ),
                         const SizedBox(height: 20),
                         Text(
@@ -397,20 +200,16 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                   const SizedBox(height: 60),
                   const CircularProgressIndicator(strokeWidth: 3, color: Colors.blue),
                   const SizedBox(height: 32),
-                  Text(
+                  const Text(
                     "يرجى البقاء في هذه الصفحة، سيتم توجيهك تلقائياً فور بدء المعلم للحصة",
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 14, fontFamily: 'Cairo', height: 1.6),
+                    style: TextStyle(color: Colors.white38, fontSize: 14, fontFamily: 'Cairo', height: 1.6),
                   ),
                   const SizedBox(height: 48),
                   TextButton.icon(
                     onPressed: () => Navigator.pop(context),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
                     icon: const Icon(Icons.arrow_back_rounded, color: Colors.grey, size: 20),
-                    label: const Text("العودة إلى لوحة التحكم", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+                    label: const Text("العودة إلى لوحة التحكم", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo')),
                   ),
                 ],
               ),

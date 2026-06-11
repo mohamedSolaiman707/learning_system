@@ -56,6 +56,22 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         });
       };
 
+      controller.onNotification = (title, color) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(title,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Cairo')),
+            backgroundColor: color,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15)),
+          ),
+        );
+      };
+
       controller.onReactionReceived = (emoji) {
         if (!mounted) return;
         setState(() {
@@ -114,23 +130,48 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = Responsive.isDesktop(context);
-    final controller = context.watch<VideoRoomController>();
+    final controller = context.read<VideoRoomController>();
 
-    if (controller.errorMessage != null) return _buildErrorState(controller, isDesktop);
-    if (controller.isLoading) return _buildLoadingState();
+    if (widget.isTeacher) return _buildTeacherLayout();
+
+    final errorMessage = context.select<VideoRoomController, String?>((c) => c.errorMessage);
+    if (errorMessage != null) return _buildErrorState(controller, isDesktop);
+
+    final isLoading = context.select<VideoRoomController, bool>((c) => c.isLoading);
+    if (isLoading) return _buildLoadingState();
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
       body: Row(
         children: [
           // 1. Left Sidebar: Channels
-          _buildChannelSidebar(controller),
+          Selector<VideoRoomController, String>(
+            selector: (_, c) => c.selectedChannel,
+            builder: (context, selectedChannel, child) => _buildChannelSidebar(controller),
+          ),
 
           Expanded(
             child: Column(
               children: [
                 // 2. Top Header: Tools & Menu
-                _buildTopHeader(context, controller),
+                Selector<VideoRoomController, ({
+                  bool isHandRaised,
+                  bool isMicEnabled,
+                  bool isCamEnabled,
+                  int participantCount,
+                  String title,
+                  bool isRecording,
+                })>(
+                  selector: (_, c) => (
+                    isHandRaised: c.isHandRaised,
+                    isMicEnabled: c.isMicEnabled,
+                    isCamEnabled: c.isCamEnabled,
+                    participantCount: (c.room?.remoteParticipants.length ?? 0) + 1,
+                    title: c.title,
+                    isRecording: c.isRecording,
+                  ),
+                  builder: (context, data, _) => _buildTopHeader(context, controller),
+                ),
 
                 Expanded(
                   child: Row(
@@ -139,8 +180,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       Expanded(
                         child: Stack(
                           children: [
-                            _buildMainStage(controller),
-                            if (controller.isWhiteboardOpen) const Positioned.fill(child: WhiteboardPanel()),
+                            Selector<VideoRoomController, String>(
+                              selector: (_, c) => c.selectedChannel,
+                              builder: (context, _, __) => _buildMainStage(controller),
+                            ),
+                            Selector<VideoRoomController, bool>(
+                              selector: (_, c) => c.isWhiteboardOpen,
+                              builder: (_, isOpen, __) => isOpen
+                                  ? const Positioned.fill(child: WhiteboardPanel())
+                                  : const SizedBox(),
+                            ),
                             ..._reactions,
                           ],
                         ),
@@ -153,12 +202,102 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 ),
 
                 // 5. Bottom: All Students Cams
-                _buildBottomParticipantBar(controller),
+                ListenableBuilder(
+                  listenable: controller.room ?? ChangeNotifier(),
+                  builder: (context, _) => _buildBottomParticipantBar(controller),
+                ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTeacherLayout() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F1014),
+      body: ShowCaseWidget(
+        builder: (context) => Stack(
+          children: [
+            const Positioned.fill(
+                child: ParticipantGrid()
+            ),
+            Positioned(
+              top: 0, left: 0, right: 0,
+              child: _buildTopHeader(
+                  context,
+                  context.read<VideoRoomController>()
+              ),
+            ),
+            Selector<VideoRoomController, bool>(
+              selector: (_, c) => c.isWhiteboardOpen,
+              builder: (_, isOpen, __) => isOpen
+                  ? const WhiteboardPanel()
+                  : const SizedBox(),
+            ),
+            ..._reactions,
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                    bottom: 20),
+                child: ControlsBar(),
+              ),
+            ),
+            if (Responsive.isDesktop(context))
+              Selector<VideoRoomController, ({
+              bool isChatOpen,
+              bool isQAOpen,
+              bool isParticipantsOpen,
+              bool isPollsOpen,
+              })>(
+                selector: (_, c) => (
+                isChatOpen: c.isChatOpen,
+                isQAOpen: c.isQAOpen,
+                isParticipantsOpen: c.isParticipantsOpen,
+                isPollsOpen: c.isPollsOpen,
+                ),
+                builder: (context, data, _) {
+                  final isOpen = data.isChatOpen ||
+                      data.isQAOpen ||
+                      data.isParticipantsOpen ||
+                      data.isPollsOpen;
+                  return Align(
+                    alignment: Alignment.centerRight,
+                    child: AnimatedContainer(
+                      duration: const Duration(
+                          milliseconds: 300),
+                      width: isOpen ? 380 : 0,
+                      child: isOpen
+                          ? _buildTeacherSidebar(data)
+                          : const SizedBox(),
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeacherSidebar(dynamic data) {
+    Widget content = const SizedBox();
+    final c = context.read<VideoRoomController>();
+    if (c.isChatOpen) content = const ChatPanel();
+    else if (c.isQAOpen) content = const QAPanel();
+    else if (c.isParticipantsOpen)
+      content = const ParticipantsPanel();
+    else if (c.isPollsOpen) content = const PollPanel();
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+            left: BorderSide(
+                color: Colors.white10, width: 0.5)),
+      ),
+      child: ClipRRect(child: content),
     );
   }
 

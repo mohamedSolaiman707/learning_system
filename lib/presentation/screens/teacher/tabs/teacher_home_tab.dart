@@ -463,7 +463,29 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                     ),
                   ),
                   const SizedBox(width: 15),
-                  Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(15)), child: const Icon(Icons.share_rounded, color: Colors.white)),
+                  InkWell(
+                    onTap: () {
+                      if (_activeSession != null) {
+                        final link = "https://learning-system-jet.vercel.app/join/${_activeSession!.classCode}";
+                        Clipboard.setData(ClipboardData(text: link));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text("تم نسخ رابط الحصة الحقيقي ✅", style: TextStyle(fontFamily: 'Cairo')),
+                            backgroundColor: Colors.green,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        );
+                        HapticFeedback.mediumImpact();
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(15),
+                    child: Container(
+                      padding: const EdgeInsets.all(15), 
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(15)), 
+                      child: const Icon(Icons.share_rounded, color: Colors.white)
+                    ),
+                  ),
                 ],
               ),
             ],

@@ -561,7 +561,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: const BoxDecoration(
         color: Color(0xFF1A1B1F),
-        border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5)),
+        border: Border(bottom: BorderSide(color: Colors.transparent, width: 0.5)),
       ),
       child: Row(
         children: [

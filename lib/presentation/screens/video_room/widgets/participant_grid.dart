@@ -373,22 +373,23 @@ class ParticipantTile extends StatelessWidget {
         VideoTrack? activeVideoTrack;
         bool isScreen = false;
 
+        // Logic to select the correct track, handling local participant correctly
         if (forceShowScreen == true) {
           final pub = participant.videoTrackPublications.where((p) => p.isScreenShare).firstOrNull;
-          if (pub != null && pub.subscribed) activeVideoTrack = pub.track as VideoTrack?;
+          if (pub != null && (isMe || pub.subscribed)) activeVideoTrack = pub.track as VideoTrack?;
           isScreen = true;
         } else if (forceShowScreen == false) {
           final pub = participant.videoTrackPublications.where((p) => !p.isScreenShare).firstOrNull;
-          if (pub != null && pub.subscribed) activeVideoTrack = pub.track as VideoTrack?;
+          if (pub != null && (isMe || pub.subscribed)) activeVideoTrack = pub.track as VideoTrack?;
           isScreen = false;
         } else {
           final screenPub = participant.videoTrackPublications.where((p) => p.isScreenShare).firstOrNull;
-          if (screenPub != null && screenPub.subscribed && screenPub.track != null) {
+          if (screenPub != null && (isMe || screenPub.subscribed) && screenPub.track != null) {
             activeVideoTrack = screenPub.track as VideoTrack?;
             isScreen = true;
           } else {
             final camPub = participant.videoTrackPublications.where((p) => !p.isScreenShare).firstOrNull;
-            if (camPub != null && camPub.subscribed && camPub.track != null) {
+            if (camPub != null && (isMe || camPub.subscribed) && camPub.track != null) {
               activeVideoTrack = camPub.track as VideoTrack?;
             }
           }
@@ -434,10 +435,10 @@ class ParticipantTile extends StatelessWidget {
                                   child: Container(
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
-                                        begin: Alignment.center,
+                                        begin: Alignment.topCenter,
                                         end: Alignment.bottomCenter,
                                         colors: [
-                                          Colors.black.withOpacity(0.2),
+                                          Colors.transparent,
                                           Colors.black.withOpacity(0.5),
                                         ],
                                       ),

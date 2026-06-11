@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -110,8 +111,16 @@ class VideoRoomController extends ChangeNotifier {
   int _unreadQuestionsCount = 0;
   int _unreadMessages = 0;
 
+  bool _seatPickerShown = false;
+  bool get seatPickerShown => _seatPickerShown;
   List<Map<String, dynamic>> _seats = [];
   List<Map<String, dynamic>> get seats => _seats;
+
+  int get seatsPerScreen {
+    if (_seats.isEmpty) return 8;
+    final rightSeats = _seats.where((s) => s['zone'] == 'right').length;
+    return rightSeats > 0 ? rightSeats : 8;
+  }
 
   final Map<String, bool> _remoteHandStates = {};
   final List<Map<String, dynamic>> _handRaiseQueue = [];
@@ -122,6 +131,7 @@ class VideoRoomController extends ChangeNotifier {
 
   final supabase = Supabase.instance.client;
   StreamSubscription? _statusSubscription;
+  StreamSubscription? _seatsSubscription;
   Timer? _expiryTimer;
 
   String _selectedChannel = "room-cam-right";
@@ -374,7 +384,7 @@ class VideoRoomController extends ChangeNotifier {
   void toggleParticipants() {
     _triggerHaptic();
     _isParticipantsOpen = !_isParticipantsOpen;
-    if (_isParticipantsOpen) refreshSeats();
+    if (_isParticipantsOpen) loadAndExpandSeats();
     _isChatOpen = false;
     _isWhiteboardOpen = false;
     _isQAOpen = false;
@@ -450,12 +460,24 @@ class VideoRoomController extends ChangeNotifier {
       if (isTeacher && sessionId != null) {
         await DatabaseService().initializeSeats(sessionId!);
       }
-      await refreshSeats();
+      await loadAndExpandSeats();
     } catch (e) {
       debugPrint("Load data error: $e");
     }
 
     await connectToRoom(roomName);
+    await loadAndExpandSeats();
+
+    if (sessionId != null) {
+      _seatsSubscription = supabase
+          .from('seats')
+          .stream(primaryKey: ['id'])
+          .eq('session_id', sessionId!)
+          .listen((data) {
+            _seats = data;
+            notifyListeners();
+          });
+    }
   }
 
   Future<void> _loadActiveLiveQuestion() async {
@@ -472,13 +494,60 @@ class VideoRoomController extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshSeats() async {
+  Future<void> loadAndExpandSeats() async {
     if (sessionId == null) return;
     try {
-      _seats = await DatabaseService().getSeats(sessionId!);
+      // Count current online students
+      final participantsCount = _room?.remoteParticipants.values
+          .where((p) => 
+            !p.identity.contains('room-cam-') && 
+            !p.identity.contains('teacher_'))
+          .length ?? 0;
+
+      // Initialize/expand seats if needed
+      await DatabaseService().initializeSeats(
+        sessionId!,
+        totalStudents: max(24, participantsCount),
+      );
+
+      // Load seats
+      final data = await DatabaseService().getSeats(sessionId!);
+      _seats = data;
+
+      // Check if student already has seat
+      if (!isTeacher) {
+        final mySeat = _seats.firstWhere(
+          (s) => s['student_id'] == userId,
+          orElse: () => {},
+        );
+        _seatPickerShown = mySeat.isNotEmpty;
+      }
+
       notifyListeners();
     } catch (e) {
-      debugPrint("Error refreshing seats: $e");
+      debugPrint("loadAndExpandSeats error: $e");
+    }
+  }
+
+  Future<bool> claimSeat(int seatNumber) async {
+    if (sessionId == null) return false;
+    try {
+      final result = await DatabaseService().claimSeat(
+        sessionId: sessionId!,
+        seatNumber: seatNumber,
+        studentId: userId,
+        studentName: userName,
+      );
+      if (result['success'] == true) {
+        _seatPickerShown = true;
+        await loadAndExpandSeats();
+        return true;
+      }
+      // Seat taken — expand and retry
+      await loadAndExpandSeats();
+      return false;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -492,7 +561,7 @@ class VideoRoomController extends ChangeNotifier {
         fromSeat: fromSeat,
         toSeat: toSeat,
       );
-      await refreshSeats();
+      await loadAndExpandSeats();
       onNotification?.call("تم تغيير ترتيب المقاعد بنجاح", Colors.green);
     } catch (e) {
       onNotification?.call("فشل في تغيير ترتيب المقاعد", Colors.red);
@@ -511,7 +580,7 @@ class VideoRoomController extends ChangeNotifier {
         studentId: null,
         studentName: null,
       );
-      await refreshSeats();
+      await loadAndExpandSeats();
     } catch (e) {
       debugPrint("Error clearing seat: $e");
     }
@@ -702,7 +771,7 @@ class VideoRoomController extends ChangeNotifier {
         }
       })
       ..on<ParticipantConnectedEvent>((event) {
-        refreshSeats();
+        loadAndExpandSeats();
         notifyListeners();
       })
       ..on<ParticipantDisconnectedEvent>((event) {
@@ -1612,6 +1681,7 @@ class VideoRoomController extends ChangeNotifier {
     }
     _connectivitySubscription?.cancel();
     _statusSubscription?.cancel();
+    _seatsSubscription?.cancel();
     _expiryTimer?.cancel();
     _breakoutTimer?.cancel();
     _room?.disconnect();

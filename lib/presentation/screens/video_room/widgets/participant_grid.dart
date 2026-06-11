@@ -252,7 +252,7 @@ class ParticipantGrid extends StatelessWidget {
   Widget _buildProfessionalDesktopLayout(BuildContext context, Participant main, List<Participant> others, bool isMainSharingScreen) {
     return Container(
       color: const Color(0xFF0F1014),
-      padding: const EdgeInsets.all(16),
+      padding: others.isEmpty ? EdgeInsets.zero : const EdgeInsets.all(16),
       child: Row(
         children: [
           Expanded(
@@ -268,24 +268,27 @@ class ParticipantGrid extends StatelessWidget {
             Container(
               width: 240,
               margin: const EdgeInsets.only(left: 16),
-              child: ListView.builder(
-                itemCount: others.length,
-                itemBuilder: (context, index) {
-                  final p = others[index];
-                  final bool forceCam = isMainSharingScreen && p.identity == main.identity;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: AspectRatio(
-                        aspectRatio: 16 / 10,
-                        child: ParticipantTile(
-                          key: ValueKey("side_${p.identity}"),
-                          participant: p,
-                          isMainStage: false,
-                          forceShowScreen: forceCam ? false : null,
-                        )
-                    ),
-                  );
-                },
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false), // إخفاء السكرول بار لمنع ظهور النقطة الزرقاء
+                child: ListView.builder(
+                  itemCount: others.length,
+                  itemBuilder: (context, index) {
+                    final p = others[index];
+                    final bool forceCam = isMainSharingScreen && p.identity == main.identity;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: AspectRatio(
+                          aspectRatio: 16 / 10,
+                          child: ParticipantTile(
+                            key: ValueKey("side_${p.identity}"),
+                            participant: p,
+                            isMainStage: false,
+                            forceShowScreen: forceCam ? false : null,
+                          )
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
         ],
@@ -298,7 +301,7 @@ class ParticipantGrid extends StatelessWidget {
       children: [
         Expanded(
             child: Padding(
-                padding: const EdgeInsets.all(8),
+                padding: others.isEmpty ? EdgeInsets.zero : const EdgeInsets.all(8),
                 child: ParticipantTile(
                   participant: main,
                   isMainStage: true,
@@ -406,18 +409,16 @@ class ParticipantTile extends StatelessWidget {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 500),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(isMainStage ? 20 : 12),
-            color: const Color(0xFF1A1B1F),
-            border: Border.all(
-              color: isSpotlighted
-                  ? Colors.amber
-                  : (isSpeaking ? Colors.greenAccent : Colors.white.withOpacity(0.05)),
-              width: (isSpotlighted || isSpeaking) ? 3 : 1,
-            ),
-            boxShadow: [
-              if (isSpeaking) BoxShadow(color: Colors.greenAccent.withOpacity(0.2), blurRadius: 15),
-              if (isSpotlighted) BoxShadow(color: Colors.amber.withOpacity(0.3), blurRadius: 20),
-            ],
+            borderRadius: isMainStage ? BorderRadius.zero : BorderRadius.circular(12),
+            color: const Color(0xFF0F1014),
+            border: isMainStage 
+              ? null // حذف الحدود تماماً لمنع الخطوط العرضية
+              : Border.all(
+                  color: isSpotlighted
+                      ? Colors.amber
+                      : (isSpeaking ? Colors.greenAccent : Colors.white.withOpacity(0.05)),
+                  width: (isSpotlighted || isSpeaking) ? 3 : 1,
+                ),
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
@@ -563,7 +564,9 @@ class ParticipantTile extends StatelessWidget {
   Widget _buildAvatar(String name, bool isMain) {
     String initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "?";
     return Container(
-      decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF2C2D35), Color(0xFF141519)])),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0F1014), // لون أسود سادة لإخفاء أي تدرجات تسبب خطوطاً
+      ),
       child: Center(
         child: CircleAvatar(
           radius: isMain ? 50 : 25,

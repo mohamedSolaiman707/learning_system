@@ -27,7 +27,7 @@ class WallDisplayScreen extends StatefulWidget {
 class _WallDisplayScreenState extends State<WallDisplayScreen> {
   Room? _room;
   EventsListener<RoomEvent>? _listener;
-  List<Map<String, dynamic>> _zoneSeats = [];
+  List<Map<String, dynamic>> _allSeats = [];
   bool _isLoading = true;
   StreamSubscription? _seatsSubscription;
 
@@ -48,10 +48,7 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
 
     try {
       final seats = await db.getSeats(widget.sessionId);
-      _zoneSeats = seats.where((s) => s['zone'] == widget.zone).toList();
-      _zoneSeats.sort(
-        (a, b) => (a['seat_number'] as int).compareTo(b['seat_number'] as int),
-      );
+      _allSeats = seats;
     } catch (e) {
       debugPrint("Error loading initial seats: $e");
     }
@@ -80,12 +77,7 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
         .listen((data) {
           if (mounted) {
             setState(() {
-              _zoneSeats = data.where((s) => s['zone'] == widget.zone).toList();
-              _zoneSeats.sort(
-                (a, b) => (a['seat_number'] as int).compareTo(
-                  b['seat_number'] as int,
-                ),
-              );
+              _allSeats = data;
             });
           }
         });
@@ -141,11 +133,17 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rightSeats = _allSeats.where((s) => s['zone'] == 'right').length;
+    final seatsPerScreen = rightSeats > 0 ? rightSeats : 8;
+
+    final zoneSeats = _allSeats.where((s) => s['zone'] == widget.zone).toList()
+      ..sort((a, b) =>
+          (a['seat_number'] as int).compareTo(b['seat_number'] as int));
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
       body: Stack(
         children: [
-          // Background Gradient for depth
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -175,52 +173,48 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.all(24.0),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            int crossAxisCount = widget.zone == 'center'
-                                ? 3
-                                : 2;
-                            return GridView.builder(
-                              physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: crossAxisCount,
-                                    crossAxisSpacing: 24,
-                                    mainAxisSpacing: 24,
-                                    childAspectRatio: 16 / 10,
-                                  ),
-                              itemCount: _zoneSeats.length,
-                              itemBuilder: (context, index) {
-                                final seat = _zoneSeats[index];
-                                final String? studentId = seat['student_id'];
-                                RemoteParticipant? participant;
-                                if (studentId != null && studentId.isNotEmpty) {
-                                  participant = _room!.remoteParticipants.values
-                                      .where((p) {
-                                        final cleanId = p.identity
-                                            .split('_')
-                                            .first;
-                                        return p.identity.contains(studentId) ||
-                                            cleanId == studentId;
-                                      })
-                                      .firstOrNull;
-                                }
+                        child: GridView.builder(
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: seatsPerScreen <= 8 ? 2 : 3,
+                            crossAxisSpacing: 24,
+                            mainAxisSpacing: 24,
+                            childAspectRatio: 16 / 10,
+                          ),
+                          itemCount: seatsPerScreen,
+                          itemBuilder: (context, index) {
+                            final seat = index < zoneSeats.length 
+                                ? zoneSeats[index] 
+                                : null;
+                            
+                            final String? studentId = seat?['student_id'];
+                            RemoteParticipant? participant;
+                            if (studentId != null && studentId.isNotEmpty) {
+                              participant = _room!.remoteParticipants.values
+                                  .where((p) {
+                                    final cleanId = p.identity
+                                        .split('_')
+                                        .first;
+                                    return p.identity.contains(studentId) ||
+                                        cleanId == studentId;
+                                  })
+                                  .firstOrNull;
+                            }
 
-                                return AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 800),
-                                  switchInCurve: Curves.easeOutBack,
-                                  switchOutCurve: Curves.easeIn,
-                                  transitionBuilder: (child, anim) =>
-                                      FadeTransition(
-                                        opacity: anim,
-                                        child: ScaleTransition(
-                                          scale: anim,
-                                          child: child,
-                                        ),
-                                      ),
-                                  child: _buildSeatTile(seat, participant),
-                                );
-                              },
+                            return AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 800),
+                              switchInCurve: Curves.easeOutBack,
+                              switchOutCurve: Curves.easeIn,
+                              transitionBuilder: (child, anim) =>
+                                  FadeTransition(
+                                    opacity: anim,
+                                    child: ScaleTransition(
+                                      scale: anim,
+                                      child: child,
+                                    ),
+                                  ),
+                              child: _buildSeatTile(seat, participant),
                             );
                           },
                         ),
@@ -312,15 +306,15 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
     );
   }
 
-  Widget _buildSeatTile(Map<String, dynamic> seat, RemoteParticipant? p) {
+  Widget _buildSeatTile(Map<String, dynamic>? seat, RemoteParticipant? p) {
     final bool isOccupied =
-        seat['student_id'] != null && (seat['student_id'] as String).isNotEmpty;
+        seat != null && seat['student_id'] != null && (seat['student_id'] as String).isNotEmpty;
     final bool isOnline = p != null;
     final bool isSpeaking = p?.isSpeaking ?? false;
-    final int seatNum = seat['seat_number'];
+    final int? seatNum = seat?['seat_number'];
 
     return Container(
-      key: ValueKey("seat_${seatNum}_${seat['student_id']}_$isOnline"),
+      key: ValueKey("seat_${seatNum ?? 'empty'}_${seat?['student_id'] ?? 'none'}_$isOnline"),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         border: Border.all(
@@ -359,32 +353,33 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
               forceShowScreen: false,
             )
           else if (isOccupied)
-            _buildOfflineState(seat['student_name'] ?? "طالب")
+            _buildOfflineState(seat!['student_name'] ?? "طالب")
           else
             _buildEmptyState(seatNum),
 
           // Seat Label
-          Positioned(
-            top: 15,
-            left: 15,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
-              ),
-              child: Text(
-                "مقعد $seatNum",
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  fontFamily: 'Cairo',
+          if (seatNum != null)
+            Positioned(
+              top: 15,
+              left: 15,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: Text(
+                  "مقعد $seatNum",
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'Cairo',
+                  ),
                 ),
               ),
             ),
-          ),
 
           if (isSpeaking)
             Positioned(top: 15, right: 15, child: _SpeakingIndicator()),
@@ -393,7 +388,7 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
     );
   }
 
-  Widget _buildEmptyState(int num) {
+  Widget _buildEmptyState(int? num) {
     return Center(
       child: Opacity(
         opacity: 0.15,
@@ -407,7 +402,7 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              "مقعد شاغر",
+              num != null ? "مقعد شاغر" : "مقعد فارغ",
               style: const TextStyle(
                 color: Colors.white,
                 fontFamily: 'Cairo',

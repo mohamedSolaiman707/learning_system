@@ -10,6 +10,7 @@ import '../../presentation/screens/admin/admin_dashboard.dart';
 import '../../presentation/screens/video_room/video_room_screen.dart';
 import '../../presentation/screens/video_room/video_room_controller.dart';
 import '../../presentation/screens/video_room/wall_display_screen.dart';
+import '../../presentation/screens/video_room/room_publisher_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -21,6 +22,7 @@ class AppRoutes {
   static const String adminHome = '/admin-home';
   static const String videoRoom = '/video-room';
   static const String wallDisplay = '/wall-display';
+  static const String roomPublisher = '/room-publisher';
 
   static Map<String, WidgetBuilder> get routes => {
     splash: (context) => const SplashScreen(),
@@ -83,6 +85,17 @@ class AppRoutes {
         ),
       );
     }
+
+    if (routeName == roomPublisher) {
+      final args = settings.arguments as Map<String, dynamic>? ?? queryParams;
+      return MaterialPageRoute(
+        builder: (context) => RoomPublisherScreen(
+          roomName: args['roomName'] ?? '',
+          sessionId: args['sessionId'] ?? '',
+        ),
+      );
+    }
+
     return null;
   }
 }

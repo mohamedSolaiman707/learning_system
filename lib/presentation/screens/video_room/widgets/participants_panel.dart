@@ -92,12 +92,91 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
       padding: const EdgeInsets.symmetric(horizontal: 16),
       children: [
         const SizedBox(height: 10),
-        if (controller.isTeacher) _buildWallControls(context, controller),
+        if (controller.isTeacher) ...[
+          _buildWallControls(context, controller),
+          _buildPublisherLink(context, controller),
+        ],
         if (localParticipant != null)
           _ParticipantTile(participant: localParticipant, controller: controller, isMe: true),
         const Divider(height: 32),
         ...participants.map((p) => _ParticipantTile(participant: p, controller: controller)),
       ],
+    );
+  }
+
+  Widget _buildPublisherLink(BuildContext context, VideoRoomController controller) {
+    final String baseUrl = Uri.base.origin;
+    final String publisherUrl = "$baseUrl/#/room-publisher?roomName=${controller.roomName}&sessionId=${controller.sessionId}";
+
+    return Container(
+      margin: const EdgeInsets.only(top: 0, bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.green.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(children: [
+            Icon(Icons.videocam_rounded, color: Colors.green, size: 18),
+            SizedBox(width: 8),
+            Text("كمبيوتر القاعة",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Cairo',
+                fontSize: 13,
+              )),
+          ]),
+          const SizedBox(height: 8),
+          const Text(
+            "افتح هذا الرابط على كمبيوتر القاعة لبدء بث الكاميرات",
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 11,
+              fontFamily: 'Cairo',
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    publisherUrl,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.blue,
+                      fontFamily: 'Cairo',
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.copy_rounded, color: Colors.green, size: 20),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: publisherUrl));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("تم نسخ رابط القاعة ✅", style: TextStyle(fontFamily: 'Cairo')),
+                      backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -227,7 +306,7 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
 
   Widget _buildWallControls(BuildContext context, VideoRoomController controller) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.blue.withOpacity(0.05),

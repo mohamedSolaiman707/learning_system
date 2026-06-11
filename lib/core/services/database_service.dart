@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -703,7 +705,7 @@ class DatabaseService {
     }
   }
 
-  Future<void> initializeSeats(String sessionId) async {
+  Future<void> initializeSeats(String sessionId, {int totalStudents = 24}) async {
     try {
       final existing = await _supabase
           .from('seats')
@@ -712,12 +714,16 @@ class DatabaseService {
           .limit(1)
           .maybeSingle();
 
+      // Calculate seats per screen dynamically
+      final seatsPerScreen = max(8, (totalStudents / 3).ceil());
+      final totalSeats = seatsPerScreen * 3;
+
       if (existing == null) {
         final List<Map<String, dynamic>> seats = [];
-        for (int i = 1; i <= 16; i++) {
-          String zone = '';
-          if (i <= 6) zone = 'right';
-          else if (i <= 11) zone = 'center';
+        for (int i = 1; i <= totalSeats; i++) {
+          String zone;
+          if (i <= seatsPerScreen) zone = 'right';
+          else if (i <= seatsPerScreen * 2) zone = 'center';
           else zone = 'left';
 
           seats.add({
@@ -727,6 +733,35 @@ class DatabaseService {
           });
         }
         await _supabase.from('seats').insert(seats);
+      } else {
+        // Check if we need to ADD more seats
+        final currentSeats = await _supabase
+          .from('seats')
+          .select('seat_number')
+          .eq('session_id', sessionId)
+          .order('seat_number', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+        final currentMax = currentSeats?['seat_number'] ?? 0;
+
+        if (totalSeats > currentMax) {
+          // Add missing seats only
+          final List<Map<String, dynamic>> newSeats = [];
+          for (int i = currentMax + 1; i <= totalSeats; i++) {
+            String zone;
+            if (i <= seatsPerScreen) zone = 'right';
+            else if (i <= seatsPerScreen * 2) zone = 'center';
+            else zone = 'left';
+
+            newSeats.add({
+              'session_id': sessionId,
+              'seat_number': i,
+              'zone': zone,
+            });
+          }
+          await _supabase.from('seats').insert(newSeats);
+        }
       }
     } catch (e) {
       debugPrint("Error initializing seats: $e");

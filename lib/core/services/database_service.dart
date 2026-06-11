@@ -396,45 +396,24 @@ class DatabaseService {
     }
   }
 
-  Future<void> logStudentEntry(String sessionId, String studentId, String studentName) async {
+  Future<void> logStudentEntry(
+    String sessionId, 
+    String studentId, 
+    String studentName,
+  ) async {
     try {
-      debugPrint("Attempting to log entry: Session($sessionId) Student($studentId)");
-      final isKicked = await isStudentKicked(sessionId, studentId);
-      if (isKicked) return;
-
-      final profile = await _supabase.from('profiles').select('id').eq('id', studentId).maybeSingle();
-      if (profile == null) {
-        await _supabase.from('profiles').insert({'id': studentId, 'full_name': studentName, 'role': 'student'});
-      }
-
-      final existingEnroll = await _supabase.from('enrollments')
-          .select('id').eq('session_id', sessionId).eq('student_id', studentId).maybeSingle();
-
-      if (existingEnroll == null) {
-        await _supabase.from('enrollments').insert({'session_id': sessionId, 'student_id': studentId});
-      }
-
-      final existingAtt = await _supabase.from('attendance')
-          .select('id, total_duration_minutes')
-          .eq('session_id', sessionId).eq('student_id', studentId).maybeSingle();
-
-      if (existingAtt == null) {
-        await _supabase.from('attendance').insert({
-          'session_id': sessionId,
-          'student_id': studentId,
-          'status': 'present',
-          'joined_at': DateTime.now().toUtc().toIso8601String(),
-          'total_duration_minutes': 0,
-        });
-      } else {
-        await _supabase.from('attendance').update({
-          'status': 'present',
-          'joined_at': DateTime.now().toUtc().toIso8601String(),
-          'left_at': null,
-        }).eq('id', existingAtt['id']);
+      final result = await _supabase.rpc('log_student_entry', params: {
+        'p_student_id': studentId,
+        'p_student_name': studentName,
+        'p_session_id': sessionId,
+      });
+      
+      if (result['success'] == false && 
+          result['reason'] == 'kicked') {
+        debugPrint("Student $studentId is kicked");
       }
     } catch (e) {
-      debugPrint("❌ CRITICAL ERROR in logStudentEntry: $e");
+      debugPrint("logStudentEntry error: $e");
     }
   }
 
@@ -648,6 +627,26 @@ class DatabaseService {
     }
   }
 
+  Future<Map<String, dynamic>> claimSeat({
+    required String sessionId,
+    required int seatNumber,
+    required String studentId,
+    required String studentName,
+  }) async {
+    try {
+      final response = await _supabase.rpc('claim_seat', params: {
+        'p_session_id': sessionId,
+        'p_seat_number': seatNumber,
+        'p_student_id': studentId,
+        'p_student_name': studentName,
+      });
+      return Map<String, dynamic>.from(response);
+      // returns: {'success': true} or {'success': false, 'error': '...'}
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
   Future<void> assignSeat({
     required String sessionId,
     required int seatNumber,
@@ -731,6 +730,57 @@ class DatabaseService {
       }
     } catch (e) {
       debugPrint("Error initializing seats: $e");
+    }
+  }
+
+  Future<void> saveLiveQuestion({
+    required String sessionId,
+    required Map<String, dynamic> question,
+  }) async {
+    try {
+      // Close any previous active question first
+      await _supabase
+          .from('live_questions')
+          .update({'is_active': false})
+          .eq('session_id', sessionId)
+          .eq('is_active', true);
+
+      // Insert new active question
+      await _supabase.from('live_questions').insert({
+        'session_id': sessionId,
+        'question': question,
+        'is_active': true,
+      });
+    } catch (e) {
+      debugPrint("Error saving live question: $e");
+    }
+  }
+
+  Future<void> closeLiveQuestion(String sessionId) async {
+    try {
+      await _supabase
+          .from('live_questions')
+          .update({'is_active': false})
+          .eq('session_id', sessionId)
+          .eq('is_active', true);
+    } catch (e) {
+      debugPrint("Error closing live question: $e");
+    }
+  }
+
+  Future<Map<String, dynamic>?> getActiveLiveQuestion(
+      String sessionId) async {
+    try {
+      final res = await _supabase
+          .from('live_questions')
+          .select()
+          .eq('session_id', sessionId)
+          .eq('is_active', true)
+          .maybeSingle();
+      if (res == null) return null;
+      return Map<String, dynamic>.from(res['question']);
+    } catch (e) {
+      return null;
     }
   }
 }

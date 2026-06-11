@@ -43,7 +43,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     final db = Provider.of<DatabaseService>(context, listen: false);
     
     db.joinWaitingRoom(widget.session.id, widget.userId);
-    _loadSeats();
+    _initAndLoadSeats();
 
     _statusSubscription = db.watchSessionStatus(widget.session.id).listen((data) {
       if (data.isEmpty || data.first['status'] == 'ended') {
@@ -72,16 +72,32 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     });
   }
 
-  Future<void> _loadSeats() async {
+  Future<void> _initAndLoadSeats() async {
     final db = Provider.of<DatabaseService>(context, listen: false);
     // Ensuring seats are initialized for the session
     await db.initializeSeats(widget.session.id);
     final seats = await db.getSeats(widget.session.id);
     if (mounted) {
-      setState(() {
-        _seats = seats;
-        _seatsLoading = false;
-      });
+      // Check if student already has a seat
+      final mySeat = seats.firstWhere(
+        (s) => s['student_id'] == widget.userId,
+        orElse: () => {},
+      );
+
+      if (mySeat.isNotEmpty) {
+        // Student already has a seat — skip picker
+        setState(() {
+          _seats = seats;
+          _selectedSeat = mySeat['seat_number'];
+          _seatSelected = true;
+          _seatsLoading = false;
+        });
+      } else {
+        setState(() {
+          _seats = seats;
+          _seatsLoading = false;
+        });
+      }
     }
   }
 
@@ -190,13 +206,32 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                   child: ElevatedButton(
                     onPressed: _selectedSeat == null ? null : () async {
                       final db = Provider.of<DatabaseService>(context, listen: false);
-                      await db.assignSeat(
+                      final result = await db.claimSeat(
                         sessionId: widget.session.id,
                         seatNumber: _selectedSeat!,
                         studentId: widget.userId,
                         studentName: widget.userName,
                       );
-                      setState(() => _seatSelected = true);
+
+                      if (result['success'] == true) {
+                        setState(() => _seatSelected = true);
+                      } else {
+                        // Show error and refresh seats
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                result['error'] ?? 'المقعد محجوز، اختر مقعداً آخر',
+                                style: const TextStyle(fontFamily: 'Cairo'),
+                              ),
+                              backgroundColor: Colors.red,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                          await _initAndLoadSeats(); // refresh the seat map
+                          setState(() => _selectedSeat = null);
+                        }
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
@@ -269,7 +304,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
                 ),
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );

@@ -70,6 +70,9 @@ class VideoRoomController extends ChangeNotifier {
   bool _isParticipantsOpen = false;
 
   bool _isVideoWallMode = false;
+  int _wallPage = 0;
+  int get wallPage => _wallPage;
+  static const int wallPageSize = 8;
 
   Map<String, String> _studentAnswers = {};
   Map<String, String> get studentAnswers => _studentAnswers;
@@ -111,6 +114,55 @@ class VideoRoomController extends ChangeNotifier {
 
   String _selectedChannel = "room-cam-right";
   String get selectedChannel => _selectedChannel;
+
+  static const List<String> roomCameraOrder = [
+    'room-cam-right',
+    'room-cam-left', 
+    'room-cam-screen',
+  ];
+
+  void checkAndFallbackChannel() {
+    if (_room == null || isTeacher) return;
+    
+    final allParticipants = <Participant>[
+      if (_room!.localParticipant != null) _room!.localParticipant!,
+      ..._room!.remoteParticipants.values,
+    ];
+    
+    // Check if current channel is still alive
+    final currentCamAlive = allParticipants.any(
+      (p) => p.identity.contains(_selectedChannel) && 
+             p.isCameraEnabled(),
+    );
+    
+    if (!currentCamAlive) {
+      // Find next available camera
+      for (final cam in roomCameraOrder) {
+        if (cam == _selectedChannel) continue;
+        final isAlive = allParticipants.any(
+          (p) => p.identity.contains(cam) && p.isCameraEnabled(),
+        );
+        if (isAlive) {
+          _selectedChannel = cam;
+          onNotification?.call(
+            "تم التحويل تلقائياً لـ ${_getCameraLabel(cam)} 📷",
+            Colors.orange,
+          );
+          notifyListeners();
+          return;
+        }
+      }
+    }
+  }
+  
+  String _getCameraLabel(String channel) {
+    switch (channel) {
+      case 'room-cam-right': return 'كاميرا اليمين';
+      case 'room-cam-left': return 'كاميرا الشمال';
+      case 'room-cam-screen': return 'الشاشة الرئيسية';
+      default: return 'كاميرا القاعة';
+    }
+  }
 
   // منطق التفاعل الذكي (Engagement Logic)
   double get engagementScore {
@@ -189,6 +241,12 @@ class VideoRoomController extends ChangeNotifier {
     _studentAnswers = {};
     _myCurrentAnswer = null;
     sendData({'type': 'new_active_question', 'question': question});
+    if (sessionId != null) {
+      DatabaseService().saveLiveQuestion(
+        sessionId: sessionId!,
+        question: question,
+      );
+    }
     notifyListeners();
   }
 
@@ -196,6 +254,9 @@ class VideoRoomController extends ChangeNotifier {
     _activeQuestion = null;
     _myCurrentAnswer = null;
     sendData({'type': 'close_active_question'});
+    if (sessionId != null) {
+      DatabaseService().closeLiveQuestion(sessionId!);
+    }
     notifyListeners();
   }
 
@@ -221,7 +282,27 @@ class VideoRoomController extends ChangeNotifier {
 
   void toggleVideoWallMode() {
     _isVideoWallMode = !_isVideoWallMode;
+    resetWallPage();
     notifyListeners();
+  }
+
+  void nextWallPage(int totalCount) {
+    final maxPage = ((totalCount - 1) / wallPageSize).floor();
+    if (_wallPage < maxPage) {
+      _wallPage++;
+      notifyListeners();
+    }
+  }
+
+  void prevWallPage() {
+    if (_wallPage > 0) {
+      _wallPage--;
+      notifyListeners();
+    }
+  }
+
+  void resetWallPage() {
+    _wallPage = 0;
   }
 
   void toggleChat() {
@@ -331,6 +412,7 @@ class VideoRoomController extends ChangeNotifier {
 
     try {
       await _loadChatHistory();
+      await _loadActiveLiveQuestion();
       if (isTeacher && sessionId != null) {
         await DatabaseService().initializeSeats(sessionId!);
       }
@@ -340,6 +422,20 @@ class VideoRoomController extends ChangeNotifier {
     }
 
     await connectToRoom(roomName);
+  }
+
+  Future<void> _loadActiveLiveQuestion() async {
+    if (sessionId == null || isTeacher) return;
+    try {
+      final q = await DatabaseService().getActiveLiveQuestion(sessionId!);
+      if (q != null) {
+        _activeQuestion = q;
+        _studentAnswers = {};
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Load active question error: $e");
+    }
   }
 
   Future<void> refreshSeats() async {
@@ -540,17 +636,17 @@ class VideoRoomController extends ChangeNotifier {
         token,
       );
 
-      if (!isTeacher && sessionId != null) {
-        try {
-          await DatabaseService().logStudentEntry(sessionId!, userId, userName);
-        } catch (e) {
-          debugPrint("Log student entry error: $e");
-        }
-      }
-
+      // --- إصلاح: إخفاء شاشة التحميل فور نجاح اتصال الـ فيديو ---
       _currentRoomName = targetRoomName;
       _isLoading = false;
       notifyListeners();
+
+      // تنفيذ عملية تسجيل الدخول في قاعدة البيانات دون انتظارها (Background)
+      if (!isTeacher && sessionId != null) {
+        DatabaseService().logStudentEntry(sessionId!, userId, userName).catchError((e) {
+          debugPrint("Log student entry error (Background): $e");
+        });
+      }
     } catch (e) {
       debugPrint("Connect to room error: $e");
       _errorMessage = "فشل الاتصال بالقاعة. يرجى المحاولة لاحقاً.";
@@ -578,6 +674,7 @@ class VideoRoomController extends ChangeNotifier {
         notifyListeners();
       })
       ..on<ParticipantDisconnectedEvent>((event) {
+        checkAndFallbackChannel();
         _handRaiseQueue.removeWhere(
           (item) => item['identity'] == event.participant.identity,
         );
@@ -604,7 +701,10 @@ class VideoRoomController extends ChangeNotifier {
         notifyListeners();
       })
       ..on<TrackSubscribedEvent>((_) => notifyListeners())
-      ..on<TrackUnsubscribedEvent>((_) => notifyListeners())
+      ..on<TrackUnsubscribedEvent>((_) {
+        checkAndFallbackChannel();
+        notifyListeners();
+      })
       ..on<TrackMutedEvent>((_) => notifyListeners())
       ..on<TrackUnmutedEvent>((_) => notifyListeners());
   }
@@ -672,8 +772,7 @@ class VideoRoomController extends ChangeNotifier {
           (q) => q['id'] == data['question_id'],
         );
         if (qIndex != -1) {
-          _questions[qIndex]['upvotes'] =
-              (_questions[qIndex]['upvotes'] ?? 0) + 1;
+          _questions[qIndex]['upvotes'] = (_questions[qIndex]['upvotes'] ?? 0) + 1;
           _sortQuestions();
         }
         break;

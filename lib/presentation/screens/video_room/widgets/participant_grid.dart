@@ -51,7 +51,43 @@ class ParticipantGrid extends StatelessWidget {
                     isMainStage: true
                   );
                 } else {
-                  return const Center(child: Text("جاري تحميل بث القاعة...", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 16)));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(
+                          color: Colors.blue, strokeWidth: 2,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "جاري تحميل بث القاعة...",
+                          style: TextStyle(
+                            color: Colors.white, 
+                            fontFamily: 'Cairo', 
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () {
+                            final ctrl = context.read<VideoRoomController>();
+                            ctrl.checkAndFallbackChannel();
+                          },
+                          icon: const Icon(
+                            Icons.refresh_rounded, 
+                            color: Colors.blue, size: 18,
+                          ),
+                          label: const Text(
+                            "تحديث",
+                            style: TextStyle(
+                              color: Colors.blue, 
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
                 }
               }
             }
@@ -59,17 +95,87 @@ class ParticipantGrid extends StatelessWidget {
             final bool isDesktop = Responsive.isDesktop(context);
 
             if (controller.isVideoWallMode) {
+              // Paginated Video Wall
+              final int pageSize = VideoRoomController.wallPageSize;
+              final int currentPage = controller.wallPage;
+              final int totalCount = allParticipants.length;
+              final int maxPage = ((totalCount - 1) / pageSize).floor();
+              
+              // Get only current page participants
+              final int startIndex = currentPage * pageSize;
+              final int endIndex = (startIndex + pageSize).clamp(0, totalCount);
+              final pageParticipants = allParticipants.sublist(startIndex, endIndex);
+              
               int crossAxisCount = isDesktop ? 4 : (Responsive.isTablet(context) ? 3 : 2);
-              return GridView.builder(
-                padding: const EdgeInsets.all(16),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 16 / 9,
-                ),
-                itemCount: allParticipants.length,
-                itemBuilder: (context, index) => ParticipantTile(participant: allParticipants[index], isMainStage: false),
+              
+              return Column(
+                children: [
+                  // Page info bar
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: Colors.black54,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "المشاركون ${startIndex + 1}–$endIndex من $totalCount",
+                          style: const TextStyle(
+                            color: Colors.white70, 
+                            fontSize: 12, 
+                            fontFamily: 'Cairo'
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back_ios, 
+                                color: Colors.white, size: 18),
+                              onPressed: currentPage > 0 
+                                ? () => controller.prevWallPage() 
+                                : null,
+                            ),
+                            Text(
+                              "${currentPage + 1} / ${maxPage + 1}",
+                              style: const TextStyle(
+                                color: Colors.white, 
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.arrow_forward_ios, 
+                                color: Colors.white, size: 18),
+                              onPressed: currentPage < maxPage 
+                                ? () => controller.nextWallPage(totalCount) 
+                                : null,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // Grid — only current page
+                  Expanded(
+                    child: GridView.builder(
+                      padding: const EdgeInsets.all(8),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                        childAspectRatio: 16 / 9,
+                      ),
+                      itemCount: pageParticipants.length,
+                      itemBuilder: (context, index) => ParticipantTile(
+                        key: ValueKey(
+                          "wall_${pageParticipants[index].identity}_p$currentPage"
+                        ),
+                        participant: pageParticipants[index],
+                        isMainStage: false,
+                      ),
+                    ),
+                  ),
+                ],
               );
             }
 
@@ -316,10 +422,34 @@ class ParticipantTile extends StatelessWidget {
                       ? (isScreen || !isMainStage
                           ? VideoTrackRenderer(activeVideoTrack, fit: VideoViewFit.contain, key: ValueKey(activeVideoTrack!.sid))
                           : Stack(
-                              key: ValueKey(activeVideoTrack!.sid),
+                              key: ValueKey(activeVideoTrack.sid),
                               children: [
-                                Positioned.fill(child: ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), child: VideoTrackRenderer(activeVideoTrack, fit: VideoViewFit.cover))),
-                                Positioned.fill(child: VideoTrackRenderer(activeVideoTrack!, fit: VideoViewFit.contain)),
+                                Positioned.fill(
+                                  child: VideoTrackRenderer(
+                                    activeVideoTrack,
+                                    fit: VideoViewFit.cover,
+                                  ),
+                                ),
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.center,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.black.withOpacity(0.2),
+                                          Colors.black.withOpacity(0.5),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Positioned.fill(
+                                  child: VideoTrackRenderer(
+                                    activeVideoTrack,
+                                    fit: VideoViewFit.contain,
+                                  ),
+                                ),
                               ],
                             ))
                       : _buildAvatar(displayName, isMainStage),

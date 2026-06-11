@@ -31,7 +31,41 @@ class ControlsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<VideoRoomController>();
+    final data = context.select<VideoRoomController, ({
+      bool isMicEnabled,
+      bool isCamEnabled,
+      bool isRecording,
+      bool isRecordingPaused,
+      bool isRecordingLoading,
+      bool isHandRaised,
+      bool isScreenSharing,
+      bool isScreenShareLocked,
+      bool isChatOpen,
+      bool isQAOpen,
+      bool isWhiteboardOpen,
+      bool isParticipantsOpen,
+      bool isTeacher,
+      int unreadMessages,
+      int unreadQuestionsCount,
+    })>((c) => (
+      isMicEnabled: c.isMicEnabled,
+      isCamEnabled: c.isCamEnabled,
+      isRecording: c.isRecording,
+      isRecordingPaused: c.isRecordingPaused,
+      isRecordingLoading: c.isRecordingLoading,
+      isHandRaised: c.isHandRaised,
+      isScreenSharing: c.isScreenSharing,
+      isScreenShareLocked: c.isScreenShareLocked,
+      isChatOpen: c.isChatOpen,
+      isQAOpen: c.isQAOpen,
+      isWhiteboardOpen: c.isWhiteboardOpen,
+      isParticipantsOpen: c.isParticipantsOpen,
+      isTeacher: c.isTeacher,
+      unreadMessages: c.unreadMessages,
+      unreadQuestionsCount: c.unreadQuestionsCount,
+    ));
+
+    final controller = context.read<VideoRoomController>();
     final bool isMobile = MediaQuery.of(context).size.width < 600;
 
     return Container(
@@ -82,10 +116,10 @@ class ControlsBar extends StatelessWidget {
                             description:
                                 'اضغط لكتم أو تفعيل صوتك أثناء المحاضرة.',
                             child: _PremiumControlButton(
-                              icon: controller.isMicEnabled
+                              icon: data.isMicEnabled
                                   ? Icons.mic_rounded
                                   : Icons.mic_off_rounded,
-                              isActive: controller.isMicEnabled,
+                              isActive: data.isMicEnabled,
                               activeColor: Colors.blueAccent,
                               onPressed: controller.toggleMic,
                               tooltip: "الميكروفون",
@@ -97,35 +131,35 @@ class ControlsBar extends StatelessWidget {
                             description:
                                 'يمكنك فتح الكاميرا لمشاركة صورتك مع المعلم وزملائك.',
                             child: _PremiumControlButton(
-                              icon: controller.isCamEnabled
+                              icon: data.isCamEnabled
                                   ? Icons.videocam_rounded
                                   : Icons.videocam_off_rounded,
-                              isActive: controller.isCamEnabled,
+                              isActive: data.isCamEnabled,
                               activeColor: Colors.blueAccent,
                               onPressed: controller.toggleCam,
                               tooltip: "الكاميرا",
                             ),
                           ),
-                          if (controller.isTeacher)
+                          if (data.isTeacher)
                             _buildShowcase(
                               key: recordKey,
                               title: 'تسجيل المحاضرة',
                               description:
                                   'ابدأ تسجيل الحصة ليتمكن الطلاب من مشاهدتها لاحقاً عبر السحابة.',
                               child: _PremiumControlButton(
-                                icon: controller.isRecording
+                                icon: data.isRecording
                                     ? Icons.stop_circle_rounded
                                     : Icons.fiber_manual_record_rounded,
-                                isActive: controller.isRecording,
-                                isLoading: controller.isRecordingLoading,
+                                isActive: data.isRecording,
+                                isLoading: data.isRecordingLoading,
                                 activeColor: Colors.redAccent,
                                 onPressed: controller.toggleRecording,
-                                tooltip: controller.isRecording
+                                tooltip: data.isRecording
                                     ? "إيقاف التسجيل"
                                     : "بدء التسجيل",
                                 pulse:
-                                    controller.isRecording &&
-                                    !controller.isRecordingPaused,
+                                    data.isRecording &&
+                                    !data.isRecordingPaused,
                               ),
                             ),
                         ]),
@@ -148,24 +182,24 @@ class ControlsBar extends StatelessWidget {
                                 'استخدمها لتنبيه المعلم أن لديك سؤالاً أو استفساراً.',
                             child: _PremiumControlButton(
                               icon: Icons.front_hand_rounded,
-                              isActive: controller.isHandRaised,
+                              isActive: data.isHandRaised,
                               activeColor: Colors.amber,
                               onPressed: controller.toggleHand,
                               tooltip: "رفع اليد",
                             ),
                           ),
-                          if (controller.isTeacher ||
-                              !controller.isScreenShareLocked)
+                          if (data.isTeacher ||
+                              !data.isScreenShareLocked)
                             _buildShowcase(
                               key: screenShareKey,
                               title: 'مشاركة الشاشة',
                               description:
                                   'تسمح لك هذه الميزة بعرض شاشة جهازك للجميع.',
                               child: _PremiumControlButton(
-                                icon: controller.isScreenSharing
+                                icon: data.isScreenSharing
                                     ? Icons.stop_screen_share_rounded
                                     : Icons.screen_share_rounded,
-                                isActive: controller.isScreenSharing,
+                                isActive: data.isScreenSharing,
                                 activeColor: Colors.greenAccent,
                                 onPressed: controller.toggleScreenShare,
                                 tooltip: "مشاركة الشاشة",
@@ -184,11 +218,11 @@ class ControlsBar extends StatelessWidget {
                                 'تواصل نصياً مع جميع الحاضرين في القاعة.',
                             child: _PremiumControlButton(
                               icon: Icons.chat_bubble_rounded,
-                              isActive: controller.isChatOpen,
+                              isActive: data.isChatOpen,
                               activeColor: Colors.blue,
                               onPressed: controller.toggleChat,
                               tooltip: "الدردشة",
-                              badgeCount: controller.unreadMessages,
+                              badgeCount: data.unreadMessages,
                             ),
                           ),
                           _buildShowcase(
@@ -198,11 +232,11 @@ class ControlsBar extends StatelessWidget {
                                 'اطرح أسئلة تعليمية محددة ليجيب عليها المعلم.',
                             child: _PremiumControlButton(
                               icon: Icons.help_outline_rounded,
-                              isActive: controller.isQAOpen,
+                              isActive: data.isQAOpen,
                               activeColor: Colors.orange,
                               onPressed: controller.toggleQA,
                               tooltip: "الأسئلة",
-                              badgeCount: controller.unreadQuestionsCount,
+                              badgeCount: data.unreadQuestionsCount,
                             ),
                           ),
                           _buildShowcase(
@@ -212,7 +246,7 @@ class ControlsBar extends StatelessWidget {
                                 'افتح السبورة لمتابعة الرسومات والشروحات التوضيحية.',
                             child: _PremiumControlButton(
                               icon: Icons.edit_note_rounded,
-                              isActive: controller.isWhiteboardOpen,
+                              isActive: data.isWhiteboardOpen,
                               activeColor: Colors.tealAccent,
                               onPressed: controller.toggleWhiteboard,
                               tooltip: "السبورة",
@@ -220,11 +254,11 @@ class ControlsBar extends StatelessWidget {
                           ),
                         ]),
 
-                        if (controller.isTeacher) ...[
+                        if (data.isTeacher) ...[
                           _buildDivider(),
                           _PremiumControlButton(
                             icon: Icons.people_alt_rounded,
-                            isActive: controller.isParticipantsOpen,
+                            isActive: data.isParticipantsOpen,
                             activeColor: Colors.purpleAccent,
                             onPressed: controller.toggleParticipants,
                             tooltip: "المشاركين",

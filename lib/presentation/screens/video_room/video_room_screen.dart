@@ -172,131 +172,191 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
+// G:/Development/learning_by_video_call/lib/presentation/screens/video_room/video_room_screen.dart
+
+// (Modified build method and helper signatures)
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final bool isDesktop = Responsive.isDesktop(context);
+    final controller = context.read<VideoRoomController>();
+
+    final errorMessage = context.select<VideoRoomController, String?>((c) => c.errorMessage);
+    final isLoading = context.select<VideoRoomController, bool>((c) => c.isLoading);
+
+    if (errorMessage != null) {
+      return _buildErrorState(controller, isDesktop);
+    }
+
+    if (isLoading) {
+      return _buildLoadingState();
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
-      body: Consumer<VideoRoomController>(
-        builder: (context, controller, child) {
-          if (controller.errorMessage != null) {
-            return _buildErrorState(controller, isDesktop);
-          }
-
-          if (controller.isLoading) {
-            return _buildLoadingState();
-          }
-
-          final bool isSidebarOpen =
-              controller.isChatOpen ||
-              controller.isQAOpen ||
-              controller.isParticipantsOpen ||
-              controller.isPollsOpen;
-
-          return ShowCaseWidget(
-            builder: (context) => Stack(
+      body: ShowCaseWidget(
+        builder: (context) => Stack(
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: AnimatedPadding(
-                              duration: const Duration(milliseconds: 300),
-                              padding: EdgeInsets.only(
-                                bottom: isDesktop ? 0 : 80,
-                              ),
-                              child: const ParticipantGrid(),
-                            ),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: AnimatedPadding(
+                          duration: const Duration(milliseconds: 300),
+                          padding: EdgeInsets.only(
+                            bottom: isDesktop ? 0 : 80,
                           ),
-
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildHeader(context, controller),
-                                if (!widget.isTeacher)
-                                  _buildChannelSelector(controller, isDesktop),
-                                if (widget.isTeacher && isDesktop)
-                                  _buildTeacherHUD(controller),
-                              ],
-                            ),
-                          ),
-
-                          if (controller.isWhiteboardOpen)
-                            const WhiteboardPanel(),
-
-                          if (controller.spotlightedQuestionId != null &&
-                              !controller.isQAOpen)
-                            _buildSpotlightOverlay(
-                              controller,
-                              !isDesktop,
-                              size,
-                            ),
-
-                          ..._reactions,
-
-                          Align(
-                            alignment: Alignment.bottomCenter,
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 20),
-                              child: ControlsBar(
-                                micKey: _micKey,
-                                camKey: _camKey,
-                                recordKey: _recordKey,
-                                emojiKey: _emojiKey,
-                                screenShareKey: _screenShareKey,
-                                handKey: _handKey,
-                                chatKey: _chatKey,
-                                qaKey: _qaKey,
-                                whiteboardKey: _whiteboardKey,
-                              ),
-                            ),
-                          ),
-                        ],
+                          child: const ParticipantGrid(),
+                        ),
                       ),
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Selector<VideoRoomController, ({
+                            bool isRecording,
+                            int participantCount,
+                            String title,
+                            bool isVideoWallMode,
+                            })>(
+                              selector: (_, c) => (
+                              isRecording: c.isRecording,
+                              participantCount: c.room?.remoteParticipants.length ?? 0,
+                              title: c.title,
+                              isVideoWallMode: c.isVideoWallMode,
+                              ),
+                              builder: (context, data, _) => _buildHeader(context, controller),
+                            ),
+                            Selector<VideoRoomController, ({
+                            bool isTeacher,
+                            String selectedChannel,
+                            })>(
+                              selector: (_, c) => (
+                              isTeacher: c.isTeacher,
+                              selectedChannel: c.selectedChannel,
+                              ),
+                              builder: (context, data, _) =>
+                              data.isTeacher ? const SizedBox() : _buildChannelSelector(controller, !isDesktop),
+                            ),
+                            if (widget.isTeacher && isDesktop)
+                              Selector<VideoRoomController, ({
+                              double engagementScore,
+                              int handsCount,
+                              int questionsCount,
+                              })>(
+                                selector: (_, c) => (
+                                engagementScore: c.engagementScore,
+                                handsCount: c.handRaiseQueue.length,
+                                questionsCount: c.unreadQuestionsCount,
+                                ),
+                                builder: (context, data, _) => _buildTeacherHUD(controller),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Selector<VideoRoomController, bool>(
+                        selector: (_, c) => c.isWhiteboardOpen,
+                        builder: (context, isOpen, _) => isOpen ? const WhiteboardPanel() : const SizedBox(),
+                      ),
+                      Selector<VideoRoomController, ({
+                      String? spotlightedQuestionId,
+                      bool isQAOpen,
+                      List<Map<String, dynamic>> questions,
+                      })>(
+                        selector: (_, c) => (
+                        spotlightedQuestionId: c.spotlightedQuestionId,
+                        isQAOpen: c.isQAOpen,
+                        questions: c.questions,
+                        ),
+                        builder: (context, data, _) {
+                          if (data.spotlightedQuestionId != null && !data.isQAOpen) {
+                            return _buildSpotlightOverlay(controller, !isDesktop, size);
+                          }
+                          return const SizedBox();
+                        },
+                      ),
+                      ..._reactions,
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: ControlsBar(
+                            micKey: _micKey,
+                            camKey: _camKey,
+                            recordKey: _recordKey,
+                            emojiKey: _emojiKey,
+                            screenShareKey: _screenShareKey,
+                            handKey: _handKey,
+                            chatKey: _chatKey,
+                            qaKey: _qaKey,
+                            whiteboardKey: _whiteboardKey,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isDesktop)
+                  Selector<VideoRoomController, ({
+                  bool isChatOpen,
+                  bool isQAOpen,
+                  bool isParticipantsOpen,
+                  bool isPollsOpen,
+                  })>(
+                    selector: (_, c) => (
+                    isChatOpen: c.isChatOpen,
+                    isQAOpen: c.isQAOpen,
+                    isParticipantsOpen: c.isParticipantsOpen,
+                    isPollsOpen: c.isPollsOpen,
                     ),
-
-                    if (isDesktop)
-                      AnimatedContainer(
+                    builder: (context, data, _) {
+                      final bool isSidebarOpen = data.isChatOpen || data.isQAOpen || data.isParticipantsOpen || data.isPollsOpen;
+                      return AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         width: isSidebarOpen ? 380 : 0,
                         curve: Curves.easeInOut,
-                        child: isSidebarOpen
-                            ? _buildSidebar(controller)
-                            : const SizedBox(),
-                      ),
-                  ],
-                ),
-
-                if (!isDesktop) ...[
-                  if (controller.isChatOpen)
-                    _buildFeaturePanel(const ChatPanel(), size),
-                  if (controller.isQAOpen)
-                    _buildFeaturePanel(const QAPanel(), size),
-                  if (controller.isParticipantsOpen)
-                    _buildFeaturePanel(const ParticipantsPanel(), size),
-                  if (controller.isPollsOpen)
-                    _buildFeaturePanel(const PollPanel(), size),
-                ],
-
-                if (controller.isProcessing)
-                  Container(
-                    color: Colors.black54,
-                    child: const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    ),
+                        child: isSidebarOpen ? _buildSidebar(controller) : const SizedBox(),
+                      );
+                    },
                   ),
               ],
             ),
-          );
-        },
+            if (!isDesktop) ...[
+              Selector<VideoRoomController, bool>(
+                selector: (_, c) => c.isChatOpen,
+                builder: (context, isOpen, _) => isOpen ? _buildFeaturePanel(const ChatPanel(), size) : const SizedBox(),
+              ),
+              Selector<VideoRoomController, bool>(
+                selector: (_, c) => c.isQAOpen,
+                builder: (context, isOpen, _) => isOpen ? _buildFeaturePanel(const QAPanel(), size) : const SizedBox(),
+              ),
+              Selector<VideoRoomController, bool>(
+                selector: (_, c) => c.isParticipantsOpen,
+                builder: (context, isOpen, _) => isOpen ? _buildFeaturePanel(const ParticipantsPanel(), size) : const SizedBox(),
+              ),
+              Selector<VideoRoomController, bool>(
+                selector: (_, c) => c.isPollsOpen,
+                builder: (context, isOpen, _) => isOpen ? _buildFeaturePanel(const PollPanel(), size) : const SizedBox(),
+              ),
+            ],
+            Selector<VideoRoomController, bool>(
+              selector: (_, c) => c.isProcessing,
+              builder: (context, isProcessing, _) => isProcessing
+                  ? Container(
+                color: Colors.black54,
+                child: const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+              )
+                  : const SizedBox(),
+            ),
+          ],
+        ),
       ),
     );
   }

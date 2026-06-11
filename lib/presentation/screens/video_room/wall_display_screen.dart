@@ -75,12 +75,12 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
         .stream(primaryKey: ['id'])
         .eq('session_id', widget.sessionId)
         .listen((data) {
-          if (mounted) {
-            setState(() {
-              _allSeats = data;
-            });
-          }
+      if (mounted) {
+        setState(() {
+          _allSeats = data;
         });
+      }
+    });
 
     if (mounted) setState(() => _isLoading = false);
   }
@@ -158,70 +158,70 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
 
           _isLoading
               ? const Center(
-                  child: CircularProgressIndicator(color: Colors.blue),
-                )
+            child: CircularProgressIndicator(color: Colors.blue),
+          )
               : _room == null
               ? const Center(
-                  child: Text(
-                    "فشل الاتصال بالقاعة",
-                    style: TextStyle(color: Colors.white, fontFamily: 'Cairo'),
-                  ),
-                )
+            child: Text(
+              "فشل الاتصال بالقاعة",
+              style: TextStyle(color: Colors.white, fontFamily: 'Cairo'),
+            ),
+          )
               : Column(
-                  children: [
-                    _buildHeader(),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: GridView.builder(
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: seatsPerScreen <= 8 ? 2 : 3,
-                            crossAxisSpacing: 24,
-                            mainAxisSpacing: 24,
-                            childAspectRatio: 16 / 10,
-                          ),
-                          itemCount: seatsPerScreen,
-                          itemBuilder: (context, index) {
-                            final seat = index < zoneSeats.length 
-                                ? zoneSeats[index] 
-                                : null;
-                            
-                            final String? studentId = seat?['student_id'];
-                            RemoteParticipant? participant;
-                            if (studentId != null && studentId.isNotEmpty) {
-                              participant = _room!.remoteParticipants.values
-                                  .where((p) {
-                                    final cleanId = p.identity
-                                        .split('_')
-                                        .first;
-                                    return p.identity.contains(studentId) ||
-                                        cleanId == studentId;
-                                  })
-                                  .firstOrNull;
-                            }
-
-                            return AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 800),
-                              switchInCurve: Curves.easeOutBack,
-                              switchOutCurve: Curves.easeIn,
-                              transitionBuilder: (child, anim) =>
-                                  FadeTransition(
-                                    opacity: anim,
-                                    child: ScaleTransition(
-                                      scale: anim,
-                                      child: child,
-                                    ),
-                                  ),
-                              child: _buildSeatTile(seat, participant),
-                            );
-                          },
-                        ),
-                      ),
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: GridView.builder(
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                    SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: seatsPerScreen <= 8 ? 2 : 3,
+                      crossAxisSpacing: 24,
+                      mainAxisSpacing: 24,
+                      childAspectRatio: 16 / 10,
                     ),
-                  ],
+                    itemCount: seatsPerScreen,
+                    itemBuilder: (context, index) {
+                      final seat = index < zoneSeats.length
+                          ? zoneSeats[index]
+                          : null;
+
+                      final String? studentId = seat?['student_id'];
+                      RemoteParticipant? participant;
+                      if (studentId != null && studentId.isNotEmpty) {
+                        participant = _room!.remoteParticipants.values
+                            .where((p) {
+                          final cleanId = p.identity
+                              .split('_')
+                              .first;
+                          return p.identity.contains(studentId) ||
+                              cleanId == studentId;
+                        })
+                            .firstOrNull;
+                      }
+
+                      return AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 800),
+                        switchInCurve: Curves.easeOutBack,
+                        switchOutCurve: Curves.easeIn,
+                        transitionBuilder: (child, anim) =>
+                            FadeTransition(
+                              opacity: anim,
+                              child: ScaleTransition(
+                                scale: anim,
+                                child: child,
+                              ),
+                            ),
+                        child: _buildSeatTile(seat, participant),
+                      );
+                    },
+                  ),
                 ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -321,8 +321,8 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
           color: isSpeaking
               ? Colors.greenAccent
               : (isOnline
-                    ? Colors.blue.withOpacity(0.3)
-                    : Colors.white.withOpacity(0.05)),
+              ? Colors.blue.withOpacity(0.3)
+              : Colors.white.withOpacity(0.05)),
           width: isSpeaking ? 3 : 1,
         ),
         boxShadow: [

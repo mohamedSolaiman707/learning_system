@@ -71,7 +71,7 @@ class _StudentMainContentState extends State<StudentMainContent> {
       backgroundColor: const Color(0xFFF0F4F8),
       body: Row(
         children: [
-          if (!isMobile) 
+          if (!isMobile)
             Showcase(
               key: _sidebarKey,
               title: 'القائمة الجانبية',
@@ -163,9 +163,9 @@ class _StudentMainContentState extends State<StudentMainContent> {
           _sidebarItem(0, Icons.grid_view_rounded, Icons.grid_view_outlined, "لوحة التحكم", isExpanded, _homeKey, 'الرئيسية', 'هنا ملخص حصصك اليومية وأهم التنبيهات.'),
           _sidebarItem(1, Icons.calendar_month_rounded, Icons.calendar_month_outlined, "الجدول الدراسي", isExpanded, _scheduleKey, 'جدولك', 'تابع مواعيد محاضراتك القادمة وروابط الدخول.'),
           _sidebarItem(2, Icons.person_rounded, Icons.person_outline_rounded, "الملف الشخصي", isExpanded, _profileKey, 'حسابك', 'يمكنك تعديل بياناتك ومتابعة مستواك الدراسي.'),
-          
+
           const Spacer(),
-          
+
           // Support Section (المستعاد بالكامل)
           _sidebarItem(99, Icons.support_agent_rounded, Icons.support_agent_outlined, "الدعم الفني", isExpanded, _supportKey, 'الدعم الفني', 'نحن هنا لمساعدتك في أي وقت إذا واجهتك مشكلة.'),
           const SizedBox(height: 20),
@@ -176,7 +176,7 @@ class _StudentMainContentState extends State<StudentMainContent> {
 
   Widget _sidebarItem(int index, IconData selectedIcon, IconData unselectedIcon, String label, bool isExpanded, GlobalKey key, String tourTitle, String tourDesc) {
     bool isSelected = _selectedIndex == index;
-    
+
     return Showcase(
       key: key,
       title: tourTitle,
@@ -188,14 +188,14 @@ class _StudentMainContentState extends State<StudentMainContent> {
         child: InkWell(
           onTap: () async {
             if (index == 99) {
-               final Uri whatsappUri = Uri.parse("https://wa.me/201014250577");
-               if (await canLaunchUrl(whatsappUri)) {
-                 await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
-               } else {
-                 if (context.mounted) {
-                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تعذر فتح واتساب")));
-                 }
-               }
+              final Uri whatsappUri = Uri.parse("https://wa.me/201014250577");
+              if (await canLaunchUrl(whatsappUri)) {
+                await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+              } else {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تعذر فتح واتساب")));
+                }
+              }
             } else {
               setState(() => _selectedIndex = index);
             }

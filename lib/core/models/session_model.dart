@@ -9,8 +9,8 @@ class SessionModel {
   final String status; // 'waiting' | 'active' | 'ended'
   final String? recordingUrl;
   final bool isRecordingEnabled;
-  final bool isRecording; // حقل جديد
-  final bool isRecordingPaused; // حقل جديد
+  final bool isRecording;
+  final bool isRecordingPaused;
 
   SessionModel({
     required this.id,
@@ -28,17 +28,32 @@ class SessionModel {
   });
 
   factory SessionModel.fromMap(Map<String, dynamic> map) {
-    final startTime = DateTime.parse(map['start_time']).toLocal();
-    final endTime = DateTime.parse(map['end_time']).toLocal();
+    // معالجة الأوقات
+    final startTime = map['start_time'] != null 
+        ? DateTime.parse(map['start_time']).toLocal() 
+        : DateTime.now();
+    final endTime = map['end_time'] != null 
+        ? DateTime.parse(map['end_time']).toLocal() 
+        : startTime.add(const Duration(hours: 1));
     
-    String teacherName = "مدرس";
-    if (map['profiles'] != null) {
-      teacherName = map['profiles']['full_name'] ?? "مدرس";
+    // استخراج اسم المدرس مع الحماية من القوائم أو الخرائط
+    String teacherName = "مدرس غير معروف";
+    final profilesData = map['profiles'];
+    if (profilesData != null) {
+      if (profilesData is Map) {
+        teacherName = (profilesData['full_name']?.toString().isNotEmpty == true) 
+            ? profilesData['full_name'] 
+            : "مدرس";
+      } else if (profilesData is List && profilesData.isNotEmpty) {
+        teacherName = (profilesData[0]['full_name']?.toString().isNotEmpty == true) 
+            ? profilesData[0]['full_name'] 
+            : "مدرس";
+      }
     }
 
+    // التحقق من حالة البث المباشر
     bool liveStatus = false;
     final roomsData = map['rooms'];
-    
     if (roomsData != null) {
       if (roomsData is List && roomsData.isNotEmpty) {
         liveStatus = roomsData.any((r) => r['is_active'] == true);
@@ -47,16 +62,22 @@ class SessionModel {
       }
     }
 
+    // استخراج اسم المادة مع قيمة افتراضية إذا كانت فارغة
+    String name = map['subject_name']?.toString() ?? "";
+    if (name.trim().isEmpty) {
+      name = "بث مباشر سريع";
+    }
+
     return SessionModel(
-      id: map['id'],
-      subjectName: map['subject_name'] ?? 'بدون عنوان',
+      id: map['id']?.toString() ?? '',
+      subjectName: name,
       teacherName: teacherName,
-      classCode: map['class_code'] ?? '',
+      classCode: map['class_code']?.toString() ?? '',
       startTime: startTime,
       endTime: endTime,
       isLive: liveStatus,
-      status: map['status'] ?? 'waiting',
-      recordingUrl: map['recording_url'],
+      status: map['status']?.toString() ?? 'waiting',
+      recordingUrl: map['recording_url']?.toString(),
       isRecordingEnabled: map['is_recording_enabled'] ?? true,
       isRecording: map['is_recording'] ?? false,
       isRecordingPaused: map['is_recording_paused'] ?? false,

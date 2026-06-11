@@ -98,7 +98,7 @@ class VideoRoomController extends ChangeNotifier {
   String? _myCurrentPollVote;
   String? get myCurrentPollVote => _myCurrentPollVote;
 
-  final List<Stroke> _whiteboardStrokes = [];
+  List<Stroke> _whiteboardStrokes = [];
   final List<Stroke> _redoStack = [];
   Color _selectedColor = Colors.black;
   double _strokeWidth = 3.0;
@@ -106,7 +106,7 @@ class VideoRoomController extends ChangeNotifier {
   Map<String, dynamic>? _activePoll;
   Map<String, int> _pollResults = {};
   List<Map<String, dynamic>> _messages = [];
-  final List<Map<String, dynamic>> _questions = [];
+  List<Map<String, dynamic>> _questions = [];
   int _unreadQuestionsCount = 0;
   int _unreadMessages = 0;
 
@@ -149,14 +149,12 @@ class VideoRoomController extends ChangeNotifier {
       ..._room!.remoteParticipants.values,
     ];
     
-    // Check if current channel is still alive
     final currentCamAlive = allParticipants.any(
       (p) => p.identity.contains(_selectedChannel) && 
              p.isCameraEnabled(),
     );
     
     if (!currentCamAlive) {
-      // Find next available camera
       for (final cam in roomCameraOrder) {
         if (cam == _selectedChannel) continue;
         final isAlive = allParticipants.any(
@@ -184,7 +182,6 @@ class VideoRoomController extends ChangeNotifier {
     }
   }
 
-  // منطق التفاعل الذكي (Engagement Logic)
   double get engagementScore {
     if (_room == null || _room!.remoteParticipants.isEmpty) return 0.0;
     int totalParticipants = _room!.remoteParticipants.length;
@@ -656,12 +653,10 @@ class VideoRoomController extends ChangeNotifier {
         token,
       );
 
-      // --- إصلاح: إخفاء شاشة التحميل فور نجاح اتصال الـ فيديو ---
       _currentRoomName = targetRoomName;
       _isLoading = false;
       notifyListeners();
 
-      // تنفيذ عملية تسجيل الدخول في قاعدة البيانات دون انتظارها (Background)
       if (!isTeacher && sessionId != null) {
         DatabaseService().logStudentEntry(sessionId!, userId, userName).catchError((e) {
           debugPrint("Log student entry error (Background): $e");
@@ -738,8 +733,18 @@ class VideoRoomController extends ChangeNotifier {
   void _handleIncomingData(Map<String, dynamic> data, RemoteParticipant? p) {
     switch (data['type']) {
       case 'chat_message':
-        _messages.insert(0, data);
+        _messages = [data, ..._messages];
         if (!_isChatOpen) _unreadMessages++;
+        break;
+      case 'edit_chat_message':
+        final index = _messages.indexWhere((m) => m['id'].toString() == data['id'].toString());
+        if (index != -1) {
+          final updatedMsg = Map<String, dynamic>.from(_messages[index]);
+          updatedMsg['content'] = data['content'];
+          updatedMsg['is_edited'] = true;
+          _messages[index] = updatedMsg;
+          _messages = List.from(_messages);
+        }
         break;
       case 'reaction':
         onReactionReceived?.call(data['value']);
@@ -773,26 +778,30 @@ class VideoRoomController extends ChangeNotifier {
         }
         break;
       case 'new_question':
-        _questions.insert(0, {
+        final newQ = {
           ...data,
           'id': data['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
           'upvotes': 0,
           'is_answered': false,
           'senderId': data['senderId'] ?? '',
-        });
+        };
+        _questions = [newQ, ..._questions];
         if (!_isQAOpen) {
           _unreadQuestionsCount++;
           if (isTeacher) {
             onNotification?.call("سؤال جديد من ${data['from']} ❓", Colors.blue);
           }
         }
+        _sortQuestions();
         break;
       case 'upvote_question':
         final qIndex = _questions.indexWhere(
           (q) => q['id'] == data['question_id'],
         );
         if (qIndex != -1) {
-          _questions[qIndex]['upvotes'] = (_questions[qIndex]['upvotes'] ?? 0) + 1;
+          final updatedQ = Map<String, dynamic>.from(_questions[qIndex]);
+          updatedQ['upvotes'] = (updatedQ['upvotes'] ?? 0) + 1;
+          _questions[qIndex] = updatedQ;
           _sortQuestions();
         }
         break;
@@ -801,10 +810,13 @@ class VideoRoomController extends ChangeNotifier {
           (q) => q['id'] == data['question_id'],
         );
         if (qIndex != -1) {
-          _questions[qIndex]['is_answered'] = true;
+          final updatedQ = Map<String, dynamic>.from(_questions[qIndex]);
+          updatedQ['is_answered'] = true;
+          _questions[qIndex] = updatedQ;
           if (_spotlightedQuestionId == data['question_id']) {
             _spotlightedQuestionId = null;
           }
+          _questions = List.from(_questions);
         }
         break;
       case 'spotlight_question':
@@ -821,6 +833,7 @@ class VideoRoomController extends ChangeNotifier {
             );
           }
         }
+        _sortQuestions();
         break;
       case 'hand_raise':
         if (p != null) {
@@ -866,15 +879,17 @@ class VideoRoomController extends ChangeNotifier {
       case 'whiteboard_undo':
         if (_whiteboardStrokes.isNotEmpty) {
           _redoStack.add(_whiteboardStrokes.removeLast());
+          _whiteboardStrokes = List.from(_whiteboardStrokes);
         }
         break;
       case 'whiteboard_redo':
         if (_redoStack.isNotEmpty) {
           _whiteboardStrokes.add(_redoStack.removeLast());
+          _whiteboardStrokes = List.from(_whiteboardStrokes);
         }
         break;
       case 'whiteboard_clear':
-        _whiteboardStrokes.clear();
+        _whiteboardStrokes = [];
         _redoStack.clear();
         break;
       case 'control_chat':
@@ -901,7 +916,7 @@ class VideoRoomController extends ChangeNotifier {
         if (isTeacher) {
           _pollResults[data['option']] =
               (_pollResults[data['option']] ?? 0) + 1;
-          notifyListeners();
+          _pollResults = Map.from(_pollResults);
         }
         break;
       case 'poll_end':
@@ -924,11 +939,13 @@ class VideoRoomController extends ChangeNotifier {
       case 'student_answer':
         if (isTeacher) {
           _studentAnswers[data['from']] = data['answer'];
+          _studentAnswers = Map.from(_studentAnswers);
         }
         break;
       case 'reveal_answer':
         if (_activeQuestion != null) {
           _activeQuestion!['correctAnswer'] = data['correct'];
+          _activeQuestion = Map.from(_activeQuestion!);
         }
         break;
     }
@@ -936,7 +953,8 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void _sortQuestions() {
-    _questions.sort((a, b) {
+    final sorted = List<Map<String, dynamic>>.from(_questions);
+    sorted.sort((a, b) {
       if (a['id'] == _spotlightedQuestionId) return -1;
       if (b['id'] == _spotlightedQuestionId) return 1;
       bool handA = _remoteHandStates[a['senderId']] ?? false;
@@ -947,6 +965,7 @@ class VideoRoomController extends ChangeNotifier {
       int upvotesB = b['upvotes'] ?? 0;
       return upvotesB.compareTo(upvotesA);
     });
+    _questions = sorted;
   }
 
   void _startBreakoutCountdown() {
@@ -1147,15 +1166,14 @@ class VideoRoomController extends ChangeNotifier {
 
   void _handleDraw(Map<String, dynamic> data) {
     final List points = data['points'];
-    _whiteboardStrokes.add(
-      Stroke(
-        points: points
-            .map((e) => Offset(e['x'].toDouble(), e['y'].toDouble()))
-            .toList(),
-        color: Color(data['color']),
-        width: data['width'].toDouble(),
-      ),
+    final newStroke = Stroke(
+      points: points
+          .map((e) => Offset(e['x'].toDouble(), e['y'].toDouble()))
+          .toList(),
+      color: Color(data['color']),
+      width: data['width'].toDouble(),
     );
+    _whiteboardStrokes = [..._whiteboardStrokes, newStroke];
     _redoStack.clear();
   }
 
@@ -1166,7 +1184,7 @@ class VideoRoomController extends ChangeNotifier {
       color: _selectedColor,
       width: _strokeWidth,
     );
-    _whiteboardStrokes.add(s);
+    _whiteboardStrokes = [..._whiteboardStrokes, s];
     _redoStack.clear();
     sendData({
       'type': 'whiteboard_draw',
@@ -1179,7 +1197,9 @@ class VideoRoomController extends ChangeNotifier {
 
   void undoWhiteboard() {
     if (_whiteboardStrokes.isNotEmpty) {
-      _redoStack.add(_whiteboardStrokes.removeLast());
+      final removed = _whiteboardStrokes.removeLast();
+      _redoStack.add(removed);
+      _whiteboardStrokes = List.from(_whiteboardStrokes);
       sendData({'type': 'whiteboard_undo'});
       notifyListeners();
     }
@@ -1187,7 +1207,8 @@ class VideoRoomController extends ChangeNotifier {
 
   void redoWhiteboard() {
     if (_redoStack.isNotEmpty) {
-      _whiteboardStrokes.add(_redoStack.removeLast());
+      final added = _redoStack.removeLast();
+      _whiteboardStrokes = [..._whiteboardStrokes, added];
       sendData({'type': 'whiteboard_redo'});
       notifyListeners();
     }
@@ -1195,7 +1216,7 @@ class VideoRoomController extends ChangeNotifier {
 
   void hideWhiteboard() => _isWhiteboardOpen = false;
   void clearWhiteboard() {
-    _whiteboardStrokes.clear();
+    _whiteboardStrokes = [];
     _redoStack.clear();
     sendData({'type': 'whiteboard_clear'});
     notifyListeners();
@@ -1203,23 +1224,67 @@ class VideoRoomController extends ChangeNotifier {
 
   void sendMessage(String text, {Map<String, dynamic>? replyTo}) async {
     if (text.trim().isEmpty || (_isChatLocked && !isTeacher)) return;
+    
+    final tempId = DateTime.now().millisecondsSinceEpoch.toString();
     final msg = {
+      'id': tempId,
       'user_name': userName,
       'content': text.trim(),
       'created_at': DateTime.now().toIso8601String(),
       if (replyTo != null) 'reply_to': replyTo,
     };
-    _messages.insert(0, msg);
+    
+    _messages = [msg, ..._messages];
     sendData({'type': 'chat_message', ...msg});
+    notifyListeners();
+    
     try {
-      await supabase.from('messages').insert({
+      final response = await supabase.from('messages').insert({
         'room_name': roomName,
         'user_name': userName,
         'content': text.trim(),
         'reply_to': replyTo,
-      });
+      }).select().single();
+      
+      final index = _messages.indexWhere((m) => m['id'] == tempId);
+      if (index != -1) {
+        final updatedMsg = Map<String, dynamic>.from(_messages[index]);
+        updatedMsg['id'] = response['id'];
+        _messages[index] = updatedMsg;
+        _messages = List.from(_messages);
+        notifyListeners();
+      }
     } catch (_) {}
+  }
+
+  void editMessage(String messageId, String newContent) async {
+    final index = _messages.indexWhere((m) => m['id'].toString() == messageId.toString());
+    if (index == -1) return;
+
+    if (_messages[index]['user_name'] != userName) return;
+
+    final updatedMsg = Map<String, dynamic>.from(_messages[index]);
+    updatedMsg['content'] = newContent.trim();
+    updatedMsg['is_edited'] = true;
+    _messages[index] = updatedMsg;
+    _messages = List.from(_messages);
+    
+    sendData({
+      'type': 'edit_chat_message',
+      'id': messageId,
+      'content': newContent.trim(),
+    });
+    
     notifyListeners();
+
+    try {
+      await supabase
+          .from('messages')
+          .update({'content': newContent.trim(), 'is_edited': true})
+          .eq('id', messageId);
+    } catch (e) {
+      debugPrint("Error editing message: $e");
+    }
   }
 
   void sendQuestion(String text) {
@@ -1232,7 +1297,9 @@ class VideoRoomController extends ChangeNotifier {
       'senderId': _room?.localParticipant?.identity ?? userId,
       'text': text.trim(),
     };
-    _questions.insert(0, {...qData, 'upvotes': 0, 'is_answered': false});
+    final localQ = {...qData, 'upvotes': 0, 'is_answered': false};
+    _questions = [localQ, ..._questions];
+    _sortQuestions();
     sendData(qData);
     notifyListeners();
   }
@@ -1240,7 +1307,9 @@ class VideoRoomController extends ChangeNotifier {
   void upvoteQuestion(String questionId) {
     final qIndex = _questions.indexWhere((q) => q['id'] == questionId);
     if (qIndex != -1) {
-      _questions[qIndex]['upvotes'] = (_questions[qIndex]['upvotes'] ?? 0) + 1;
+      final updatedQ = Map<String, dynamic>.from(_questions[qIndex]);
+      updatedQ['upvotes'] = (updatedQ['upvotes'] ?? 0) + 1;
+      _questions[qIndex] = updatedQ;
       _sortQuestions();
       sendData({'type': 'upvote_question', 'question_id': questionId});
       notifyListeners();
@@ -1251,8 +1320,11 @@ class VideoRoomController extends ChangeNotifier {
     if (!isTeacher) return;
     final qIndex = _questions.indexWhere((q) => q['id'] == questionId);
     if (qIndex != -1) {
-      _questions[qIndex]['is_answered'] = true;
+      final updatedQ = Map<String, dynamic>.from(_questions[qIndex]);
+      updatedQ['is_answered'] = true;
+      _questions[qIndex] = updatedQ;
       if (_spotlightedQuestionId == questionId) _spotlightedQuestionId = null;
+      _questions = List.from(_questions);
       sendData({'type': 'mark_answered', 'question_id': questionId});
       notifyListeners();
     }
@@ -1313,10 +1385,7 @@ class VideoRoomController extends ChangeNotifier {
     if (_room != null) {
       final data = utf8.encode(jsonEncode(d));
       _room!.localParticipant?.publishData(
-        data,
-        reliable: true,
-        destinationIdentities: targetIdentities,
-      );
+        data, reliable: true, destinationIdentities: targetIdentities);
     }
   }
 

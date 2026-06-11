@@ -14,6 +14,7 @@ class _ChatPanelState extends State<ChatPanel> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Map<String, dynamic>? _replyingTo;
+  Map<String, dynamic>? _editingMessage;
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -65,13 +66,24 @@ class _ChatPanelState extends State<ChatPanel> {
                     final isMe = msg['user_name'] == data.userName;
                     
                     return _MessageBubble(
-                      key: ValueKey(msg['created_at'] ?? index),
+                      key: ValueKey(msg['id'] ?? msg['created_at'] ?? index),
                       userName: msg['user_name'] ?? 'مشارك',
                       text: msg['content'] ?? '',
                       isMe: isMe,
                       time: _formatTime(msg['created_at']),
+                      isEdited: msg['is_edited'] ?? false,
                       replyTo: msg['reply_to'],
-                      onReply: (m) => setState(() => _replyingTo = m),
+                      onReply: (m) => setState(() {
+                        _replyingTo = m;
+                        _editingMessage = null;
+                      }),
+                      onEdit: isMe ? (m) {
+                        setState(() {
+                          _editingMessage = msg;
+                          _replyingTo = null;
+                          _controller.text = msg['content'];
+                        });
+                      } : null,
                     );
                   },
                 ),
@@ -85,6 +97,7 @@ class _ChatPanelState extends State<ChatPanel> {
             Column(
               children: [
                 if (_replyingTo != null) _buildReplyPreview(),
+                if (_editingMessage != null) _buildEditPreview(),
                 _buildInput(controller),
               ],
             ),
@@ -95,7 +108,6 @@ class _ChatPanelState extends State<ChatPanel> {
 
   Widget _buildReplyPreview() {
     return Container(
-      color: Colors.grey.shade100,
       padding: const EdgeInsets.all(8),
       margin: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
@@ -125,6 +137,37 @@ class _ChatPanelState extends State<ChatPanel> {
           IconButton(
             icon: const Icon(Icons.close, size: 16),
             onPressed: () => setState(() => _replyingTo = null),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditPreview() {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        border: const Border(left: BorderSide(color: Colors.orange, width: 3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.edit, size: 16, color: Colors.orange),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              "تعديل الرسالة...",
+              style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16),
+            onPressed: () {
+              setState(() => _editingMessage = null);
+              _controller.clear();
+            },
           ),
         ],
       ),
@@ -169,7 +212,7 @@ class _ChatPanelState extends State<ChatPanel> {
             child: TextField(
               controller: _controller,
               decoration: InputDecoration(
-                hintText: "اكتب رسالة...",
+                hintText: _editingMessage != null ? "عدل رسالتك..." : "اكتب رسالة...",
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(25)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
@@ -178,9 +221,9 @@ class _ChatPanelState extends State<ChatPanel> {
           ),
           const SizedBox(width: 8),
           CircleAvatar(
-            backgroundColor: Colors.blue,
+            backgroundColor: _editingMessage != null ? Colors.orange : Colors.blue,
             child: IconButton(
-              icon: const Icon(Icons.send, color: Colors.white, size: 20),
+              icon: Icon(_editingMessage != null ? Icons.check : Icons.send, color: Colors.white, size: 20),
               onPressed: () => _send(controller),
             ),
           ),
@@ -190,10 +233,16 @@ class _ChatPanelState extends State<ChatPanel> {
   }
 
   void _send(VideoRoomController controller) {
-    if (_controller.text.trim().isNotEmpty) {
-      controller.sendMessage(_controller.text.trim(), replyTo: _replyingTo);
+    final text = _controller.text.trim();
+    if (text.isNotEmpty) {
+      if (_editingMessage != null) {
+        controller.editMessage(_editingMessage!['id'].toString(), text);
+        setState(() => _editingMessage = null);
+      } else {
+        controller.sendMessage(text, replyTo: _replyingTo);
+        setState(() => _replyingTo = null);
+      }
       _controller.clear();
-      setState(() => _replyingTo = null);
       _scrollToBottom();
     }
   }
@@ -204,8 +253,10 @@ class _MessageBubble extends StatelessWidget {
   final String text;
   final bool isMe;
   final String time;
+  final bool isEdited;
   final Map<String, dynamic>? replyTo;
   final Function(Map<String, dynamic>)? onReply;
+  final Function(Map<String, dynamic>)? onEdit;
 
   const _MessageBubble({
     super.key,
@@ -213,154 +264,134 @@ class _MessageBubble extends StatelessWidget {
     required this.text,
     required this.isMe,
     required this.time,
+    this.isEdited = false,
     this.replyTo,
     this.onReply,
+    this.onEdit,
   });
 
-  Widget _buildCopyIcon(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Clipboard.setData(ClipboardData(text: text));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              "تم نسخ الرسالة ✅",
-              style: TextStyle(fontFamily: 'Cairo'),
+  void _showOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.copy),
+              title: const Text("نسخ النص", style: TextStyle(fontFamily: 'Cairo')),
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: text));
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم النسخ ✅")));
+              },
             ),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 1),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+            ListTile(
+              leading: const Icon(Icons.reply),
+              title: const Text("رد", style: TextStyle(fontFamily: 'Cairo')),
+              onTap: () {
+                onReply?.call({'user_name': userName, 'content': text});
+                Navigator.pop(context);
+              },
             ),
-            margin: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-          ),
-        );
-      },
-      child: const Icon(
-        Icons.copy_rounded,
-        size: 14,
-        color: Colors.grey,
+            if (isMe)
+              ListTile(
+                leading: const Icon(Icons.edit, color: Colors.orange),
+                title: const Text("تعديل", style: TextStyle(fontFamily: 'Cairo', color: Colors.orange)),
+                onTap: () {
+                  onEdit?.call({'content': text});
+                  Navigator.pop(context);
+                },
+              ),
+          ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onLongPress: () {
-        Clipboard.setData(ClipboardData(text: text));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              "تم نسخ الرسالة ✅",
-              style: TextStyle(fontFamily: 'Cairo'),
-            ),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 1),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-          ),
-        );
-      },
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
+        onLongPress: () => _showOptions(context),
         onHorizontalDragEnd: (details) {
           if (details.primaryVelocity! > 300) {
-            onReply?.call({
-              'user_name': userName,
-              'content': text,
-            });
+            onReply?.call({'user_name': userName, 'content': text});
           }
         },
-        child: Align(
-          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
-            margin: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (isMe) ...[
-                  _buildCopyIcon(context),
-                  const SizedBox(width: 4),
-                ],
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        child: Text(userName, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                      ),
+        child: Container(
+          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Text(userName, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              ),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isMe ? Colors.blue : Colors.grey.shade200,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(15),
+                    topRight: const Radius.circular(15),
+                    bottomLeft: Radius.circular(isMe ? 15 : 2),
+                    bottomRight: Radius.circular(isMe ? 2 : 15),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (replyTo != null) ...[
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(8),
+                        margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
-                          color: isMe ? Colors.blue : Colors.grey.shade200,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(15),
-                            topRight: const Radius.circular(15),
-                            bottomLeft: Radius.circular(isMe ? 15 : 2),
-                            bottomRight: Radius.circular(isMe ? 2 : 15),
-                          ),
+                          color: isMe ? Colors.blue.shade700 : Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(8),
+                          border: const Border(left: BorderSide(color: Colors.blue, width: 3)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (replyTo != null) ...[
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                margin: const EdgeInsets.only(bottom: 8),
-                                decoration: BoxDecoration(
-                                  color: isMe ? Colors.blue.shade700 : Colors.grey.shade300,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: const Border(left: BorderSide(color: Colors.blue, width: 3)),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      replyTo!['user_name'],
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: isMe ? Colors.white70 : Colors.black54,
-                                      ),
-                                    ),
-                                    Text(
-                                      replyTo!['content'],
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isMe ? Colors.white60 : Colors.black45,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                            Text(
+                              replyTo!['user_name'],
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: isMe ? Colors.white70 : Colors.black54,
                               ),
-                            ],
-                            Text(text, style: TextStyle(color: isMe ? Colors.white : Colors.black, fontSize: 14)),
-                            const SizedBox(height: 4),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(time, style: TextStyle(fontSize: 8, color: isMe ? Colors.white70 : Colors.black54)),
+                            ),
+                            Text(
+                              replyTo!['content'],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isMe ? Colors.white60 : Colors.black45,
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ],
-                  ),
+                    Text(text, style: TextStyle(color: isMe ? Colors.white : Colors.black, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isEdited)
+                          const Text("معدلة  ", style: TextStyle(fontSize: 8, color: Colors.grey, fontStyle: FontStyle.italic)),
+                        Text(time, style: TextStyle(fontSize: 8, color: isMe ? Colors.white70 : Colors.black54)),
+                      ],
+                    ),
+                  ],
                 ),
-                if (!isMe) ...[
-                  const SizedBox(width: 4),
-                  _buildCopyIcon(context),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

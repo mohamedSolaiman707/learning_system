@@ -250,7 +250,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         children: [
           Row(
             children: [
-              // 1. Sidebar: Channels & Whiteboard
               Selector<VideoRoomController, (String, bool)>(
                 selector: (_, c) => (c.selectedChannel, c.isWhiteboardOpen),
                 builder: (context, data, child) => _buildChannelSidebar(controller),
@@ -259,7 +258,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               Expanded(
                 child: Column(
                   children: [
-                    // 2. Top Header: Tools & Menu
                     Selector<VideoRoomController, ({
                       bool isHandRaised,
                       bool isMicEnabled,
@@ -288,18 +286,15 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                     Expanded(
                       child: Row(
                         children: [
-                          // 3. Center Stage (Main Video or Whiteboard)
                           Expanded(
                             child: Stack(
                               children: [
-                                // Always render main stage
                                 Positioned.fill(
                                   child: Selector<VideoRoomController, (String, bool)>(
                                     selector: (_, c) => (c.selectedChannel, c.isPiPExpanded),
                                     builder: (context, _, __) => _buildMainStage(controller),
                                   ),
                                 ),
-                                // Whiteboard overlay correctly wrapped in Positioned.fill
                                 Positioned.fill(
                                   child: Selector<VideoRoomController, bool>(
                                     selector: (_, c) => c.isWhiteboardOpen,
@@ -313,7 +308,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                             ),
                           ),
 
-                          // 4. Right Sidebar: Chat / Q&A (Desktop Only)
                           Selector<VideoRoomController, ({
                             bool isChatOpen,
                             bool isQAOpen,
@@ -327,16 +321,27 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                               if (!isOpen) return const SizedBox();
                               return AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
-                                width: 350,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF16171B),
-                                  border: Border(
-                                      left: BorderSide(color: Colors.white10, width: 0.5)
+                                width: 380,
+                                padding: const EdgeInsets.all(16),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(24),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.2),
+                                        blurRadius: 20,
+                                        offset: const Offset(0, 10),
+                                      )
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(24),
+                                    child: data.isChatOpen
+                                        ? const ChatPanel()
+                                        : const QAPanel(),
                                   ),
                                 ),
-                                child: data.isChatOpen
-                                    ? const ChatPanel()
-                                    : const QAPanel(),
                               );
                             },
                           ),
@@ -344,7 +349,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       ),
                     ),
 
-                    // 5. Bottom: Students Cams
                     ListenableBuilder(
                       listenable: controller.room ?? ChangeNotifier(),
                       builder: (context, _) => _buildBottomParticipantBar(controller),
@@ -376,19 +380,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   Widget _buildMobilePanel(Widget child) {
     final size = MediaQuery.of(context).size;
     return Positioned(
-      bottom: 0, left: 0, right: 0,
+      bottom: 20, left: 15, right: 15,
       child: Container(
-        height: size.height * 0.7,
-        decoration: const BoxDecoration(
+        height: size.height * 0.55,
+        decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(
-              top: Radius.circular(20)),
-          boxShadow: [BoxShadow(
-              color: Colors.black54, blurRadius: 20)],
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 25, offset: Offset(0, -5))],
         ),
         child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(20)),
+          borderRadius: BorderRadius.circular(30),
           child: child,
         ),
       ),
@@ -449,11 +450,27 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   return Align(
                     alignment: Alignment.centerRight,
                     child: AnimatedContainer(
-                      duration: const Duration(
-                          milliseconds: 300),
-                      width: isOpen ? 380 : 0,
+                      duration: const Duration(milliseconds: 300),
+                      width: isOpen ? 420 : 0,
+                      padding: isOpen ? const EdgeInsets.all(16) : EdgeInsets.zero,
                       child: isOpen
-                          ? _buildTeacherSidebar(data)
+                          ? Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 10),
+                                  )
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(24),
+                                child: _buildTeacherSidebar(data),
+                              ),
+                            )
                           : const SizedBox(),
                     ),
                   );
@@ -466,22 +483,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 
   Widget _buildTeacherSidebar(dynamic data) {
-    Widget content = const SizedBox();
     final c = context.read<VideoRoomController>();
-    if (c.isChatOpen) content = const ChatPanel();
-    else if (c.isQAOpen) content = const QAPanel();
-    else if (c.isParticipantsOpen)
-      content = const ParticipantsPanel();
-    else if (c.isPollsOpen) content = const PollPanel();
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-            left: BorderSide(
-                color: Colors.white10, width: 0.5)),
-      ),
-      child: ClipRRect(child: content),
-    );
+    if (c.isChatOpen) return const ChatPanel();
+    if (c.isQAOpen) return const QAPanel();
+    if (c.isParticipantsOpen) return const ParticipantsPanel();
+    if (c.isPollsOpen) return const PollPanel();
+    return const SizedBox();
   }
 
   Widget _buildChannelSidebar(VideoRoomController controller) {
@@ -567,7 +574,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             ],
           ),
           const Spacer(),
-          // Tools Section
           Row(
             children: [
               _HeaderToolButton(
@@ -602,7 +608,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 onPressed: controller.toggleQA,
                 label: "الأسئلة",
               ),
-              // Fixed: Always show Screen Share for student, but style it based on lock state
               const SizedBox(width: 15),
               _HeaderToolButton(
                 icon: controller.isScreenSharing ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
@@ -615,7 +620,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 label: "مشاركة الشاشة",
               ),
               const SizedBox(width: 25),
-              // User Count
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(20)),
@@ -630,7 +634,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             ],
           ),
           const Spacer(),
-          // Menu Section
           IconButton(onPressed: _showSettingsDialog, icon: const Icon(Icons.settings, color: Colors.white54)),
           IconButton(
             onPressed: () => _showExitConfirmation(context, controller),
@@ -647,7 +650,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       ...controller.room?.remoteParticipants.values ?? [],
     ];
 
-    // Always show teacher in main stage
     Participant? teacher;
     try {
       teacher = allParticipants.firstWhere(
@@ -657,7 +659,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       teacher = allParticipants.isNotEmpty ? allParticipants.first : null;
     }
 
-    // Get selected channel camera (for PiP)
     final channelCam = controller.selectedChannel != 'whiteboard'
         ? allParticipants.where((p) => p.identity.contains(controller.selectedChannel)).firstOrNull
         : null;
@@ -670,7 +671,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
     return Stack(
       children: [
-        // Main stage — always teacher
         Positioned.fill(
           child: teacher != null
               ? ParticipantTile(
@@ -690,7 +690,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
           ),
         ),
 
-        // PiP — selected channel camera (bottom right)
         if (channelCam != null)
           Positioned(
             bottom: 16,
@@ -718,7 +717,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                             participant: channelCam,
                             isMainStage: false,
                           ),
-                          // Channel label
                           Positioned(
                             top: 6, left: 6,
                             child: Container(
@@ -730,7 +728,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                               ),
                             ),
                           ),
-                          // Expand/Collapse icon
                           Positioned(
                             top: 6, right: 6,
                             child: Container(
@@ -751,24 +748,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
-  Widget _buildRightSidebar(VideoRoomController controller) {
-    return Container(
-      width: 350,
-      decoration: const BoxDecoration(
-        color: Color(0xFF16171B),
-        border: Border(left: BorderSide(color: Colors.white10, width: 0.5)),
-      ),
-      child: const ChatPanel(),
-    );
-  }
-
   Widget _buildBottomParticipantBar(VideoRoomController controller) {
     final allParticipants = <Participant>[
       if (controller.room?.localParticipant != null) controller.room!.localParticipant!,
       ...controller.room?.remoteParticipants.values ?? [],
     ];
 
-    // Filter out the classroom cameras to only show students
     final students = allParticipants.where((p) => !p.identity.contains('room-cam-') && !p.identity.contains('teacher_')).toList();
     final localPart = controller.room?.localParticipant;
 
@@ -794,7 +779,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               },
             ),
           ),
-          // "My Cam" fixed at the end
           if (localPart != null)
             Container(
               width: 200,

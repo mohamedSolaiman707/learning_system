@@ -501,6 +501,81 @@ class ParticipantTile extends StatelessWidget {
                 ),
 
               if (isSpeaking) Positioned(top: 0, left: 0, right: 0, child: Container(height: 3, color: Colors.greenAccent)),
+
+              // Answer overlay — only in teacher Video Wall mode
+              Consumer<VideoRoomController>(
+                builder: (context, ctrl, _) {
+                  if (!ctrl.isTeacher) return const SizedBox();
+                  if (!ctrl.isVideoWallMode) return const SizedBox();
+                  if (ctrl.activeQuestion == null) return const SizedBox();
+                  
+                  final answer = ctrl.getAnswerForParticipant(
+                    participant.identity);
+                  if (answer == null) return const SizedBox();
+                  
+                  final correctAnswer = ctrl.activeQuestionCorrectAnswer;
+                  final bool hasCorrect = correctAnswer != null && 
+                                          correctAnswer.isNotEmpty;
+                  
+                  Color bgColor = Colors.black54;
+                  Color textColor = Colors.white;
+                  IconData? icon;
+                  
+                  if (hasCorrect) {
+                    if (answer == correctAnswer) {
+                      bgColor = Colors.green.withOpacity(0.85);
+                      textColor = Colors.white;
+                      icon = Icons.check_circle_rounded;
+                    } else {
+                      bgColor = Colors.red.withOpacity(0.85);
+                      textColor = Colors.white;
+                      icon = Icons.cancel_rounded;
+                    }
+                  } else {
+                    bgColor = Colors.blue.withOpacity(0.85);
+                    textColor = Colors.white;
+                  }
+
+                  return Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(12),
+                          bottomRight: Radius.circular(12),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (icon != null) ...[
+                            Icon(icon, color: textColor, size: 14),
+                            const SizedBox(width: 6),
+                          ],
+                          Expanded(
+                            child: Text(
+                              answer,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 11,
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         );

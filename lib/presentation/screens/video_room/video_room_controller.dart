@@ -77,8 +77,20 @@ class VideoRoomController extends ChangeNotifier {
   Map<String, String> _studentAnswers = {};
   Map<String, String> get studentAnswers => _studentAnswers;
 
+  String? getAnswerForParticipant(String identity) {
+    for (final entry in _studentAnswers.entries) {
+      if (identity.contains(entry.key) || 
+          entry.key.contains(identity.split('_').first)) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
   Map<String, dynamic>? _activeQuestion;
   Map<String, dynamic>? get activeQuestion => _activeQuestion;
+  String? get activeQuestionCorrectAnswer =>
+    _activeQuestion?['correctAnswer'] as String?;
 
   String? _myCurrentAnswer;
   String? get myCurrentAnswer => _myCurrentAnswer;
@@ -115,6 +127,14 @@ class VideoRoomController extends ChangeNotifier {
   String _selectedChannel = "room-cam-right";
   String get selectedChannel => _selectedChannel;
 
+  bool _isPiPExpanded = false;
+  bool get isPiPExpanded => _isPiPExpanded;
+
+  void togglePiP() {
+    _isPiPExpanded = !_isPiPExpanded;
+    notifyListeners();
+  }
+
   static const List<String> roomCameraOrder = [
     'room-cam-right',
     'room-cam-left', 
@@ -145,7 +165,7 @@ class VideoRoomController extends ChangeNotifier {
         if (isAlive) {
           _selectedChannel = cam;
           onNotification?.call(
-            "تم التحويل تلقائياً لـ ${_getCameraLabel(cam)} 📷",
+            "تم التحويل تلقائياً لـ ${getCameraLabel(cam)} 📷",
             Colors.orange,
           );
           notifyListeners();
@@ -155,7 +175,7 @@ class VideoRoomController extends ChangeNotifier {
     }
   }
   
-  String _getCameraLabel(String channel) {
+  String getCameraLabel(String channel) {
     switch (channel) {
       case 'room-cam-right': return 'كاميرا اليمين';
       case 'room-cam-left': return 'كاميرا الشمال';

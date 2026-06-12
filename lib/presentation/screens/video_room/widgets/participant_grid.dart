@@ -38,8 +38,7 @@ class ParticipantGrid extends StatelessWidget {
               screenSharingParticipant = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
             } catch (_) {}
 
-            // منطق الطالب إذا كان يستخدم الـ Grid (للإحتي
-اط)
+
             if (!isTeacher) {
               final channelParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
               final teacherParticipant = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;

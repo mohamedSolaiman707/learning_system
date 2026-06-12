@@ -29,146 +29,173 @@ class ParticipantGrid extends StatelessWidget {
               ...room.remoteParticipants.values,
             ];
 
-            if (allParticipants.isEmpty) {
-              return const Center(child: Text("في انتظار دخول المشاركين...", style: TextStyle(color: Colors.white70, fontFamily: 'Cairo')));
-            }
-
             Participant? screenSharingParticipant;
             try {
               screenSharingParticipant = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
             } catch (_) {}
 
-
             if (!isTeacher) {
-              final channelParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
-              final teacherParticipant = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
-
-              if (screenSharingParticipant != null) {
-                return _buildHybridStudentLayout(context, screenSharingParticipant, channelParticipant);
-              } else {
-                // نفضل كاميرا القاعة، ولو مش موجودة نظهر المدرس كـ Main
-                final mainToDisplay = channelParticipant ?? teacherParticipant;
-                
-                if (mainToDisplay != null) {
-                  return GestureDetector(
-                    onTap: () => controller.cycleRoomCamera(),
-                    child: ParticipantTile(
-                        key: ValueKey("channel_or_teacher_${mainToDisplay.identity}"),
-                        participant: mainToDisplay,
-                        isMainStage: true
-                    ),
-                  );
-                } else {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(color: Colors.blue, strokeWidth: 2),
-                        const SizedBox(height: 16),
-                        const Text("في انتظار المدرس أو بث القاعة...", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 16)),
-                      ],
-                    ),
-                  );
-                }
-              }
+              return _buildStudentLayout(context, allParticipants, screenSharingParticipant, selectedChannel);
             }
 
-            // منطق المدرس
-            final bool isDesktop = Responsive.isDesktop(context);
-
-            if (controller.isVideoWallMode) {
-              final int pageSize = VideoRoomController.wallPageSize;
-              final int currentPage = controller.wallPage;
-              final int totalCount = allParticipants.length;
-              final int maxPage = ((totalCount - 1) / pageSize).floor();
-
-              final int startIndex = currentPage * pageSize;
-              final int endIndex = (startIndex + pageSize).clamp(0, totalCount);
-              final pageParticipants = allParticipants.sublist(startIndex, endIndex);
-
-              int crossAxisCount = isDesktop ? 4 : (Responsive.isTablet(context) ? 3 : 2);
-
-              return Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    color: Colors.black54,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "المشاركون ${startIndex + 1}–$endIndex من $totalCount",
-                          style: const TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'Cairo'),
-                        ),
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 18),
-                              onPressed: currentPage > 0 ? () => controller.prevWallPage() : null,
-                            ),
-                            Text("${currentPage + 1} / ${maxPage + 1}", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                            IconButton(
-                              icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 18),
-                              onPressed: currentPage < maxPage ? () => controller.nextWallPage(totalCount) : null,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: GridView.builder(
-                      padding: const EdgeInsets.all(8),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: crossAxisCount,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                        childAspectRatio: 16 / 9,
-                      ),
-                      itemCount: pageParticipants.length,
-                      itemBuilder: (context, index) => ParticipantTile(
-                        key: ValueKey("wall_${pageParticipants[index].identity}_p$currentPage"),
-                        participant: pageParticipants[index],
-                        isMainStage: false,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            // تحديد الـ Main Participant للمدرس
-            Participant? mainParticipant = screenSharingParticipant;
-            if (mainParticipant == null) {
-              // الأولوية لكاميرا القاعة
-              mainParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
-              
-              if (mainParticipant == null) {
-                // لو المدرس لوحده، يظهر هو في الـ Main
-                if (allParticipants.length == 1 && allParticipants.first.identity.contains('teacher')) {
-                  mainParticipant = allParticipants.first;
-                } else {
-                  // لو فيه طلاب، نظهر أول طالب
-                  try {
-                    mainParticipant = allParticipants.firstWhere((p) => !p.identity.toLowerCase().contains('teacher'));
-                  } catch (_) {
-                    mainParticipant = allParticipants.firstOrNull;
-                  }
-                }
-              }
-            }
-
-            final bool isMainSharingScreen = mainParticipant?.isScreenShareEnabled() ?? false;
-            final otherParticipants = allParticipants.where((p) {
-              if (isMainSharingScreen) return true;
-              return p.identity != mainParticipant?.identity;
-            }).toList();
-
-            if (isDesktop) return _buildProfessionalDesktopLayout(context, mainParticipant!, otherParticipants, isMainSharingScreen);
-            return _buildMobileLayout(context, mainParticipant!, otherParticipants, isMainSharingScreen);
+            // --- منطق المدرس (Video Wall Mode) ---
+            return _buildTeacherVideoWall(context, controller, allParticipants, screenSharingParticipant);
           },
         );
       },
+    );
+  }
+
+  // واجهة الطالب التقليدية
+  Widget _buildStudentLayout(BuildContext context, List<Participant> allParticipants, Participant? screenSharingParticipant, String selectedChannel) {
+    final controller = context.read<VideoRoomController>();
+    final teacherParticipant = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
+    final channelParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
+
+    if (screenSharingParticipant != null) {
+      return _buildHybridStudentLayout(context, screenSharingParticipant, channelParticipant);
+    }
+
+    final mainToDisplay = channelParticipant ?? teacherParticipant;
+    if (mainToDisplay != null) {
+      return GestureDetector(
+        onTap: () => controller.cycleRoomCamera(),
+        child: ParticipantTile(
+            key: ValueKey("student_main_${mainToDisplay.identity}"),
+            participant: mainToDisplay,
+            isMainStage: true
+        ),
+      );
+    }
+
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: Colors.blue, strokeWidth: 2),
+          SizedBox(height: 16),
+          Text("في انتظار المدرس أو بث القاعة...", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 16)),
+        ],
+      ),
+    );
+  }
+
+  // واجهة المدرس (Video Wall) المبنية على المقاعد
+  Widget _buildTeacherVideoWall(BuildContext context, VideoRoomController controller, List<Participant> allParticipants, Participant? screenSharingParticipant) {
+    final isDesktop = Responsive.isDesktop(context);
+    final seats = controller.seats;
+
+    if (seats.isEmpty) {
+      return const Center(child: CircularProgressIndicator(color: Colors.blue));
+    }
+
+    // تقسيم الشاشة لو كان هناك مشاركة شاشة أو سبورة
+    return Row(
+      children: [
+        if (screenSharingParticipant != null || controller.isWhiteboardOpen)
+          Expanded(
+            flex: 2,
+            child: Container(
+              margin: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: screenSharingParticipant != null 
+                  ? ParticipantTile(participant: screenSharingParticipant, isMainStage: true, forceShowScreen: true)
+                  : const SizedBox(), // السبورة تظهر من الـ Stack في الـ Screen
+              ),
+            ),
+          ),
+        
+        Expanded(
+          flex: 3,
+          child: Column(
+            children: [
+              // رأسية الـ Video Wall
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                color: Colors.black26,
+                child: Row(
+                  children: [
+                    const Icon(Icons.grid_view_rounded, color: Colors.blue, size: 20),
+                    const SizedBox(width: 10),
+                    const Text("جدار الفيديو (توزيع المقاعد الذكي)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 14)),
+                    const Spacer(),
+                    Text("${allParticipants.length} مشاركين متصلين", style: const TextStyle(color: Colors.white54, fontSize: 12, fontFamily: 'Cairo')),
+                  ],
+                ),
+              ),
+              
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.all(12),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: isDesktop ? 4 : 2,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 1.5,
+                  ),
+                  itemCount: seats.length,
+                  itemBuilder: (context, index) {
+                    final seat = seats[index];
+                    final String? studentId = seat['student_id'];
+                    
+                    // البحث عن الطالب في قائمة المشاركين الفعليين (LiveKit)
+                    Participant? participant;
+                    if (studentId != null) {
+                      try {
+                        participant = allParticipants.firstWhere(
+                          (p) => p.identity.startsWith(studentId)
+                        );
+                      } catch (_) {}
+                    }
+
+                    if (participant != null) {
+                      return ParticipantTile(
+                        key: ValueKey("seat_${seat['id']}_${participant.identity}"),
+                        participant: participant,
+                        isMainStage: false,
+                        displayName: seat['student_name'] ?? participant.name,
+                      );
+                    } else {
+                      // مقعد فارغ (Free Seat) كما في صورة العميل
+                      return _buildEmptySeat(seat['seat_number'], seat['student_name']);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptySeat(int number, String? assignedName) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1B1F),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.person_outline_rounded, color: Colors.white.withOpacity(0.1), size: 30),
+          const SizedBox(height: 8),
+          Text(
+            assignedName ?? "مقعد فارغ",
+            style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11, fontFamily: 'Cairo'),
+          ),
+          Text(
+            "مقعد $number",
+            style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 9, fontFamily: 'Cairo'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -198,7 +225,7 @@ class ParticipantGrid extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(15),
                   border: Border.all(color: Colors.blue.withOpacity(0.5), width: 2),
-                  boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 10)],
+                  boxShadow: [const BoxShadow(color: Colors.black54, blurRadius: 10)],
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(15),
@@ -215,93 +242,6 @@ class ParticipantGrid extends StatelessWidget {
       ],
     );
   }
-
-  Widget _buildProfessionalDesktopLayout(BuildContext context, Participant main, List<Participant> others, bool isMainSharingScreen) {
-    return Container(
-      color: const Color(0xFF0F1014),
-      padding: others.isEmpty ? EdgeInsets.zero : const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-              flex: 4,
-              child: ParticipantTile(
-                key: ValueKey("main_${main.identity}"),
-                participant: main,
-                isMainStage: true,
-                forceShowScreen: isMainSharingScreen ? true : null,
-              )
-          ),
-          if (others.isNotEmpty)
-            Container(
-              width: 240,
-              margin: const EdgeInsets.only(left: 16),
-              child: ScrollConfiguration(
-                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                child: ListView.builder(
-                  itemCount: others.length,
-                  itemBuilder: (context, index) {
-                    final p = others[index];
-                    final bool forceCam = isMainSharingScreen && p.identity == main.identity;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: AspectRatio(
-                          aspectRatio: 16 / 10,
-                          child: ParticipantTile(
-                            key: ValueKey("side_${p.identity}"),
-                            participant: p,
-                            isMainStage: false,
-                            forceShowScreen: forceCam ? false : null,
-                          )
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMobileLayout(BuildContext context, Participant main, List<Participant> others, bool isMainSharingScreen) {
-    return Column(
-      children: [
-        Expanded(
-            child: Padding(
-                padding: others.isEmpty ? EdgeInsets.zero : const EdgeInsets.all(8),
-                child: ParticipantTile(
-                  participant: main,
-                  isMainStage: true,
-                  forceShowScreen: isMainSharingScreen ? true : null,
-                )
-            )
-        ),
-        if (others.isNotEmpty)
-          Container(
-            height: 120,
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              itemCount: others.length,
-              itemBuilder: (context, index) {
-                final p = others[index];
-                final bool forceCam = isMainSharingScreen && p.identity == main.identity;
-                return Container(
-                    width: 160,
-                    margin: const EdgeInsets.only(right: 8),
-                    child: ParticipantTile(
-                      participant: p,
-                      isMainStage: false,
-                      forceShowScreen: forceCam ? false : null,
-                    )
-                );
-              },
-            ),
-          ),
-      ],
-    );
-  }
 }
 
 class ParticipantTile extends StatelessWidget {
@@ -309,6 +249,7 @@ class ParticipantTile extends StatelessWidget {
   final bool isMainStage;
   final bool? forceHandRaised;
   final bool? forceShowScreen;
+  final String? displayName;
 
   const ParticipantTile({
     super.key,
@@ -316,6 +257,7 @@ class ParticipantTile extends StatelessWidget {
     required this.isMainStage,
     this.forceHandRaised,
     this.forceShowScreen,
+    this.displayName,
   });
 
   @override
@@ -341,11 +283,11 @@ class ParticipantTile extends StatelessWidget {
         final bool isRoomCam = participant.identity.contains('room-cam-');
         final bool isSpeaking = participant.isSpeaking;
 
-        String displayName = participant.name ?? "";
-        if (displayName.isEmpty) {
-          displayName = participant.identity.replaceAll("teacher_", "").split('_').first;
+        String nameToShow = displayName ?? participant.name ?? "";
+        if (nameToShow.isEmpty) {
+          nameToShow = participant.identity.replaceAll("teacher_", "").split('_').first;
         }
-        if (displayName.isEmpty) displayName = "مشارك";
+        if (nameToShow.isEmpty) nameToShow = "مشارك";
 
         VideoTrack? activeVideoTrack;
         bool isScreen = false;
@@ -398,7 +340,7 @@ class ParticipantTile extends StatelessWidget {
                           mirrorMode: isMe ? VideoViewMirrorMode.mirror : VideoViewMirrorMode.off,
                           key: ValueKey(activeVideoTrack.sid),
                         )
-                      : _buildAvatar(displayName, isMainStage),
+                      : _buildAvatar(nameToShow, isMainStage),
                 ),
               ),
 
@@ -415,7 +357,7 @@ class ParticipantTile extends StatelessWidget {
                   ),
                 ),
 
-              Positioned(bottom: 10, left: 10, child: _buildNameLabel(displayName, isMe, participant.isMicrophoneEnabled(), isScreen)),
+              Positioned(bottom: 10, left: 10, child: _buildNameLabel(nameToShow, isMe, participant.isMicrophoneEnabled(), isScreen)),
 
               Positioned(
                 top: 10,
@@ -427,7 +369,7 @@ class ParticipantTile extends StatelessWidget {
                     if (isHandRaised) const SizedBox(width: 8),
                     if (isSpotlighted) _buildBadge("مشاركة مميزة", Colors.amber.shade700, Icons.star),
                     if (isSpotlighted) const SizedBox(width: 8),
-                    if (isRoomCam) _buildBadge(displayName, Colors.teal, Icons.videocam)
+                    if (isRoomCam) _buildBadge(nameToShow, Colors.teal, Icons.videocam)
                     else if (isTeacher) _buildBadge(isScreen ? "شاشة المعلم" : "المعلم", Colors.blueAccent, isScreen ? Icons.desktop_windows : Icons.school),
                   ],
                 ),

@@ -705,14 +705,15 @@ class DatabaseService {
     }
   }
 
-  Future<void> initializeSeats(String sessionId, {int totalStudents = 24}) async {
+  Future<void> initializeSeats(String sessionId, 
+    {int totalStudents = 24}) async {
     try {
       final existing = await _supabase
-          .from('seats')
-          .select('id')
-          .eq('session_id', sessionId)
-          .limit(1)
-          .maybeSingle();
+        .from('seats')
+        .select('id')
+        .eq('session_id', sessionId)
+        .limit(1)
+        .maybeSingle();
 
       // Calculate seats per screen dynamically
       final seatsPerScreen = max(8, (totalStudents / 3).ceil());

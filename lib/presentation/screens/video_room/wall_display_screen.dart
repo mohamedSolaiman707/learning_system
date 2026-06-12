@@ -133,8 +133,9 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final rightSeats = _allSeats.where((s) => s['zone'] == 'right').length;
-    final seatsPerScreen = rightSeats > 0 ? rightSeats : 8;
+    // Get seats per screen dynamically
+    final rightSeatsCount = _allSeats.where((s) => s['zone'] == 'right').length;
+    final seatsPerScreen = rightSeatsCount > 0 ? rightSeatsCount : 8;
 
     final zoneSeats = _allSeats.where((s) => s['zone'] == widget.zone).toList()
       ..sort((a, b) =>
@@ -172,15 +173,15 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
               _buildHeader(),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.all(24.0),
+                  padding: const EdgeInsets.all(12.0),
                   child: GridView.builder(
                     physics: const NeverScrollableScrollPhysics(),
                     gridDelegate:
                     SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: seatsPerScreen <= 8 ? 2 : 3,
-                      crossAxisSpacing: 24,
-                      mainAxisSpacing: 24,
-                      childAspectRatio: 16 / 10,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                      childAspectRatio: 16 / 9,
                     ),
                     itemCount: seatsPerScreen,
                     itemBuilder: (context, index) {

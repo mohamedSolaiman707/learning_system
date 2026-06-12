@@ -535,7 +535,14 @@ class VideoRoomController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint("loadAndExpandSeats error: $e");
-      notifyListeners(); // نحدث الواجهة حتى لو فشل التحميل
+      // في حالة الخطأ، نحاول جلب البيانات المتاحة على الأقل
+      try {
+        final data = await DatabaseService().getSeats(sessionId!);
+        if (data.isNotEmpty) {
+          _seats = data;
+          notifyListeners();
+        }
+      } catch (_) {}
     }
   }
 

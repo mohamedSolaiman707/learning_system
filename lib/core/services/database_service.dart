@@ -1,5 +1,4 @@
 import 'dart:math';
-
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -643,7 +642,6 @@ class DatabaseService {
         'p_student_name': studentName,
       });
       return Map<String, dynamic>.from(response);
-      // returns: {'success': true} or {'success': false, 'error': '...'}
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -675,47 +673,26 @@ class DatabaseService {
     required int toSeat,
   }) async {
     try {
-      final seats = await getSeats(sessionId);
-      final sourceSeat = seats.firstWhere((s) => s['seat_number'] == fromSeat);
-      final targetSeat = seats.firstWhere((s) => s['seat_number'] == toSeat);
-
-      final studentId = sourceSeat['student_id'];
-      final studentName = sourceSeat['student_name'];
-
-      final targetStudentId = targetSeat['student_id'];
-      final targetStudentName = targetSeat['student_name'];
-
-      // Move source to target
-      await assignSeat(
-        sessionId: sessionId,
-        seatNumber: toSeat,
-        studentId: studentId,
-        studentName: studentName,
-      );
-
-      // Clear source or move target back (Swap)
-      await assignSeat(
-        sessionId: sessionId,
-        seatNumber: fromSeat,
-        studentId: targetStudentId,
-        studentName: targetStudentName,
-      );
+      await _supabase.rpc('swap_student_seats', params: {
+        'p_session_id': sessionId,
+        'p_from_seat': fromSeat,
+        'p_to_seat': toSeat,
+      });
     } catch (e) {
+      debugPrint("moveStudentSeat error: $e");
       rethrow;
     }
   }
 
-  Future<void> initializeSeats(String sessionId, 
-    {int totalStudents = 24}) async {
+  Future<void> initializeSeats(String sessionId, {int totalStudents = 24}) async {
     try {
       final existing = await _supabase
-        .from('seats')
-        .select('id')
-        .eq('session_id', sessionId)
-        .limit(1)
-        .maybeSingle();
+          .from('seats')
+          .select('id')
+          .eq('session_id', sessionId)
+          .limit(1)
+          .maybeSingle();
 
-      // Calculate seats per screen dynamically
       final seatsPerScreen = max(8, (totalStudents / 3).ceil());
       final totalSeats = seatsPerScreen * 3;
 
@@ -735,7 +712,6 @@ class DatabaseService {
         }
         await _supabase.from('seats').insert(seats);
       } else {
-        // Check if we need to ADD more seats
         final currentSeats = await _supabase
           .from('seats')
           .select('seat_number')
@@ -747,7 +723,6 @@ class DatabaseService {
         final currentMax = currentSeats?['seat_number'] ?? 0;
 
         if (totalSeats > currentMax) {
-          // Add missing seats only
           final List<Map<String, dynamic>> newSeats = [];
           for (int i = currentMax + 1; i <= totalSeats; i++) {
             String zone;
@@ -774,14 +749,12 @@ class DatabaseService {
     required Map<String, dynamic> question,
   }) async {
     try {
-      // Close any previous active question first
       await _supabase
           .from('live_questions')
           .update({'is_active': false})
           .eq('session_id', sessionId)
           .eq('is_active', true);
 
-      // Insert new active question
       await _supabase.from('live_questions').insert({
         'session_id': sessionId,
         'question': question,
@@ -804,8 +777,7 @@ class DatabaseService {
     }
   }
 
-  Future<Map<String, dynamic>?> getActiveLiveQuestion(
-      String sessionId) async {
+  Future<Map<String, dynamic>?> getActiveLiveQuestion(String sessionId) async {
     try {
       final res = await _supabase
           .from('live_questions')

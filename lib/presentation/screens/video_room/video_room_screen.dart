@@ -744,10 +744,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
           ...controller.room?.remoteParticipants.values ?? [],
         ];
 
-        // البحث عن المدرس
         Participant? teacher = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
         
-        // لو مفيش مدرس، ممكن يكون لسا مدخلش أو الطالب لوحده في القاعة
         teacher ??= allParticipants.firstOrNull;
 
         final channelCam = controller.selectedChannel != 'whiteboard'
@@ -896,15 +894,67 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.redAccent, size: 80),
-            const SizedBox(height: 24),
-            Text(controller.errorMessage!, style: const TextStyle(color: Colors.white, fontSize: 18, fontFamily: 'Cairo')),
-            const SizedBox(height: 32),
-            ElevatedButton(onPressed: () => controller.init(), child: const Text("إعادة المحاولة", style: TextStyle(fontFamily: 'Cairo'))),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(30.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.wifi_off_rounded, color: Colors.redAccent, size: 60),
+              ),
+              const SizedBox(height: 30),
+              Text(
+                controller.errorMessage ?? "حدث خطأ غير متوقع",
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white, 
+                  fontSize: 18, 
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 40),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 280),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF102A43),
+                      foregroundColor: Colors.white,
+                      elevation: 8,
+                      shadowColor: const Color(0xFF102A43).withOpacity(0.4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    onPressed: () => controller.init(),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.refresh_rounded, size: 20),
+                        SizedBox(width: 12),
+                        Text(
+                          "إعادة المحاولة",
+                          style: TextStyle(
+                            fontFamily: 'Cairo', 
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

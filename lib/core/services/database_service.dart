@@ -81,7 +81,7 @@ class DatabaseService {
   // --- Session Management ---
   Future<List<Map<String, dynamic>>> getAllSessions() async {
     try {
-      final response = await _supabase.from('sessions').select('*, profiles!teacher_id(full_name)').order('start_time', ascending: false);
+      final response = await _supabase.from('sessions').select('*, profiles!teacher_id(full_name), rooms(is_active)').order('start_time', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       rethrow;
@@ -92,7 +92,7 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('sessions')
-          .select('*, profiles!teacher_id(full_name)')
+          .select('*, profiles!teacher_id(full_name), rooms(is_active)')
           .eq('teacher_id', teacherId)
           .order('start_time', ascending: false);
       return List<Map<String, dynamic>>.from(response);
@@ -260,6 +260,7 @@ class DatabaseService {
     }
   }
 
+  // ... rest of the file ...
   Future<void> addRecordingRecord(Map<String, dynamic> data) async {
     try {
       await _supabase.from('recordings').insert(data);
@@ -305,11 +306,13 @@ class DatabaseService {
     }
   }
 
-  Future<Map<String, dynamic>?> saveSession(Map<String, dynamic> data, {String? id}) async {
+  Future<Map<String, dynamic>> saveSession(Map<String, dynamic> data, {String? id}) async {
     if (id == null) {
-      return await _supabase.from('sessions').insert(data).select().single();
+      final res = await _supabase.from('sessions').insert(data).select().single();
+      return Map<String, dynamic>.from(res);
     } else {
-      return await _supabase.from('sessions').update(data).eq('id', id).select().single();
+      final res = await _supabase.from('sessions').update(data).eq('id', id).select().single();
+      return Map<String, dynamic>.from(res);
     }
   }
 
@@ -585,7 +588,8 @@ class DatabaseService {
   // --- Quiz Features ---
   Future<Map<String, dynamic>> createQuiz(Map<String, dynamic> quizData) async {
     try {
-      return await _supabase.from('quizzes').insert(quizData).select().single();
+      final res = await _supabase.from('quizzes').insert(quizData).select().single();
+      return Map<String, dynamic>.from(res);
     } catch (e) {
       rethrow;
     }

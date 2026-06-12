@@ -428,6 +428,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   }
 
   Widget _buildPremiumLiveCard(String teacherName, bool isDesktop) {
+    if (_activeSession == null) return _buildEmptyLiveState();
+    final dateStr = intl.DateFormat('yyyy/MM/dd').format(_activeSession!.startTime.toLocal());
+    final timeStr = _formatTimeArabic(_activeSession!.startTime);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(30),
@@ -451,7 +455,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(_clean(_activeSession?.subjectName), style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900, fontFamily: 'Cairo'), overflow: TextOverflow.ellipsis),
-                        Text("بدأت في ${_formatTimeArabic(_activeSession?.startTime ?? DateTime.now())}", style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14, fontFamily: 'Cairo')),
+                        Text("بدأت في $dateStr الساعة $timeStr", style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14, fontFamily: 'Cairo')),
                       ],
                     ),
                   ),
@@ -516,6 +520,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
   }
 
   Widget _buildUpcomingCard(bool isDesktop) {
+    if (_nextSession == null) return const SizedBox();
+    final dateStr = intl.DateFormat('yyyy/MM/dd').format(_nextSession!.startTime.toLocal());
+    final timeStr = _formatTimeArabic(_nextSession!.startTime);
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15, offset: const Offset(0, 5))]),
@@ -529,7 +537,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
               children: [
                 Text(_clean(_nextSession?.subjectName), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Color(0xFF102A43), fontFamily: 'Cairo')),
                 const SizedBox(height: 4),
-                Text("تبدأ الساعة: ${_formatTimeArabic(_nextSession?.startTime ?? DateTime.now())}", style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 13, fontFamily: 'Cairo')),
+                Text("الموعد: $dateStr الساعة $timeStr", style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 13, fontFamily: 'Cairo')),
               ],
             ),
           ),

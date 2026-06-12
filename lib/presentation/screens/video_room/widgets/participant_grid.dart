@@ -38,18 +38,24 @@ class ParticipantGrid extends StatelessWidget {
               screenSharingParticipant = allParticipants.firstWhere((p) => p.isScreenShareEnabled());
             } catch (_) {}
 
+            // منطق الطالب إذا كان يستخدم الـ Grid (للإحتي
+اط)
             if (!isTeacher) {
               final channelParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
+              final teacherParticipant = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
 
               if (screenSharingParticipant != null) {
                 return _buildHybridStudentLayout(context, screenSharingParticipant, channelParticipant);
               } else {
-                if (channelParticipant != null) {
+                // نفضل كاميرا القاعة، ولو مش موجودة نظهر المدرس كـ Main
+                final mainToDisplay = channelParticipant ?? teacherParticipant;
+                
+                if (mainToDisplay != null) {
                   return GestureDetector(
                     onTap: () => controller.cycleRoomCamera(),
                     child: ParticipantTile(
-                        key: ValueKey("channel_${channelParticipant.identity}"),
-                        participant: channelParticipant,
+                        key: ValueKey("channel_or_teacher_${mainToDisplay.identity}"),
+                        participant: mainToDisplay,
                         isMainStage: true
                     ),
                   );
@@ -58,36 +64,9 @@ class ParticipantGrid extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const CircularProgressIndicator(
-                          color: Colors.blue, strokeWidth: 2,
-                        ),
+                        const CircularProgressIndicator(color: Colors.blue, strokeWidth: 2),
                         const SizedBox(height: 16),
-                        const Text(
-                          "جاري تحميل بث القاعة...",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontFamily: 'Cairo',
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton.icon(
-                          onPressed: () {
-                            final ctrl = context.read<VideoRoomController>();
-                            ctrl.checkAndFallbackChannel();
-                          },
-                          icon: const Icon(
-                            Icons.refresh_rounded,
-                            color: Colors.blue, size: 18,
-                          ),
-                          label: const Text(
-                            "تحديث",
-                            style: TextStyle(
-                              color: Colors.blue,
-                              fontFamily: 'Cairo',
-                            ),
-                          ),
-                        ),
+                        const Text("في انتظار المدرس أو بث القاعة...", style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 16)),
                       ],
                     ),
                   );
@@ -95,6 +74,7 @@ class ParticipantGrid extends StatelessWidget {
               }
             }
 
+            // منطق المدرس
             final bool isDesktop = Responsive.isDesktop(context);
 
             if (controller.isVideoWallMode) {
@@ -119,35 +99,18 @@ class ParticipantGrid extends StatelessWidget {
                       children: [
                         Text(
                           "المشاركون ${startIndex + 1}–$endIndex من $totalCount",
-                          style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                              fontFamily: 'Cairo'
-                          ),
+                          style: const TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'Cairo'),
                         ),
                         Row(
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.arrow_back_ios,
-                                  color: Colors.white, size: 18),
-                              onPressed: currentPage > 0
-                                  ? () => controller.prevWallPage()
-                                  : null,
+                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 18),
+                              onPressed: currentPage > 0 ? () => controller.prevWallPage() : null,
                             ),
-                            Text(
-                              "${currentPage + 1} / ${maxPage + 1}",
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold
-                              ),
-                            ),
+                            Text("${currentPage + 1} / ${maxPage + 1}", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                             IconButton(
-                              icon: const Icon(Icons.arrow_forward_ios,
-                                  color: Colors.white, size: 18),
-                              onPressed: currentPage < maxPage
-                                  ? () => controller.nextWallPage(totalCount)
-                                  : null,
+                              icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 18),
+                              onPressed: currentPage < maxPage ? () => controller.nextWallPage(totalCount) : null,
                             ),
                           ],
                         ),
@@ -165,9 +128,7 @@ class ParticipantGrid extends StatelessWidget {
                       ),
                       itemCount: pageParticipants.length,
                       itemBuilder: (context, index) => ParticipantTile(
-                        key: ValueKey(
-                            "wall_${pageParticipants[index].identity}_p$currentPage"
-                        ),
+                        key: ValueKey("wall_${pageParticipants[index].identity}_p$currentPage"),
                         participant: pageParticipants[index],
                         isMainStage: false,
                       ),
@@ -177,15 +138,23 @@ class ParticipantGrid extends StatelessWidget {
               );
             }
 
+            // تحديد الـ Main Participant للمدرس
             Participant? mainParticipant = screenSharingParticipant;
             if (mainParticipant == null) {
+              // الأولوية لكاميرا القاعة
               mainParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
               
               if (mainParticipant == null) {
-                try {
-                  mainParticipant = allParticipants.firstWhere((p) => !p.identity.toLowerCase().contains('teacher'));
-                } catch (_) {
-                  mainParticipant = allParticipants.firstOrNull;
+                // لو المدرس لوحده، يظهر هو في الـ Main
+                if (allParticipants.length == 1 && allParticipants.first.identity.contains('teacher')) {
+                  mainParticipant = allParticipants.first;
+                } else {
+                  // لو فيه طلاب، نظهر أول طالب
+                  try {
+                    mainParticipant = allParticipants.firstWhere((p) => !p.identity.toLowerCase().contains('teacher'));
+                  } catch (_) {
+                    mainParticipant = allParticipants.firstOrNull;
+                  }
                 }
               }
             }
@@ -218,7 +187,6 @@ class ParticipantGrid extends StatelessWidget {
             forceShowScreen: true,
           ),
         ),
-
         if (camPart != null)
           Positioned(
             top: isDesktop ? 40 : 20,
@@ -269,7 +237,7 @@ class ParticipantGrid extends StatelessWidget {
               width: 240,
               margin: const EdgeInsets.only(left: 16),
               child: ScrollConfiguration(
-                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false), // إخفاء السكرول بار لمنع ظهور النقطة الزرقاء
+                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                 child: ListView.builder(
                   itemCount: others.length,
                   itemBuilder: (context, index) {
@@ -412,11 +380,9 @@ class ParticipantTile extends StatelessWidget {
             borderRadius: isMainStage ? BorderRadius.zero : BorderRadius.circular(12),
             color: const Color(0xFF0F1014),
             border: isMainStage 
-              ? null // حذف الحدود تماماً لمنع الخطوط العرضية
+              ? null 
               : Border.all(
-                  color: isSpotlighted
-                      ? Colors.amber
-                      : (isSpeaking ? Colors.greenAccent : Colors.white.withOpacity(0.05)),
+                  color: isSpotlighted ? Colors.amber : (isSpeaking ? Colors.greenAccent : Colors.white.withOpacity(0.05)),
                   width: (isSpotlighted || isSpeaking) ? 3 : 1,
                 ),
           ),
@@ -429,7 +395,7 @@ class ParticipantTile extends StatelessWidget {
                   child: hasVideo
                       ? VideoTrackRenderer(
                           activeVideoTrack!,
-                          fit: isScreen || !isMainStage ? VideoViewFit.contain : VideoViewFit.contain,
+                          fit: VideoViewFit.contain,
                           mirrorMode: isMe ? VideoViewMirrorMode.mirror : VideoViewMirrorMode.off,
                           key: ValueKey(activeVideoTrack.sid),
                         )
@@ -444,11 +410,7 @@ class ParticipantTile extends StatelessWidget {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.amber.withOpacity(0.1),
-                          Colors.transparent,
-                          Colors.black.withOpacity(0.4),
-                        ],
+                        colors: [Colors.amber.withOpacity(0.1), Colors.transparent, Colors.black.withOpacity(0.4)],
                       ),
                     ),
                   ),
@@ -472,88 +434,8 @@ class ParticipantTile extends StatelessWidget {
                 ),
               ),
 
-              if (isSpeaking && !isScreen)
-                Positioned(
-                  bottom: 10,
-                  right: 10,
-                  child: _AudioVisualizer(),
-                ),
-
+              if (isSpeaking && !isScreen) Positioned(bottom: 10, right: 10, child: _AudioVisualizer()),
               if (isSpeaking) Positioned(top: 0, left: 0, right: 0, child: Container(height: 3, color: Colors.greenAccent)),
-
-              Consumer<VideoRoomController>(
-                builder: (context, ctrl, _) {
-                  if (!ctrl.isTeacher) return const SizedBox();
-                  if (!ctrl.isVideoWallMode) return const SizedBox();
-                  if (ctrl.activeQuestion == null) return const SizedBox();
-
-                  final answer = ctrl.getAnswerForParticipant(
-                      participant.identity);
-                  if (answer == null) return const SizedBox();
-
-                  final correctAnswer = ctrl.activeQuestionCorrectAnswer;
-                  final bool hasCorrect = correctAnswer != null &&
-                      correctAnswer.isNotEmpty;
-
-                  Color bgColor = Colors.black54;
-                  Color textColor = Colors.white;
-                  IconData? icon;
-
-                  if (hasCorrect) {
-                    if (answer == correctAnswer) {
-                      bgColor = Colors.green.withOpacity(0.85);
-                      textColor = Colors.white;
-                      icon = Icons.check_circle_rounded;
-                    } else {
-                      bgColor = Colors.red.withOpacity(0.85);
-                      textColor = Colors.white;
-                      icon = Icons.cancel_rounded;
-                    }
-                  } else {
-                    bgColor = Colors.blue.withOpacity(0.85);
-                    textColor = Colors.white;
-                  }
-
-                  return Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: bgColor,
-                        borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(12),
-                          bottomRight: Radius.circular(12),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (icon != null) ...[
-                            Icon(icon, color: textColor, size: 14),
-                            const SizedBox(width: 6),
-                          ],
-                          Expanded(
-                            child: Text(
-                              answer,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: 11,
-                                fontFamily: 'Cairo',
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
             ],
           ),
         );
@@ -564,9 +446,7 @@ class ParticipantTile extends StatelessWidget {
   Widget _buildAvatar(String name, bool isMain) {
     String initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "?";
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F1014), // لون أسود سادة لإخفاء أي تدرجات تسبب خطوطاً
-      ),
+      color: const Color(0xFF0F1014),
       child: Center(
         child: CircleAvatar(
           radius: isMain ? 50 : 25,
@@ -628,19 +508,13 @@ class _AudioVisualizer extends StatefulWidget {
 class _AudioVisualizerState extends State<_AudioVisualizer> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   final List<double> _heights = [0.2, 0.8, 0.4, 0.7, 0.3];
-
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 500))..repeat(reverse: true);
   }
-
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
+  void dispose() { _controller.dispose(); super.dispose(); }
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -653,10 +527,7 @@ class _AudioVisualizerState extends State<_AudioVisualizer> with SingleTickerPro
               margin: const EdgeInsets.symmetric(horizontal: 1),
               width: 2,
               height: 12 * (_heights[index] * _controller.value + 0.2),
-              decoration: BoxDecoration(
-                color: Colors.greenAccent,
-                borderRadius: BorderRadius.circular(1),
-              ),
+              decoration: BoxDecoration(color: Colors.greenAccent, borderRadius: BorderRadius.circular(1)),
             );
           }),
         );

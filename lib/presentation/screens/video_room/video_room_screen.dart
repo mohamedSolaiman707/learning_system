@@ -47,7 +47,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       final controller = context.read<VideoRoomController>();
       controller.init();
 
-      // مراقبة حالة اختيار المقعد لفتحه مرة واحدة فقط
       controller.addListener(_handleSeatPicker);
 
       controller.onBreakoutInvite = (room, name, duration) {
@@ -99,7 +98,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     if (!mounted || widget.isTeacher) return;
     final controller = context.read<VideoRoomController>();
     
-    // إذا لم يختار مقعد والنافذة ليست مفتوحة بالفعل
     if (!controller.seatPickerShown && !_isSeatPickerOpen && !controller.isLoading) {
       setState(() => _isSeatPickerOpen = true);
       showDialog(
@@ -117,7 +115,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
   @override
   void dispose() {
-    // تنظيف المستمع عند الخروج
     try {
       context.read<VideoRoomController>().removeListener(_handleSeatPicker);
     } catch (_) {}
@@ -747,14 +744,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
           ...controller.room?.remoteParticipants.values ?? [],
         ];
 
-        Participant? teacher;
-        try {
-          teacher = allParticipants.firstWhere(
-                (p) => p.identity.toLowerCase().contains('teacher'),
-          );
-        } catch (_) {
-          teacher = allParticipants.isNotEmpty ? allParticipants.first : null;
-        }
+        // البحث عن المدرس
+        Participant? teacher = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
+        
+        // لو مفيش مدرس، ممكن يكون لسا مدخلش أو الطالب لوحده في القاعة
+        teacher ??= allParticipants.firstOrNull;
 
         final channelCam = controller.selectedChannel != 'whiteboard'
             ? allParticipants.where((p) => p.identity.contains(controller.selectedChannel)).firstOrNull
@@ -787,7 +781,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               ),
             ),
 
-            if (channelCam != null)
+            if (channelCam != null && channelCam.identity != teacher?.identity)
               Positioned(
                 bottom: 16,
                 right: 16,

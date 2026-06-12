@@ -441,6 +441,26 @@ class VideoRoomController extends ChangeNotifier {
       return;
     }
 
+    // بدئ الاستماع للمقاعد فوراً قبل أي انتظار طويل
+    if (sessionId != null) {
+      _seatsSubscription = supabase
+          .from('seats')
+          .stream(primaryKey: ['id'])
+          .eq('session_id', sessionId!)
+          .listen((data) {
+            _seats = data;
+            // التحقق من مقعد الطالب الحالي
+            if (!isTeacher) {
+              final mySeat = _seats.firstWhere(
+                (s) => s['student_id'] == userId,
+                orElse: () => {},
+              );
+              _seatPickerShown = mySeat.isNotEmpty;
+            }
+            notifyListeners();
+          });
+    }
+
     if (sessionId != null && sessionId!.isNotEmpty) {
       try {
         final isValid = await _checkAndMonitorSession();
@@ -467,17 +487,6 @@ class VideoRoomController extends ChangeNotifier {
 
     await connectToRoom(roomName);
     await loadAndExpandSeats();
-
-    if (sessionId != null) {
-      _seatsSubscription = supabase
-          .from('seats')
-          .stream(primaryKey: ['id'])
-          .eq('session_id', sessionId!)
-          .listen((data) {
-            _seats = data;
-            notifyListeners();
-          });
-    }
   }
 
   Future<void> _loadActiveLiveQuestion() async {
@@ -526,6 +535,7 @@ class VideoRoomController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint("loadAndExpandSeats error: $e");
+      notifyListeners(); // نحدث الواجهة حتى لو فشل التحميل
     }
   }
 
@@ -934,7 +944,7 @@ class VideoRoomController extends ChangeNotifier {
             }
             if (isTeacher) {
               onNotification?.call(
-                "قام ${p.name} برفع يده ✋",
+                "قوم ${p.name} برفع يده ✋",
                 Colors.orange,
               );
             }
@@ -953,7 +963,7 @@ class VideoRoomController extends ChangeNotifier {
         _isHandRaised = false;
         break;
       case 'session_ended':
-        onNotification?.call("🔴 انتهى البث.", Colors.redAccent);
+        onNotification?.call("🔴 تم إنهاء البث.", Colors.redAccent);
         Future.delayed(
           const Duration(seconds: 2),
           () => onSessionEnded?.call("انتهت الحصة."),
@@ -1547,7 +1557,7 @@ class VideoRoomController extends ChangeNotifier {
             'is_recording_paused': false,
           }, id: sessionId!);
         } catch (_) {}
-        _isRecording = false;
+        _isRecording = true;
         _isRecordingPaused = false;
         _triggerHaptic();
         onNotification?.call("✅ تم إيقاف التسجيل وجاري المعالجة", Colors.blue);

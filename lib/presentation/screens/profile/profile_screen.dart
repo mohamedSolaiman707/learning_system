@@ -199,7 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                   const SizedBox(height: 40),
                   _buildLogoutButton(authProvider),
-                  const SizedBox(height: 60),
+                  const SizedBox(height: 10),
                 ],
               ),
             ),

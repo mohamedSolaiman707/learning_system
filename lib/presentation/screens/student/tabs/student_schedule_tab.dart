@@ -3,6 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/services/database_service.dart';
 import '../../../../core/services/cache_service.dart';
@@ -10,6 +11,7 @@ import '../../../../core/utils/responsive.dart';
 import '../../../../core/models/session_model.dart';
 import '../../video_room/video_room_screen.dart';
 import '../../video_room/video_room_controller.dart';
+import '../../video_room/waiting_room_screen.dart';
 
 class StudentScheduleTab extends StatefulWidget {
   const StudentScheduleTab({super.key});
@@ -24,6 +26,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
   DateTime? _selectedDay;
   List<SessionModel> _allSessions = [];
   bool _isLoading = true;
+  bool _isJoining = false;
 
   @override
   void initState() {
@@ -61,29 +64,89 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
     if (!mounted) return;
     if (initial) setState(() => _isLoading = true);
     try {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
       final cache = Provider.of<CacheService>(context, listen: false);
-      final data = await db.getStudentSchedule(auth.user!.id);
-      final sessionMaps = data
-          .map((e) => e['sessions'] as Map<String, dynamic>)
-          .toList();
-      await cache.saveEnrolledSessions(sessionMaps);
+      
+      // جلب كافة الحصص المجدولة في الأكاديمية بدلاً من المسجلة فقط
+      final data = await db.getAllSessions();
+      
+      await cache.saveEnrolledSessions(data);
       if (mounted) {
         setState(() {
           _allSessions = data
-              .map((e) => SessionModel.fromMap(e['sessions']))
+              .map((e) => SessionModel.fromMap(e))
               .toList();
           _isLoading = false;
         });
       }
     } catch (e) {
+      debugPrint("Load schedule error: $e");
       if (mounted && initial) setState(() => _isLoading = false);
     }
   }
 
   List<SessionModel> _getSessionsForDay(DateTime day) {
     return _allSessions.where((s) => isSameDay(s.startTime, day)).toList();
+  }
+
+  Future<void> _joinSession(SessionModel session) async {
+    if (_isJoining) return;
+    setState(() => _isJoining = true);
+    HapticFeedback.mediumImpact();
+    
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final db = Provider.of<DatabaseService>(context, listen: false);
+      
+      // التحقق مما إذا كان الطالب مطروداً
+      bool isKicked = await db.isStudentKicked(session.id, auth.user!.id);
+      if (isKicked) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("عذراً، تم استبعادك من هذه الحصة 🚫"), backgroundColor: Colors.redAccent),
+        );
+        return;
+      }
+
+      // التسجيل في الحصة تلقائياً عند الدخول
+      await db.enrollStudentBySessionId(auth.user!.id, session.id);
+
+      if (!mounted) return;
+      final String userName = auth.profile?['full_name'] ?? "الطالب";
+      final String userId = auth.user!.id;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => session.status == 'waiting'
+              ? WaitingRoomScreen(session: session, userName: userName, userId: userId)
+              : ChangeNotifierProvider(
+                  create: (_) => VideoRoomController(
+                    title: session.subjectName,
+                    roomName: "room_${session.id}",
+                    userName: userName,
+                    userId: userId,
+                    isTeacher: false,
+                    sessionId: session.id,
+                  ),
+                  child: VideoRoomScreen(
+                    title: session.subjectName,
+                    roomName: "room_${session.id}",
+                    userName: userName,
+                    userId: userId,
+                    isTeacher: false,
+                    sessionId: session.id,
+                  ),
+                ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل الانضمام للحصة، يرجى المحاولة لاحقاً")));
+      }
+    } finally {
+      if (mounted) setState(() => _isJoining = false);
+    }
   }
 
   @override
@@ -94,23 +157,29 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
         title: const Text("الجدول الدراسي", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 18, color: Color(0xFF102A43))),
         backgroundColor: Colors.white,
         elevation: 0,
-        actions: const [
-           SizedBox(width: 10),
-        ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1400),
-          child: _isLoading
-              ? _buildLoadingSkeleton()
-              : RefreshIndicator(
-                  onRefresh: () => _loadSchedule(initial: true),
-                  child: Responsive(
-                    mobile: _buildMobileLayout(),
-                    desktop: _buildDesktopLayout(),
-                  ),
-                ),
-        ),
+      body: Stack(
+        children: [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1400),
+              child: _isLoading
+                  ? _buildLoadingSkeleton()
+                  : RefreshIndicator(
+                      onRefresh: () => _loadSchedule(initial: true),
+                      child: Responsive(
+                        mobile: _buildMobileLayout(),
+                        desktop: _buildDesktopLayout(),
+                      ),
+                    ),
+            ),
+          ),
+          if (_isJoining)
+            Container(
+              color: Colors.black26,
+              child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+            ),
+        ],
       ),
     );
   }
@@ -118,7 +187,10 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
   Widget _buildMobileLayout() {
     return Column(
       children: [
-        _buildCalendarCard(),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: _buildCalendarCard(),
+        ),
         Expanded(child: _buildSessionsList(_getSessionsForDay(_selectedDay!))),
       ],
     );
@@ -207,16 +279,15 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
         ),
       );
     }
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final userName = authProvider.profile?['full_name'] ?? "Student";
-    final userId = authProvider.user?.id ?? "";
 
     return ListView.builder(
       padding: const EdgeInsets.all(24),
       itemCount: sessions.length,
       itemBuilder: (context, index) {
         final session = sessions[index];
-        final isLive = session.isLive;
+        final bool isLive = session.isLive || session.status == 'active' || session.status == 'waiting';
+        final bool hasEnded = session.status == 'ended' || session.hasEnded;
+        
         return Container(
           margin: const EdgeInsets.only(bottom: 20),
           decoration: BoxDecoration(
@@ -268,33 +339,9 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                     ],
                   ),
                 ),
-                if (isLive)
+                if (isLive && !hasEnded)
                   ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ChangeNotifierProvider(
-                            create: (_) => VideoRoomController(
-                              title: session.subjectName,
-                              roomName: "room_${session.id}",
-                              userName: userName,
-                              userId: userId,
-                              isTeacher: false,
-                              sessionId: session.id,
-                            ),
-                            child: VideoRoomScreen(
-                              title: session.subjectName,
-                              roomName: "room_${session.id}",
-                              userName: userName,
-                              userId: userId,
-                              isTeacher: false,
-                              sessionId: session.id,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: () => _joinSession(session),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
@@ -304,11 +351,13 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
                     ),
                     child: const Text("دخول الآن", style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                   )
+                else if (hasEnded)
+                  const Text("انتهت", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo', fontSize: 12))
                 else
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(color: Colors.grey.shade50, shape: BoxShape.circle),
-                    child: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+                    child: const Icon(Icons.lock_clock_rounded, size: 14, color: Colors.grey),
                   ),
               ],
             ),

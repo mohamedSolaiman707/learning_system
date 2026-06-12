@@ -64,8 +64,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
             final now = DateTime.now();
             try {
               _activeSession = _sessions.where((s) => 
-                s.status == 'active' || 
-                (s.startTime.isBefore(now) && s.endTime.isAfter(now) && s.status != 'ended')
+                s.status != 'ended' && 
+                s.status != 'archived' &&
+                s.endTime.isAfter(now) &&
+                (s.status == 'active' || s.startTime.isBefore(now))
               ).first;
             } catch (_) {
               _activeSession = null;
@@ -73,7 +75,10 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
 
             try {
               _nextSession = _sessions.where((s) => 
-                s.startTime.isAfter(now) && s.id != _activeSession?.id && s.status != 'ended'
+                s.status != 'ended' &&
+                s.status != 'archived' &&
+                s.startTime.isAfter(now) && 
+                s.id != _activeSession?.id
               ).first;
             } catch (_) {
               _nextSession = null;

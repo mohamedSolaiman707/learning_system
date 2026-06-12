@@ -323,7 +323,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                           const SizedBox(height: 20),
                           _buildQuickActionsGrid(),
                         ],
-                        const SizedBox(height: 100),
+                        const SizedBox(height: 10),
                       ]),
                     ),
                   ),

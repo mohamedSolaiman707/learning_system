@@ -48,7 +48,7 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
               ),
               const SizedBox(height: 25),
 
-              // اختيار الشاشة - 3 أزرار
+              // اختيار الشاشة - 3 أزرار صريحة (ElevatedButton) لضمان العمل على الويب والجوال
               Row(
                 children: [
                   _buildZoneTab("شاشة 1", "right"),
@@ -66,18 +66,30 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
                 child: Container(
                   constraints: const BoxConstraints(maxHeight: 300),
                   child: seats.isEmpty
-                      ? const Center(child: CircularProgressIndicator(color: Colors.blue))
-                      : GridView.builder(
-                          shrinkWrap: true,
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 2.8,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(color: Colors.blue),
+                              SizedBox(height: 15),
+                              Text("جاري تحميل المقاعد...", 
+                                style: TextStyle(color: Colors.white54, fontFamily: 'Cairo')),
+                            ],
                           ),
-                          itemCount: zoneSeats.length,
-                          itemBuilder: (context, index) => _buildSeatButton(zoneSeats[index], controller),
-                        ),
+                        )
+                      : (zoneSeats.isEmpty 
+                          ? const Center(child: Text("لا توجد مقاعد متاحة حالياً", style: TextStyle(color: Colors.white38, fontFamily: 'Cairo')))
+                          : GridView.builder(
+                              shrinkWrap: true,
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                childAspectRatio: 2.8,
+                                crossAxisSpacing: 10,
+                                mainAxisSpacing: 10,
+                              ),
+                              itemCount: zoneSeats.length,
+                              itemBuilder: (context, index) => _buildSeatButton(zoneSeats[index], controller),
+                            )),
                 ),
               ),
 
@@ -109,7 +121,7 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
                   ),
                   child: _isSubmitting
                       ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text("تأكيد المكان", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                      : const Text("تأكيد المكان الآن", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                 ),
               ),
             ],
@@ -122,35 +134,21 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
   Widget _buildZoneTab(String label, String zone) {
     final bool isSelected = _activeZone == zone;
     return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            setState(() {
-              _activeZone = zone;
-              _selectedSeat = null;
-            });
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: isSelected ? Colors.blue : Colors.white10,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.white38,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                fontFamily: 'Cairo',
-              ),
-            ),
-          ),
+      child: ElevatedButton(
+        onPressed: () {
+          setState(() {
+            _activeZone = zone;
+            _selectedSeat = null;
+          });
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isSelected ? Colors.blue : Colors.white10,
+          foregroundColor: isSelected ? Colors.white : Colors.white38,
+          elevation: 0,
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, fontFamily: 'Cairo')),
       ),
     );
   }
@@ -161,28 +159,19 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
     final bool isOccupied = studentId != null && studentId != controller.userId;
     final bool isSelected = _selectedSeat == seatNum;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: isOccupied ? null : () => setState(() => _selectedSeat = seatNum),
-        borderRadius: BorderRadius.circular(12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.blue.withOpacity(0.2) : (isOccupied ? Colors.white10 : Colors.white.withOpacity(0.05)),
-            border: Border.all(color: isSelected ? Colors.blue : (isOccupied ? Colors.transparent : Colors.white12)),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            isOccupied ? "محجوز" : "مقعد $seatNum",
-            style: TextStyle(
-              color: isOccupied ? Colors.white24 : (isSelected ? Colors.blue : Colors.white70),
-              fontFamily: 'Cairo',
-              fontSize: 12,
-            ),
-          ),
-        ),
+    return ElevatedButton(
+      onPressed: isOccupied ? null : () => setState(() => _selectedSeat = seatNum),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isSelected ? Colors.blue.withOpacity(0.2) : (isOccupied ? Colors.white10 : Colors.white.withOpacity(0.05)),
+        foregroundColor: isSelected ? Colors.blue : Colors.white70,
+        elevation: 0,
+        side: BorderSide(color: isSelected ? Colors.blue : Colors.transparent),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+      ),
+      child: Text(
+        isOccupied ? "محجوز" : "مقعد $seatNum",
+        style: const TextStyle(fontFamily: 'Cairo', fontSize: 12),
       ),
     );
   }

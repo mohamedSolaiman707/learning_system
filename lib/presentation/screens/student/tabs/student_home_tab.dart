@@ -693,15 +693,6 @@ class _StudentHomeTabState extends State<StudentHomeTab>
           const SizedBox(width: 20),
           Expanded(
             child: _buildStatCard(
-              "النقاط المكتسبة",
-              _stats['points'].toString(),
-              Icons.stars_rounded,
-              Colors.orange,
-            ),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: _buildStatCard(
               "الحصص المكتملة",
               _stats['completedSessions'].toString(),
               Icons.check_circle_outline,
@@ -721,12 +712,6 @@ class _StudentHomeTabState extends State<StudentHomeTab>
           _stats['learningHours'].toString(),
           Icons.timer_outlined,
           Colors.blue,
-        ),
-        _buildStatCard(
-          "النقاط المكتسبة",
-          _stats['points'].toString(),
-          Icons.stars_rounded,
-          Colors.orange,
         ),
         _buildStatCard(
           "الحصص المكتملة",

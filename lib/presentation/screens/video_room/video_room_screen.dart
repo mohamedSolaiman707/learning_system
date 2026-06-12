@@ -38,6 +38,7 @@ class VideoRoomScreen extends StatefulWidget {
 
 class _VideoRoomScreenState extends State<VideoRoomScreen> {
   final List<Widget> _reactions = [];
+  bool _isSeatPickerOpen = false;
 
   @override
   void initState() {
@@ -45,6 +46,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = context.read<VideoRoomController>();
       controller.init();
+
+      // مراقبة حالة اختيار المقعد لفتحه مرة واحدة فقط
+      controller.addListener(_handleSeatPicker);
 
       controller.onBreakoutInvite = (room, name, duration) {
         _showBreakoutInvite(room, name, duration, controller);
@@ -89,6 +93,35 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         });
       };
     });
+  }
+
+  void _handleSeatPicker() {
+    if (!mounted || widget.isTeacher) return;
+    final controller = context.read<VideoRoomController>();
+    
+    // إذا لم يختار مقعد والنافذة ليست مفتوحة بالفعل
+    if (!controller.seatPickerShown && !_isSeatPickerOpen && !controller.isLoading) {
+      setState(() => _isSeatPickerOpen = true);
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => ChangeNotifierProvider.value(
+          value: controller,
+          child: const SeatPickerDialog(),
+        ),
+      ).then((_) {
+        if (mounted) setState(() => _isSeatPickerOpen = false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    // تنظيف المستمع عند الخروج
+    try {
+      context.read<VideoRoomController>().removeListener(_handleSeatPicker);
+    } catch (_) {}
+    super.dispose();
   }
 
   void _showBreakoutInvite(String room, String name, int duration, VideoRoomController controller) {
@@ -229,23 +262,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
     final isLoading = context.select<VideoRoomController, bool>((c) => c.isLoading);
     if (isLoading) return _buildLoadingState();
-
-    final seatPickerShown = context.select<VideoRoomController, bool>((c) => c.seatPickerShown);
-
-    if (!seatPickerShown) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !context.read<VideoRoomController>().seatPickerShown) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => ChangeNotifierProvider.value(
-              value: context.read<VideoRoomController>(),
-              child: const SeatPickerDialog(),
-            ),
-          );
-        }
-      });
-    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
@@ -833,8 +849,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
   Widget _buildBottomParticipantBar(VideoRoomController controller) {
     final allParticipants = <Participant>[
-      if (controller.room?.localParticipant != null) controller.room!.localParticipant!,
-      ...controller.room?.remoteParticipants.values ?? [],
+      if (controller.room!.localParticipant != null) controller.room!.localParticipant!,
+      ...controller.room!.remoteParticipants.values,
     ];
 
     final students = allParticipants.where((p) => !p.identity.contains('room-cam-') && !p.identity.contains('teacher_')).toList();

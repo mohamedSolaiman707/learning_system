@@ -582,14 +582,14 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         ];
 
         final teacher = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
-        
         if (teacher == null) return const SizedBox.shrink();
 
         final channelCam = allParticipants.where((p) => p.identity.contains(controller.selectedChannel)).firstOrNull;
-        final bool isChannelActive = channelCam != null && channelCam.isCameraEnabled();
-        final bool isSharingScreen = allParticipants.any((p) => p.isScreenShareEnabled());
+        bool isChannelActive = channelCam != null && channelCam.isCameraEnabled();
 
-        bool shouldShowFloating = controller.isWhiteboardOpen || isChannelActive || isSharingScreen;
+        // لا تظهر الكارت العائم إذا كان المعلم هو أصلاً المعروض في الشاشة الكبيرة
+        // (أي إذا لم تكن السبورة مفتوحة ولم تكن هناك قناة كاميرا نشطة)
+        bool shouldShowFloating = controller.isWhiteboardOpen || isChannelActive || controller.isScreenSharing;
 
         if (!shouldShowFloating) return const SizedBox.shrink();
 
@@ -643,20 +643,20 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         final channelCam = controller.selectedChannel != 'whiteboard'
             ? allParticipants.where((p) => p.identity.contains(controller.selectedChannel)).firstOrNull
             : null;
+        bool isChannelActive = channelCam != null && (channelCam.isCameraEnabled() || channelCam.isScreenShareEnabled());
 
-        bool isChannelValid = channelCam != null && (channelCam.isCameraEnabled() || channelCam.videoTrackPublications.any((v) => v.isScreenShare));
-        
-        Participant? mainToDisplay = isChannelValid ? channelCam : teacher;
+        // bool isChannelValid = channelCam != null && (channelCam.isCameraEnabled() || channelCam.videoTrackPublications.any((v) => v.isScreenShare));
+
+        Participant? mainToDisplay = isChannelActive ? channelCam : teacher;
         mainToDisplay ??= allParticipants.firstOrNull;
+        if (mainToDisplay == null) return _buildWaitingState();
 
         return Positioned.fill(
-          child: mainToDisplay != null
-              ? ParticipantTile(
-                  key: ValueKey("student_main_stage_${mainToDisplay.identity}"),
-                  participant: mainToDisplay,
-                  isMainStage: true,
-                )
-              : _buildWaitingState(),
+          child: ParticipantTile(
+            key: ValueKey("main_stage_${mainToDisplay.identity}"),
+            participant: mainToDisplay,
+            isMainStage: true,
+          ),
         );
       },
     );

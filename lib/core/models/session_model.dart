@@ -78,7 +78,7 @@ class SessionModel {
       isLive: liveStatus,
       status: map['status']?.toString() ?? 'waiting',
       recordingUrl: map['recording_url']?.toString(),
-      isRecordingEnabled = map['is_recording_enabled'] ?? true,
+      isRecordingEnabled: map['is_recording_enabled'] ?? true,
       isRecording: map['is_recording'] ?? false,
       isRecordingPaused: map['is_recording_paused'] ?? false,
     );

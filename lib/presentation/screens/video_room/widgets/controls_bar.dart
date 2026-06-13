@@ -44,6 +44,7 @@ class ControlsBar extends StatelessWidget {
       bool isQAOpen,
       bool isWhiteboardOpen,
       bool isParticipantsOpen,
+      bool isVideoWallMode,
       bool isTeacher,
       int unreadMessages,
       int unreadQuestionsCount,
@@ -60,6 +61,7 @@ class ControlsBar extends StatelessWidget {
       isQAOpen: c.isQAOpen,
       isWhiteboardOpen: c.isWhiteboardOpen,
       isParticipantsOpen: c.isParticipantsOpen,
+      isVideoWallMode: c.isVideoWallMode,
       isTeacher: c.isTeacher,
       unreadMessages: c.unreadMessages,
       unreadQuestionsCount: c.unreadQuestionsCount,
@@ -252,6 +254,15 @@ class ControlsBar extends StatelessWidget {
                               tooltip: "السبورة",
                             ),
                           ),
+                          // زر توزيع المقاعد الجديد (Video Wall) للمدرس
+                          if (data.isTeacher)
+                            _PremiumControlButton(
+                              icon: Icons.grid_view_rounded,
+                              isActive: data.isVideoWallMode,
+                              activeColor: Colors.blueAccent,
+                              onPressed: controller.toggleVideoWallMode,
+                              tooltip: "توزيع المقاعد",
+                            ),
                         ]),
 
                         if (data.isTeacher) ...[

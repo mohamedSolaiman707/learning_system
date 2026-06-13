@@ -266,6 +266,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         children: [
           Row(
             children: [
+              // 1. Sidebar Channels
               Selector<VideoRoomController, (String, bool)>(
                 selector: (_, c) => (c.selectedChannel, c.isWhiteboardOpen),
                 builder: (context, data, child) => _buildChannelSidebar(controller),
@@ -274,14 +275,14 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               Expanded(
                 child: Column(
                   children: [
+                    // 2. Top Header
                     Selector<VideoRoomController, ({
                     bool isHandRaised,
                     bool isMicEnabled,
                     bool isCamEnabled,
-                    int participantCount,
-                    String title,
                     bool isChatOpen,
                     bool isQAOpen,
+                    bool isPollsOpen,
                     bool isScreenSharing,
                     bool isScreenShareLocked,
                     })>(
@@ -289,10 +290,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       isHandRaised: c.isHandRaised,
                       isMicEnabled: c.isMicEnabled,
                       isCamEnabled: c.isCamEnabled,
-                      participantCount: (c.room?.remoteParticipants.length ?? 0) + 1,
-                      title: c.title,
                       isChatOpen: c.isChatOpen,
                       isQAOpen: c.isQAOpen,
+                      isPollsOpen: c.isPollsOpen,
                       isScreenSharing: c.isScreenSharing,
                       isScreenShareLocked: c.isScreenShareLocked,
                       ),
@@ -304,6 +304,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                         isCamEnabled: data.isCamEnabled,
                         isChatOpen: data.isChatOpen,
                         isQAOpen: data.isQAOpen,
+                        isPollsOpen: data.isPollsOpen,
                         isScreenSharing: data.isScreenSharing,
                         isScreenShareLocked: data.isScreenShareLocked,
                       ),
@@ -312,6 +313,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                     Expanded(
                       child: Row(
                         children: [
+                          // 3. Main Stage
                           Expanded(
                             child: Stack(
                               children: [
@@ -335,16 +337,19 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                             ),
                           ),
 
+                          // 4. Right Panel
                           Selector<VideoRoomController, ({
                           bool isChatOpen,
                           bool isQAOpen,
+                          bool isPollsOpen,
                           })>(
                             selector: (_, c) => (
                             isChatOpen: c.isChatOpen,
                             isQAOpen: c.isQAOpen,
+                            isPollsOpen: c.isPollsOpen,
                             ),
                             builder: (context, data, _) {
-                              final isOpen = (data.isChatOpen || data.isQAOpen) && isDesktop;
+                              final isOpen = (data.isChatOpen || data.isQAOpen || data.isPollsOpen) && isDesktop;
                               if (!isOpen) return const SizedBox();
                               return AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
@@ -366,7 +371,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                                     borderRadius: BorderRadius.circular(24),
                                     child: data.isChatOpen
                                         ? const ChatPanel()
-                                        : const QAPanel(),
+                                        : (data.isQAOpen ? const QAPanel() : const PollPanel()),
                                   ),
                                 ),
                               );
@@ -376,50 +381,285 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       ),
                     ),
 
-                    ListenableBuilder(
-                      listenable: controller.room ?? ChangeNotifier(),
-                      builder: (context, _) => _buildBottomParticipantBar(controller),
-                    ),
+                    // 5. Bottom Bar
+                    _buildBottomParticipantBar(controller),
                   ],
                 ),
               ),
             ],
           ),
-          if (!isDesktop) ...[
-            Selector<VideoRoomController, bool>(
-              selector: (_, c) => c.isChatOpen,
-              builder: (_, isOpen, __) => isOpen
-                  ? _buildMobilePanel(const ChatPanel())
-                  : const SizedBox(),
-            ),
-            Selector<VideoRoomController, bool>(
-              selector: (_, c) => c.isQAOpen,
-              builder: (_, isOpen, __) => isOpen
-                  ? _buildMobilePanel(const QAPanel())
-                  : const SizedBox(),
-            ),
-          ]
         ],
       ),
     );
   }
 
-  Widget _buildMobilePanel(Widget child) {
-    final size = MediaQuery.of(context).size;
-    return Positioned(
-      bottom: 20, left: 15, right: 15,
-      child: Container(
-        height: size.height * 0.55,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 25, offset: Offset(0, -5))],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(30),
-          child: child,
-        ),
+  Widget _buildTopHeader(BuildContext context, VideoRoomController controller, {
+    bool? isHandRaised,
+    bool? isMicEnabled,
+    bool? isCamEnabled,
+    bool? isChatOpen,
+    bool? isQAOpen,
+    bool? isPollsOpen,
+    bool? isScreenSharing,
+    bool? isScreenShareLocked,
+  }) {
+    return Container(
+      height: 70,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1B1F),
+        border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5)),
       ),
+      child: Row(
+        children: [
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(controller.title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+              Row(
+                children: [
+                  const Icon(Icons.people_alt_rounded, color: Colors.blue, size: 12),
+                  const SizedBox(width: 5),
+                  Text("${(controller.room?.remoteParticipants.length ?? 0) + 1} متصل الآن", style: const TextStyle(color: Colors.white38, fontSize: 10, fontFamily: 'Cairo')),
+                ],
+              ),
+            ],
+          ),
+          const Spacer(),
+          if (!widget.isTeacher)
+            Row(
+              children: [
+                _HeaderToolButton(
+                  icon: (isHandRaised ?? controller.isHandRaised) ? Icons.front_hand : Icons.front_hand_outlined,
+                  color: (isHandRaised ?? controller.isHandRaised) ? Colors.amber : Colors.white54,
+                  onPressed: controller.toggleHand,
+                  label: "رفع اليد",
+                ),
+                const SizedBox(width: 15),
+                _HeaderToolButton(
+                  icon: (isMicEnabled ?? controller.isMicEnabled) ? Icons.mic : Icons.mic_off,
+                  color: (isMicEnabled ?? controller.isMicEnabled) ? Colors.blue : Colors.redAccent,
+                  onPressed: controller.toggleMic,
+                  label: (isMicEnabled ?? controller.isMicEnabled) ? "الميكروفون" : "صامت",
+                ),
+                const SizedBox(width: 15),
+                _HeaderToolButton(
+                  icon: (isCamEnabled ?? controller.isCamEnabled) ? Icons.videocam : Icons.videocam_off,
+                  color: (isCamEnabled ?? controller.isCamEnabled) ? Colors.blue : Colors.redAccent,
+                  onPressed: controller.toggleCam,
+                  label: "الكاميرا",
+                ),
+                const SizedBox(width: 15),
+                _HeaderToolButton(
+                  icon: Icons.chat_bubble_rounded,
+                  color: (isChatOpen ?? controller.isChatOpen) ? Colors.blue : Colors.white54,
+                  onPressed: controller.toggleChat,
+                  label: "الشات",
+                ),
+                const SizedBox(width: 15),
+                _HeaderToolButton(
+                  icon: Icons.help_outline_rounded,
+                  color: (isQAOpen ?? controller.isQAOpen) ? Colors.orange : Colors.white54,
+                  onPressed: controller.toggleQA,
+                  label: "الأسئلة",
+                ),
+                const SizedBox(width: 15),
+                _HeaderToolButton(
+                  icon: Icons.poll_rounded,
+                  color: (isPollsOpen ?? controller.isPollsOpen) ? Colors.green : Colors.white54,
+                  onPressed: controller.togglePolls,
+                  label: "الاستطلاع",
+                ),
+              ],
+            ),
+          const Spacer(),
+          Row(
+            children: [
+              IconButton(onPressed: () {}, icon: const Icon(Icons.person_pin_rounded, color: Colors.white54), tooltip: "الملف الشخصي"),
+              IconButton(onPressed: _showSettingsDialog, icon: const Icon(Icons.settings, color: Colors.white54), tooltip: "الإعدادات"),
+              IconButton(
+                onPressed: () => _showExitConfirmation(context, controller),
+                icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+                tooltip: "خروج",
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChannelSidebar(VideoRoomController controller) {
+    final channels = [
+      {'id': 'room-cam-right', 'label': 'Cam 1', 'desc': 'كاميرا القاعة 1'},
+      {'id': 'room-cam-left', 'label': 'Cam 2', 'desc': 'كاميرا القاعة 2'},
+      {'id': 'whiteboard', 'label': 'Whiteboard', 'desc': 'السبورة'},
+      {'id': 'room-cam-screen', 'label': 'Screen', 'desc': 'الشاشة الرئيسية'},
+    ];
+
+    return Container(
+      width: 110,
+      color: const Color(0xFF16171B),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          const Text("Channels", style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          const SizedBox(height: 20),
+          Expanded(
+            child: ListView.builder(
+              itemCount: channels.length,
+              itemBuilder: (context, index) {
+                final ch = channels[index];
+                final bool isWhiteboard = ch['id'] == 'whiteboard';
+                final isSelected = isWhiteboard
+                    ? controller.isWhiteboardOpen
+                    : (controller.selectedChannel == ch['id'] && !controller.isWhiteboardOpen);
+
+                return InkWell(
+                  onTap: () {
+                    if (isWhiteboard) {
+                      controller.toggleWhiteboard();
+                    } else {
+                      controller.selectChannel(ch['id']!);
+                      if (controller.isWhiteboardOpen) controller.toggleWhiteboard();
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.blue.withOpacity(0.15) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: isSelected ? Colors.blue : Colors.white.withOpacity(0.05)),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                            isWhiteboard ? Icons.edit_note_rounded : Icons.video_camera_back_rounded,
+                            color: isSelected ? Colors.blue : Colors.white54,
+                            size: 24
+                        ),
+                        const SizedBox(height: 8),
+                        Text(ch['label']!, textAlign: TextAlign.center, style: TextStyle(color: isSelected ? Colors.blue : Colors.white54, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomParticipantBar(VideoRoomController controller) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final allParticipants = <Participant>[
+          if (controller.room?.localParticipant != null) controller.room!.localParticipant!,
+          ...controller.room?.remoteParticipants.values ?? [],
+        ];
+
+        // 1. استخراج هوية الطالب الحالي لمنع التكرار
+        final localIdentity = controller.room?.localParticipant?.identity;
+
+        // 2. تصفية الطلاب المتصلين (استبعاد الكاميرات، المدرس، والطالب نفسه)
+        final rawStudents = allParticipants.where((p) => 
+          !p.identity.contains('room-cam-') && 
+          !p.identity.contains('teacher_') &&
+          p.identity != localIdentity
+        ).toList();
+        
+        // 3. ترتيب الطلاب بناءً على المقاعد
+        final orderedStudents = <Participant>[];
+        for (var seat in controller.seats) {
+          final sId = seat['student_id'];
+          if (sId != null) {
+            final p = rawStudents.where((p) => p.identity.startsWith(sId)).firstOrNull;
+            if (p != null && !orderedStudents.contains(p)) {
+              orderedStudents.add(p);
+            }
+          }
+        }
+        
+        // 4. إضافة بقية الطلاب الذين ليس لديهم مقاعد
+        for (var p in rawStudents) {
+          if (!orderedStudents.contains(p)) {
+            orderedStudents.add(p);
+          }
+        }
+
+        final localPart = controller.room?.localParticipant;
+
+        return Container(
+          height: 140,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: const BoxDecoration(
+            color: Color(0xFF0F1014),
+            border: Border(top: BorderSide(color: Colors.white10, width: 0.5)),
+          ),
+          child: Row(
+            children: [
+              const SizedBox(width: 20),
+              const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.people_outline_rounded, color: Colors.white38, size: 20),
+                  Text("Students", style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                ],
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: orderedStudents.length,
+                  itemBuilder: (context, index) {
+                    final p = orderedStudents[index];
+                    // جلب بيانات المقعد لعرض الاسم الصحيح (إذا وجد)
+                    final seat = controller.seats.firstWhere((s) => s['student_id'] != null && p.identity.startsWith(s['student_id']), orElse: () => {});
+                    
+                    return Container(
+                      width: 180,
+                      margin: const EdgeInsets.only(right: 12),
+                      child: ParticipantTile(
+                        participant: p, 
+                        isMainStage: false,
+                        displayName: seat['student_name'],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              // "My Cam" بوضوح على اليمين مع استبعادها من القائمة السابقة
+              if (localPart != null)
+                Container(
+                  width: 200,
+                  padding: const EdgeInsets.only(left: 20, right: 20),
+                  decoration: const BoxDecoration(
+                    border: Border(left: BorderSide(color: Colors.white10)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text("My Cam", style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ParticipantTile(
+                          participant: localPart, 
+                          isMainStage: false,
+                          displayName: controller.userName, // عرض الاسم الفعلي للطالب
+                        )
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -516,168 +756,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     if (c.isParticipantsOpen) return const ParticipantsPanel();
     if (c.isPollsOpen) return const PollPanel();
     return const SizedBox();
-  }
-
-  Widget _buildChannelSidebar(VideoRoomController controller) {
-    final channels = [
-      {'id': 'room-cam-right', 'label': 'Cam 1', 'desc': 'كاميرا اليمين'},
-      {'id': 'room-cam-left', 'label': 'Cam 2', 'desc': 'كاميرا الشمال'},
-      {'id': 'whiteboard', 'label': 'Whiteboard', 'desc': 'السبورة'},
-      {'id': 'room-cam-screen', 'label': 'Screen', 'desc': 'الشاشة الرئيسية'},
-    ];
-
-    return Container(
-      width: 120,
-      color: const Color(0xFF16171B),
-      child: Column(
-        children: [
-          const SizedBox(height: 20),
-          const Text("Channels", style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          Expanded(
-            child: ListView.builder(
-              itemCount: channels.length,
-              itemBuilder: (context, index) {
-                final ch = channels[index];
-                final bool isWhiteboard = ch['id'] == 'whiteboard';
-                final isSelected = isWhiteboard
-                    ? controller.isWhiteboardOpen
-                    : (controller.selectedChannel == ch['id'] && !controller.isWhiteboardOpen);
-
-                return InkWell(
-                  onTap: () {
-                    if (isWhiteboard) {
-                      controller.toggleWhiteboard();
-                    } else {
-                      controller.selectChannel(ch['id']!);
-                      if (controller.isWhiteboardOpen) controller.toggleWhiteboard();
-                    }
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: isSelected ? Colors.blue : Colors.white10),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                            isWhiteboard ? Icons.edit_note_rounded : Icons.video_camera_back_rounded,
-                            color: isSelected ? Colors.blue : Colors.white54,
-                            size: 24
-                        ),
-                        const SizedBox(height: 8),
-                        Text(ch['label']!, textAlign: TextAlign.center, style: TextStyle(color: isSelected ? Colors.blue : Colors.white54, fontSize: 10, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopHeader(BuildContext context, VideoRoomController controller, {
-    bool? isHandRaised,
-    bool? isMicEnabled,
-    bool? isCamEnabled,
-    bool? isChatOpen,
-    bool? isQAOpen,
-    bool? isScreenSharing,
-    bool? isScreenShareLocked,
-  }) {
-    return Container(
-      height: 70,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1B1F),
-        border: Border(bottom: BorderSide(color: Colors.transparent, width: 0.5)),
-      ),
-      child: Row(
-        children: [
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(controller.title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-              Text("Live Session", style: TextStyle(color: Colors.white38, fontSize: 11, fontFamily: 'Cairo')),
-            ],
-          ),
-          const Spacer(),
-          if (!widget.isTeacher)
-            Row(
-              children: [
-                _HeaderToolButton(
-                  icon: (isHandRaised ?? controller.isHandRaised) ? Icons.front_hand : Icons.front_hand_outlined,
-                  color: (isHandRaised ?? controller.isHandRaised) ? Colors.amber : Colors.white54,
-                  onPressed: controller.toggleHand,
-                  label: "رفع اليد",
-                ),
-                const SizedBox(width: 15),
-                _HeaderToolButton(
-                  icon: (isMicEnabled ?? controller.isMicEnabled) ? Icons.mic : Icons.mic_off,
-                  color: (isMicEnabled ?? controller.isMicEnabled) ? Colors.blue : Colors.redAccent,
-                  onPressed: controller.toggleMic,
-                ),
-                const SizedBox(width: 15),
-                _HeaderToolButton(
-                  icon: (isCamEnabled ?? controller.isCamEnabled) ? Icons.videocam : Icons.videocam_off,
-                  color: (isCamEnabled ?? controller.isCamEnabled) ? Colors.blue : Colors.redAccent,
-                  onPressed: controller.toggleCam,
-                ),
-                const SizedBox(width: 15),
-                _HeaderToolButton(
-                  icon: Icons.chat_bubble_rounded,
-                  color: (isChatOpen ?? controller.isChatOpen) ? Colors.blue : Colors.white54,
-                  onPressed: controller.toggleChat,
-                  label: "الشات",
-                ),
-                const SizedBox(width: 15),
-                _HeaderToolButton(
-                  icon: Icons.help_outline_rounded,
-                  color: (isQAOpen ?? controller.isQAOpen) ? Colors.orange : Colors.white54,
-                  onPressed: controller.toggleQA,
-                  label: "الأسئلة",
-                ),
-                const SizedBox(width: 15),
-                _HeaderToolButton(
-                  icon: (isScreenSharing ?? controller.isScreenSharing) ? Icons.stop_screen_share_rounded : Icons.screen_share_rounded,
-                  color: (isScreenSharing ?? controller.isScreenSharing)
-                      ? Colors.greenAccent
-                      : ((isScreenShareLocked ?? controller.isScreenShareLocked) && !widget.isTeacher ? Colors.white24 : Colors.white54),
-                  onPressed: (isScreenShareLocked ?? controller.isScreenShareLocked) && !widget.isTeacher
-                      ? () => controller.onNotification?.call("مشاركة الشاشة مقفلة من قبل المعلم 🔒", Colors.orange)
-                      : controller.toggleScreenShare,
-                  label: "مشاركة الشاشة",
-                ),
-                const SizedBox(width: 25),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(20)),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.people_alt_rounded, color: Colors.blue, size: 16),
-                      const SizedBox(width: 8),
-                      Text("${(controller.room?.remoteParticipants.length ?? 0) + 1}", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          const Spacer(),
-          IconButton(onPressed: _showSettingsDialog, icon: const Icon(Icons.settings, color: Colors.white54)),
-          IconButton(
-            onPressed: () => _showExitConfirmation(context, controller),
-            icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildTeacherFloatingCard(VideoRoomController controller) {
@@ -839,57 +917,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
-  Widget _buildBottomParticipantBar(VideoRoomController controller) {
-    final allParticipants = <Participant>[
-      if (controller.room!.localParticipant != null) controller.room!.localParticipant!,
-      ...controller.room!.remoteParticipants.values,
-    ];
-
-    final students = allParticipants.where((p) => !p.identity.contains('room-cam-') && !p.identity.contains('teacher_')).toList();
-    final localPart = controller.room?.localParticipant;
-
-    return Container(
-      height: 140,
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      color: const Color(0xFF0F1014),
-      child: Row(
-        children: [
-          const SizedBox(width: 20),
-          const Text("Students", style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
-          const SizedBox(width: 20),
-          Expanded(
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: students.length,
-              itemBuilder: (context, index) {
-                return Container(
-                  width: 180,
-                  margin: const EdgeInsets.only(right: 12),
-                  child: ParticipantTile(participant: students[index], isMainStage: false),
-                );
-              },
-            ),
-          ),
-          if (localPart != null)
-            Container(
-              width: 200,
-              padding: const EdgeInsets.only(left: 20, right: 20),
-              decoration: const BoxDecoration(
-                border: Border(left: BorderSide(color: Colors.white10)),
-              ),
-              child: Column(
-                children: [
-                  const Text("My Cam", style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Expanded(child: ParticipantTile(participant: localPart, isMainStage: false)),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildErrorState(VideoRoomController controller, bool isDesktop) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
@@ -1038,7 +1065,12 @@ class _HeaderToolButton extends StatelessWidget {
         IconButton(
           onPressed: onPressed,
           icon: Icon(icon, color: color),
-          style: IconButton.styleFrom(backgroundColor: color.withOpacity(0.05), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+          style: IconButton.styleFrom(
+            backgroundColor: color.withOpacity(0.05), 
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.all(8),
+            minimumSize: const Size(45, 45),
+          ),
         ),
         if (label != null) Text(label!, style: TextStyle(color: color, fontSize: 8, fontFamily: 'Cairo')),
       ],

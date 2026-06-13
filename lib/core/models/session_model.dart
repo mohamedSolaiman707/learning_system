@@ -51,7 +51,7 @@ class SessionModel {
       }
     }
 
-    // التحقق من حالة البث المباشر
+    // التحقق من حالة البث المباشر (وجود غرفة نشطة)
     bool liveStatus = false;
     final roomsData = map['rooms'];
     if (roomsData != null) {
@@ -78,13 +78,16 @@ class SessionModel {
       isLive: liveStatus,
       status: map['status']?.toString() ?? 'waiting',
       recordingUrl: map['recording_url']?.toString(),
-      isRecordingEnabled: map['is_recording_enabled'] ?? true,
+      isRecordingEnabled = map['is_recording_enabled'] ?? true,
       isRecording: map['is_recording'] ?? false,
       isRecordingPaused: map['is_recording_paused'] ?? false,
     );
   }
 
   bool get hasEnded => status == 'ended' || DateTime.now().isAfter(endTime);
-  bool get isActive => status == 'active';
-  bool get isWaiting => status == 'waiting';
+  
+  // الجلسة تعتبر نشطة إذا كانت حالتها active أو إذا كان البث المباشر قد بدأ بالفعل (isLive)
+  bool get isActive => status == 'active' || isLive;
+  
+  bool get isWaiting => status == 'waiting' && !isLive;
 }

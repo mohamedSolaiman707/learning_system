@@ -39,7 +39,6 @@ class _StudentHomeTabState extends State<StudentHomeTab>
     'completedSessions': 0,
   };
 
-  // الحفاظ على حالة الصفحة لمنع الـ Flicker عند التنقل
   @override
   bool get wantKeepAlive => true;
 
@@ -53,7 +52,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
 
     _loadStudentDataWithCache();
 
-    _refreshTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (mounted) _loadStudentData(initial: false);
     });
   }
@@ -110,7 +109,6 @@ class _StudentHomeTabState extends State<StudentHomeTab>
       debugPrint("Cache loading error: $e");
     }
     
-    // جلب البيانات من السيرفر لتحديث الكاش والواجهة
     await _loadStudentData(initial: _isLoading);
   }
 
@@ -121,8 +119,9 @@ class _StudentHomeTabState extends State<StudentHomeTab>
       return;
     }
     try {
+      // نفضل الحصة التي بدأت بالفعل أو التي وقتها حان
       _nextSession = _enrolledSessions.firstWhere(
-        (s) => (s.isLive || s.isActive) && s.endTime.isAfter(now),
+        (s) => s.isActive && s.endTime.isAfter(now),
         orElse: () =>
             _enrolledSessions.firstWhere((s) => s.endTime.isAfter(now)),
       );
@@ -153,7 +152,6 @@ class _StudentHomeTabState extends State<StudentHomeTab>
         final statsResponse = results[2] as Map<String, dynamic>;
         final allSessionsResponse = results[3] as List<Map<String, dynamic>>;
 
-        // تحديث الكاش فوراً
         await cache.saveStudentStats(statsResponse);
         final List<Map<String, dynamic>> sessionMaps = [];
         for (var e in enrolledResponse) {
@@ -202,8 +200,6 @@ class _StudentHomeTabState extends State<StudentHomeTab>
     }
   }
 
-  // ... باقي الواجهات (UI) تظل كما هي ...
-  
   void _showUpcomingClasses() {
     final now = DateTime.now();
     final upcoming = _allUpcomingSessions;
@@ -330,15 +326,15 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
-                          isNow
+                          isNow || session.isActive
                               ? "جارية الآن (اضغط للانضمام)"
                               : "موعدها: ${_formatDateTime(session.startTime)}",
                           style: TextStyle(
-                            color: isNow ? Colors.red : Colors.grey.shade600,
+                            color: isNow || session.isActive ? Colors.red : Colors.grey.shade600,
                             fontSize: 12,
                           ),
                         ),
-                        trailing: !isNow && !isToday
+                        trailing: !isNow && !isToday && !session.isActive
                             ? Text(
                                 "بعد ${session.startTime.difference(DateTime(now.year, now.month, now.day)).inDays} يوم",
                                 style: const TextStyle(
@@ -386,10 +382,12 @@ class _StudentHomeTabState extends State<StudentHomeTab>
       if (!mounted) return;
       final String userName = auth.profile?['full_name'] ?? "الطالب";
       final String userId = auth.user!.id;
+      
+      // الدخول لغرفة الانتظار فقط إذا لم تكن الحصة نشطة (بدأها المدرس)
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => session.status == 'waiting'
+          builder: (context) => !session.isActive
               ? WaitingRoomScreen(
                   session: session,
                   userName: userName,
@@ -427,7 +425,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // مطلوب عند استخدام AutomaticKeepAliveClientMixin
+    super.build(context);
     final authProvider = Provider.of<AuthProvider>(context);
     final userName = authProvider.profile?['full_name'] ?? "الطالب";
     final isDesktop = Responsive.isDesktop(context);

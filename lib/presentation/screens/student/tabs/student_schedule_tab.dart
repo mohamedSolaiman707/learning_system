@@ -67,7 +67,6 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       final db = Provider.of<DatabaseService>(context, listen: false);
       final cache = Provider.of<CacheService>(context, listen: false);
       
-      // جلب كافة الحصص المجدولة في الأكاديمية بدلاً من المسجلة فقط
       final data = await db.getAllSessions();
       
       await cache.saveEnrolledSessions(data);
@@ -98,27 +97,27 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
       
-      // التحقق مما إذا كان الطالب مطروداً
       bool isKicked = await db.isStudentKicked(session.id, auth.user!.id);
       if (isKicked) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("عذراً، تم استبعادك من هذه الحصة 🚫"), backgroundColor: Colors.redAccent),
         );
+        setState(() => _isJoining = false);
         return;
       }
 
-      // التسجيل في الحصة تلقائياً عند الدخول
       await db.enrollStudentBySessionId(auth.user!.id, session.id);
 
       if (!mounted) return;
       final String userName = auth.profile?['full_name'] ?? "الطالب";
       final String userId = auth.user!.id;
 
+      // التعديل: الدخول مباشرة إذا كانت الحصة نشطة (بدأ المدرس)
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => session.status == 'waiting'
+          builder: (context) => !session.isActive
               ? WaitingRoomScreen(session: session, userName: userName, userId: userId)
               : ChangeNotifierProvider(
                   create: (_) => VideoRoomController(
@@ -285,8 +284,8 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       itemCount: sessions.length,
       itemBuilder: (context, index) {
         final session = sessions[index];
-        final bool isLive = session.isLive || session.status == 'active' || session.status == 'waiting';
-        final bool hasEnded = session.status == 'ended' || session.hasEnded;
+        final bool isLive = session.isActive;
+        final bool hasEnded = session.hasEnded;
         
         return Container(
           margin: const EdgeInsets.only(bottom: 20),

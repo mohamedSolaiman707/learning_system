@@ -1,7 +1,6 @@
 import 'package:livekit_client/livekit_client.dart';
 
-/// Result of resolving who appears on the main stage and whether the teacher
-/// floating card should be visible.
+
 class MainStageResolution {
   final Participant participant;
   final bool isScreenShare;
@@ -14,9 +13,6 @@ class MainStageResolution {
   });
 }
 
-/// Single source of truth for virtual-classroom participant selection.
-///
-/// Priority: [Screen Share] > [Active Room Cam] > [Teacher (default)]
 class ClassroomParticipantUtils {
   ClassroomParticipantUtils._();
 
@@ -142,7 +138,7 @@ class ClassroomParticipantUtils {
     }
 
     final channelCam = findChannelParticipant(participants, selectedChannel);
-    if (isRoomCamActive(channelCam) && mainParticipant?.identity == channelCam.identity) {
+    if (isRoomCamActive(channelCam) && mainParticipant?.identity == channelCam?.identity) {
       // إذا كانت كاميرا القاعة هي المعروضة، نظهر المدرس عائماً
       return true;
     }

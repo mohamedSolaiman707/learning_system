@@ -80,7 +80,7 @@ class VideoRoomController extends ChangeNotifier {
 
   String? getAnswerForParticipant(String identity) {
     for (final entry in _studentAnswers.entries) {
-      if (identity.contains(entry.key) || 
+      if (identity.contains(entry.key) ||
           entry.key.contains(identity.split('_').first)) {
         return entry.value;
       }
@@ -91,7 +91,7 @@ class VideoRoomController extends ChangeNotifier {
   Map<String, dynamic>? _activeQuestion;
   Map<String, dynamic>? get activeQuestion => _activeQuestion;
   String? get activeQuestionCorrectAnswer =>
-    _activeQuestion?['correctAnswer'] as String?;
+      _activeQuestion?['correctAnswer'] as String?;
 
   String? _myCurrentAnswer;
   String? get myCurrentAnswer => _myCurrentAnswer;
@@ -147,7 +147,7 @@ class VideoRoomController extends ChangeNotifier {
 
   static const List<String> roomCameraOrder = [
     'room-cam-right',
-    'room-cam-left', 
+    'room-cam-left',
     'room-cam-screen',
   ];
 
@@ -156,7 +156,8 @@ class VideoRoomController extends ChangeNotifier {
     if (currentIndex == -1) {
       _selectedChannel = roomCameraOrder.first;
     } else {
-      _selectedChannel = roomCameraOrder[(currentIndex + 1) % roomCameraOrder.length];
+      _selectedChannel =
+          roomCameraOrder[(currentIndex + 1) % roomCameraOrder.length];
     }
     _isWhiteboardOpen = false;
     _triggerHaptic();
@@ -165,17 +166,16 @@ class VideoRoomController extends ChangeNotifier {
 
   void checkAndFallbackChannel() {
     if (_room == null || isTeacher) return;
-    
+
     final allParticipants = <Participant>[
       if (_room!.localParticipant != null) _room!.localParticipant!,
       ..._room!.remoteParticipants.values,
     ];
-    
+
     final currentCamAlive = allParticipants.any(
-      (p) => p.identity.contains(_selectedChannel) && 
-             p.isCameraEnabled(),
+      (p) => p.identity.contains(_selectedChannel) && p.isCameraEnabled(),
     );
-    
+
     if (!currentCamAlive) {
       for (final cam in roomCameraOrder) {
         if (cam == _selectedChannel) continue;
@@ -194,20 +194,25 @@ class VideoRoomController extends ChangeNotifier {
       }
     }
   }
-  
+
   String getCameraLabel(String channel) {
     switch (channel) {
-      case 'room-cam-right': return 'كاميرا القاعة 1';
-      case 'room-cam-left': return 'كاميرا القاعة 2';
-      case 'room-cam-screen': return 'كاميرا القاعة 3';
-      default: return 'كاميرا القاعة';
+      case 'room-cam-right':
+        return 'كاميرا القاعة 1';
+      case 'room-cam-left':
+        return 'كاميرا القاعة 2';
+      case 'room-cam-screen':
+        return 'كاميرا القاعة 3';
+      default:
+        return 'كاميرا القاعة';
     }
   }
 
   double get engagementScore {
     if (_room == null || _room!.remoteParticipants.isEmpty) return 0.0;
     int totalParticipants = _room!.remoteParticipants.length;
-    int activeParticipants = _handRaiseQueue.length +
+    int activeParticipants =
+        _handRaiseQueue.length +
         (_activePoll != null
             ? _pollResults.values.fold<int>(0, (a, b) => a + b)
             : 0) +
@@ -417,7 +422,9 @@ class VideoRoomController extends ChangeNotifier {
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
       event,
     ) {
-      final hasInternet = event.any((result) => result != ConnectivityResult.none);
+      final hasInternet = event.any(
+        (result) => result != ConnectivityResult.none,
+      );
       if (_isConnected && !hasInternet) {
         _isConnected = false;
         onNotification?.call("فقدت الاتصال بالإنترنت ⚠️", Colors.red);
@@ -507,11 +514,15 @@ class VideoRoomController extends ChangeNotifier {
     if (sessionId == null) return;
     try {
       // Count current online students
-      final participantsCount = _room?.remoteParticipants.values
-          .where((p) => 
-            !p.identity.contains('room-cam-') && 
-            !p.identity.contains('teacher_'))
-          .length ?? 0;
+      final participantsCount =
+          _room?.remoteParticipants.values
+              .where(
+                (p) =>
+                    !p.identity.contains('room-cam-') &&
+                    !p.identity.contains('teacher_'),
+              )
+              .length ??
+          0;
 
       // Initialize/expand seats if needed
       await DatabaseService().initializeSeats(
@@ -761,9 +772,11 @@ class VideoRoomController extends ChangeNotifier {
       notifyListeners();
 
       if (!isTeacher && sessionId != null) {
-        DatabaseService().logStudentEntry(sessionId!, userId, userName).catchError((e) {
-          debugPrint("Log student entry error (Background): $e");
-        });
+        DatabaseService()
+            .logStudentEntry(sessionId!, userId, userName)
+            .catchError((e) {
+              debugPrint("Log student entry error (Background): $e");
+            });
       }
     } catch (e) {
       debugPrint("Connect to room error: $e");
@@ -840,7 +853,9 @@ class VideoRoomController extends ChangeNotifier {
         if (!_isChatOpen) _unreadMessages++;
         break;
       case 'edit_chat_message':
-        final index = _messages.indexWhere((m) => m['id'].toString() == data['id'].toString());
+        final index = _messages.indexWhere(
+          (m) => m['id'].toString() == data['id'].toString(),
+        );
         if (index != -1) {
           final updatedMsg = Map<String, dynamic>.from(_messages[index]);
           updatedMsg['content'] = data['content'];
@@ -950,10 +965,7 @@ class VideoRoomController extends ChangeNotifier {
               });
             }
             if (isTeacher) {
-              onNotification?.call(
-                "قوم ${p.name} برفع يده ✋",
-                Colors.orange,
-              );
+              onNotification?.call("قوم ${p.name} برفع يده ✋", Colors.orange);
             }
           } else {
             _handRaiseQueue.removeWhere((i) => i['identity'] == p.identity);
@@ -1327,7 +1339,7 @@ class VideoRoomController extends ChangeNotifier {
 
   void sendMessage(String text, {Map<String, dynamic>? replyTo}) async {
     if (text.trim().isEmpty || (_isChatLocked && !isTeacher)) return;
-    
+
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
     final msg = {
       'id': tempId,
@@ -1336,19 +1348,23 @@ class VideoRoomController extends ChangeNotifier {
       'created_at': DateTime.now().toIso8601String(),
       if (replyTo != null) 'reply_to': replyTo,
     };
-    
+
     _messages = [msg, ..._messages];
     sendData({'type': 'chat_message', ...msg});
     notifyListeners();
-    
+
     try {
-      final response = await supabase.from('messages').insert({
-        'room_name': roomName,
-        'user_name': userName,
-        'content': text.trim(),
-        'reply_to': replyTo,
-      }).select().single();
-      
+      final response = await supabase
+          .from('messages')
+          .insert({
+            'room_name': roomName,
+            'user_name': userName,
+            'content': text.trim(),
+            'reply_to': replyTo,
+          })
+          .select()
+          .single();
+
       final index = _messages.indexWhere((m) => m['id'] == tempId);
       if (index != -1) {
         final updatedMsg = Map<String, dynamic>.from(_messages[index]);
@@ -1361,7 +1377,9 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void editMessage(String messageId, String newContent) async {
-    final index = _messages.indexWhere((m) => m['id'].toString() == messageId.toString());
+    final index = _messages.indexWhere(
+      (m) => m['id'].toString() == messageId.toString(),
+    );
     if (index == -1) return;
 
     if (_messages[index]['user_name'] != userName) return;
@@ -1371,13 +1389,13 @@ class VideoRoomController extends ChangeNotifier {
     updatedMsg['is_edited'] = true;
     _messages[index] = updatedMsg;
     _messages = List.from(_messages);
-    
+
     sendData({
       'type': 'edit_chat_message',
       'id': messageId,
       'content': newContent.trim(),
     });
-    
+
     notifyListeners();
 
     try {
@@ -1488,7 +1506,10 @@ class VideoRoomController extends ChangeNotifier {
     if (_room != null) {
       final data = utf8.encode(jsonEncode(d));
       _room!.localParticipant?.publishData(
-        data, reliable: true, destinationIdentities: targetIdentities);
+        data,
+        reliable: true,
+        destinationIdentities: targetIdentities,
+      );
     }
   }
 

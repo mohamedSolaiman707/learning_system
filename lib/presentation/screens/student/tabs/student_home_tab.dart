@@ -22,13 +22,12 @@ class StudentHomeTab extends StatefulWidget {
 }
 
 class _StudentHomeTabState extends State<StudentHomeTab>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   bool _isLoading = true;
   bool _isJoining = false;
   List<SessionModel> _enrolledSessions = [];
   List<SessionModel> _allActiveSessions = [];
-  List<SessionModel> _allUpcomingSessions =
-      []; // القائمة الجديدة لكل الحصص المجدولة
+  List<SessionModel> _allUpcomingSessions = []; 
   List<Map<String, dynamic>> _recentRecordings = [];
   SessionModel? _nextSession;
   Timer? _refreshTimer;
@@ -40,6 +39,10 @@ class _StudentHomeTabState extends State<StudentHomeTab>
     'completedSessions': 0,
   };
 
+  // الحفاظ على حالة الصفحة لمنع الـ Flicker عند التنقل
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   void initState() {
     super.initState();
@@ -50,8 +53,8 @@ class _StudentHomeTabState extends State<StudentHomeTab>
 
     _loadStudentDataWithCache();
 
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      _loadStudentData(initial: false);
+    _refreshTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
+      if (mounted) _loadStudentData(initial: false);
     });
   }
 
@@ -85,11 +88,12 @@ class _StudentHomeTabState extends State<StudentHomeTab>
 
   Future<void> _loadStudentDataWithCache() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    
     final cache = Provider.of<CacheService>(context, listen: false);
     try {
       final cachedStats = await cache.getStudentStats();
       final cachedEnrolled = await cache.getEnrolledSessions();
+      
       if (mounted && (cachedStats != null || cachedEnrolled != null)) {
         setState(() {
           if (cachedStats != null) _stats = cachedStats;
@@ -99,17 +103,23 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                 .toList();
             _updateNextSession();
           }
-          _isLoading = false;
+          _isLoading = false; 
         });
       }
     } catch (e) {
       debugPrint("Cache loading error: $e");
     }
+    
+    // جلب البيانات من السيرفر لتحديث الكاش والواجهة
     await _loadStudentData(initial: _isLoading);
   }
 
   void _updateNextSession() {
     final now = DateTime.now();
+    if (_enrolledSessions.isEmpty) {
+      _nextSession = null;
+      return;
+    }
     try {
       _nextSession = _enrolledSessions.firstWhere(
         (s) => (s.isLive || s.isActive) && s.endTime.isAfter(now),
@@ -124,15 +134,18 @@ class _StudentHomeTabState extends State<StudentHomeTab>
   Future<void> _loadStudentData({bool initial = true}) async {
     if (!mounted) return;
     if (initial) setState(() => _isLoading = true);
+    
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final db = Provider.of<DatabaseService>(context, listen: false);
+      final cache = Provider.of<CacheService>(context, listen: false);
+
       if (auth.user != null) {
         final results = await Future.wait([
           db.getStudentSchedule(auth.user!.id),
           db.getActiveSessions(),
           db.getStudentStats(auth.user!.id),
-          db.getAllSessions(), // جلب كل الحصص المجدولة في الأكاديمية
+          db.getAllSessions(),
         ]);
 
         final enrolledResponse = results[0] as List<Map<String, dynamic>>;
@@ -140,12 +153,20 @@ class _StudentHomeTabState extends State<StudentHomeTab>
         final statsResponse = results[2] as Map<String, dynamic>;
         final allSessionsResponse = results[3] as List<Map<String, dynamic>>;
 
+        // تحديث الكاش فوراً
+        await cache.saveStudentStats(statsResponse);
+        final List<Map<String, dynamic>> sessionMaps = [];
+        for (var e in enrolledResponse) {
+          if (e['sessions'] != null) sessionMaps.add(e['sessions'] as Map<String, dynamic>);
+        }
+        await cache.saveEnrolledSessions(sessionMaps);
+
         final List<Map<String, dynamic>> allRecs = [];
         for (var enrollment in enrolledResponse) {
           final sId = enrollment['session_id'];
           final recs = await db.getSessionRecordings(sId);
           for (var r in recs) {
-            r['subject_name'] = enrollment['sessions']['subject_name'];
+            r['subject_name'] = enrollment['sessions']?['subject_name'] ?? "حصة";
             allRecs.add(r);
           }
         }
@@ -155,37 +176,34 @@ class _StudentHomeTabState extends State<StudentHomeTab>
         if (mounted) {
           setState(() {
             _enrolledSessions = enrolledResponse
+                .where((e) => e['sessions'] != null)
                 .map((e) => SessionModel.fromMap(e['sessions']))
                 .toList();
-            _enrolledSessions.sort(
-              (a, b) => a.startTime.compareTo(b.startTime),
-            );
+            _enrolledSessions.sort((a, b) => a.startTime.compareTo(b.startTime));
 
-            _allActiveSessions = activeResponse
-                .map((e) => SessionModel.fromMap(e))
-                .toList();
+            _allActiveSessions = activeResponse.map((e) => SessionModel.fromMap(e)).toList();
 
-            // فلترة كل الحصص القادمة التي لم تنتهِ بعد
-            _allUpcomingSessions =
-                allSessionsResponse
+            _allUpcomingSessions = allSessionsResponse
                     .map((e) => SessionModel.fromMap(e))
                     .where((s) => s.endTime.isAfter(now))
                     .toList()
                   ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
             _stats = statsResponse;
-            _recentRecordings = allRecs
-              ..sort((a, b) => b['created_at'].compareTo(a['created_at']));
+            _recentRecordings = allRecs..sort((a, b) => b['created_at'].compareTo(a['created_at']));
             _updateNextSession();
             _isLoading = false;
           });
         }
       }
     } catch (e) {
+      debugPrint("Load student data error: $e");
       if (mounted && initial) setState(() => _isLoading = false);
     }
   }
 
+  // ... باقي الواجهات (UI) تظل كما هي ...
+  
   void _showUpcomingClasses() {
     final now = DateTime.now();
     final upcoming = _allUpcomingSessions;
@@ -409,6 +427,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // مطلوب عند استخدام AutomaticKeepAliveClientMixin
     final authProvider = Provider.of<AuthProvider>(context);
     final userName = authProvider.profile?['full_name'] ?? "الطالب";
     final isDesktop = Responsive.isDesktop(context);

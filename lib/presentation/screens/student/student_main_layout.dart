@@ -14,7 +14,6 @@ class StudentMainLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ShowCaseWidget(
-      // حفظ حالة الجولة عند الانتهاء أو التخطي
       onFinish: () => context.read<AuthProvider>().completeTour(),
       builder: (context) => const StudentMainContent(),
     );
@@ -31,23 +30,24 @@ class StudentMainContent extends StatefulWidget {
 class _StudentMainContentState extends State<StudentMainContent> {
   int _selectedIndex = 0;
 
-  // مفاتيح الجولة الإرشادية
   final GlobalKey _sidebarKey = GlobalKey();
   final GlobalKey _homeKey = GlobalKey();
   final GlobalKey _scheduleKey = GlobalKey();
   final GlobalKey _profileKey = GlobalKey();
   final GlobalKey _supportKey = GlobalKey();
 
-  final List<Widget> _tabs = [
-    const StudentHomeTab(),
-    const StudentScheduleTab(),
-    const ProfileScreen(),
-  ];
+  // استخدام IndexedStack يتطلب تعريف القائمة مرة واحدة
+  late final List<Widget> _tabs;
 
   @override
   void initState() {
     super.initState();
-    // تشغيل الجولة تلقائياً للمستخدمين الجدد فقط
+    _tabs = [
+      const StudentHomeTab(),
+      const StudentScheduleTab(),
+      const ProfileScreen(),
+    ];
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = context.read<AuthProvider>();
       if (!auth.hasSeenTour) {
@@ -95,7 +95,11 @@ class _StudentMainContentState extends State<StudentMainContent> {
               ),
               child: ClipRRect(
                 borderRadius: isMobile ? BorderRadius.zero : BorderRadius.circular(32),
-                child: _tabs[_selectedIndex],
+                // الحل السحري: استخدام IndexedStack للحفاظ على حالة الصفحات ومنع الـ Flicker
+                child: IndexedStack(
+                  index: _selectedIndex,
+                  children: _tabs,
+                ),
               ),
             ),
           ),
@@ -112,7 +116,6 @@ class _StudentMainContentState extends State<StudentMainContent> {
       color: const Color(0xFFF0F4F8),
       child: Column(
         children: [
-          // Logo Section (المستعاد بالكامل)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
             child: Row(
@@ -132,23 +135,8 @@ class _StudentMainContentState extends State<StudentMainContent> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          "EduConnect",
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 20,
-                            color: Color(0xFF102A43),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        Text(
-                          "بوابة الطالب",
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF627D98),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        Text("EduConnect", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Color(0xFF102A43), letterSpacing: -0.5)),
+                        Text("بوابة الطالب", style: TextStyle(fontSize: 12, color: Color(0xFF627D98), fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -156,17 +144,11 @@ class _StudentMainContentState extends State<StudentMainContent> {
               ],
             ),
           ),
-
           const SizedBox(height: 10),
-
-          // Menu Items (المستعادة مع دمج الـ Showcase)
           _sidebarItem(0, Icons.grid_view_rounded, Icons.grid_view_outlined, "لوحة التحكم", isExpanded, _homeKey, 'الرئيسية', 'هنا ملخص حصصك اليومية وأهم التنبيهات.'),
           _sidebarItem(1, Icons.calendar_month_rounded, Icons.calendar_month_outlined, "الجدول الدراسي", isExpanded, _scheduleKey, 'جدولك', 'تابع مواعيد محاضراتك القادمة وروابط الدخول.'),
           _sidebarItem(2, Icons.person_rounded, Icons.person_outline_rounded, "الملف الشخصي", isExpanded, _profileKey, 'حسابك', 'يمكنك تعديل بياناتك ومتابعة مستواك الدراسي.'),
-
           const Spacer(),
-
-          // Support Section (المستعاد بالكامل)
           _sidebarItem(99, Icons.support_agent_rounded, Icons.support_agent_outlined, "الدعم الفني", isExpanded, _supportKey, 'الدعم الفني', 'نحن هنا لمساعدتك في أي وقت إذا واجهتك مشكلة.'),
           const SizedBox(height: 20),
         ],
@@ -191,10 +173,6 @@ class _StudentMainContentState extends State<StudentMainContent> {
               final Uri whatsappUri = Uri.parse("https://wa.me/201014250577");
               if (await canLaunchUrl(whatsappUri)) {
                 await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
-              } else {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تعذر فتح واتساب")));
-                }
               }
             } else {
               setState(() => _selectedIndex = index);
@@ -207,14 +185,6 @@ class _StudentMainContentState extends State<StudentMainContent> {
             decoration: BoxDecoration(
               color: isSelected ? const Color(0xFF102A43) : Colors.transparent,
               borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                if (isSelected)
-                  BoxShadow(
-                    color: const Color(0xFF102A43).withOpacity(0.2),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  )
-              ],
             ),
             child: Row(
               mainAxisAlignment: isExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
@@ -222,14 +192,7 @@ class _StudentMainContentState extends State<StudentMainContent> {
                 Icon(isSelected ? selectedIcon : unselectedIcon, color: isSelected ? Colors.white : const Color(0xFF486581), size: 24),
                 if (isExpanded) ...[
                   const SizedBox(width: 16),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                      fontSize: 15,
-                      color: isSelected ? Colors.white : const Color(0xFF486581),
-                    ),
-                  ),
+                  Text(label, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.w600, fontSize: 15, color: isSelected ? Colors.white : const Color(0xFF486581))),
                 ],
               ],
             ),
@@ -243,13 +206,7 @@ class _StudentMainContentState extends State<StudentMainContent> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))],
       ),
       child: NavigationBar(
         elevation: 0,

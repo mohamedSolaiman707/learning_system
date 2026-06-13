@@ -633,6 +633,7 @@ class _ParticipantTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool handRaised = controller.remoteHandStates[participant.identity] ?? false;
     final bool isSpotlight = controller.spotlightUserId == participant.identity;
+    final bool hasPen = controller.authorizedStudentId == participant.identity;
     
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -657,9 +658,18 @@ class _ParticipantTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  isMe ? "أ. ${controller.userName} (أنت)" : (participant.name.isNotEmpty ? participant.name : "طالب"),
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16),
+                Row(
+                  children: [
+                    Text(
+                      isMe ? "أ. ${controller.userName} (أنت)" : (participant.name.isNotEmpty ? participant.name : "طالب"),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 16),
+                    ),
+                    if (hasPen)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8.0),
+                        child: Icon(Icons.edit_rounded, color: Colors.green, size: 16),
+                      ),
+                  ],
                 ),
                 if (handRaised) 
                   const Text("يرفع يده ✋", style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
@@ -675,6 +685,8 @@ class _ParticipantTile extends StatelessWidget {
   }
 
   Widget _buildTeacherMenu(BuildContext context) {
+    final bool hasPen = controller.authorizedStudentId == participant.identity;
+
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_horiz, color: Colors.grey),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -683,6 +695,7 @@ class _ParticipantTile extends StatelessWidget {
         if (val == 'cam') controller.disableParticipantCamera(participant.identity, participant.isCameraEnabled());
         if (val == 'kick') controller.kickParticipant(participant.identity);
         if (val == 'spotlight') controller.setSpotlight(controller.spotlightUserId == participant.identity ? null : participant.identity);
+        if (val == 'pen') controller.grantPenToStudent(hasPen ? null : participant.identity);
       },
       itemBuilder: (ctx) => [
         PopupMenuItem(
@@ -702,6 +715,16 @@ class _ParticipantTile extends StatelessWidget {
               const Icon(Icons.videocam_outlined, size: 20),
               const SizedBox(width: 12),
               Text(participant.isCameraEnabled() ? "تعطيل الكاميرا" : "تفعيل الكاميرا", style: const TextStyle(fontFamily: 'Cairo')),
+            ],
+          )
+        ),
+        PopupMenuItem(
+          value: 'pen', 
+          child: Row(
+            children: [
+              Icon(hasPen ? Icons.edit_off_rounded : Icons.edit_rounded, size: 20, color: hasPen ? Colors.orange : Colors.green),
+              const SizedBox(width: 12),
+              Text(hasPen ? "سحب القلم" : "إعطاء القلم", style: const TextStyle(fontFamily: 'Cairo')),
             ],
           )
         ),

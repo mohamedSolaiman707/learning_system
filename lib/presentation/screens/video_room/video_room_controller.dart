@@ -61,6 +61,7 @@ class VideoRoomController extends ChangeNotifier {
   bool _isWhiteboardLocked = false;
   bool _isScreenShareLocked = false;
   String? _spotlightUserId;
+  String? _authorizedStudentId;
   String? _spotlightedQuestionId;
   bool _isAllMuted = false;
 
@@ -263,6 +264,7 @@ class VideoRoomController extends ChangeNotifier {
   bool get isWhiteboardLocked => _isWhiteboardLocked;
   bool get isScreenShareLocked => _isScreenShareLocked;
   String? get spotlightUserId => _spotlightUserId;
+  String? get authorizedStudentId => _authorizedStudentId;
   bool get isAllMuted => _isAllMuted;
   bool get isCamLocked => _isCamLocked;
   Color get selectedColor => _selectedColor;
@@ -1013,6 +1015,9 @@ class VideoRoomController extends ChangeNotifier {
       case 'control_whiteboard':
         _isWhiteboardLocked = data['value'];
         break;
+      case 'pen_authority_changed':
+        _authorizedStudentId = data['authorized_id'];
+        break;
       case 'control_screenshare':
         _isScreenShareLocked = data['value'];
         break;
@@ -1214,6 +1219,22 @@ class VideoRoomController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void grantPenToStudent(String? studentId) {
+    if (!isTeacher) return;
+    _authorizedStudentId = studentId;
+    sendData({
+      'type': 'pen_authority_changed',
+      'authorized_id': studentId,
+    });
+
+    if (studentId != null) {
+      onNotification?.call("تم منح صلاحية الكتابة للطالب", Colors.green);
+    } else {
+      onNotification?.call("تم سحب صلاحيات الكتابة الخاصة", Colors.orange);
+    }
+    notifyListeners();
+  }
+
   void toggleScreenShareLock() {
     _isScreenShareLocked = !_isScreenShareLocked;
     sendData({'type': 'control_screenshare', 'value': _isScreenShareLocked});
@@ -1293,7 +1314,16 @@ class VideoRoomController extends ChangeNotifier {
   }
 
   void addStroke(List<Offset> pts) {
-    if (!isTeacher && _isWhiteboardLocked) return;
+    if (!isTeacher) {
+      if (_isWhiteboardLocked) return;
+      if (_authorizedStudentId != null) {
+        final myId = _room?.localParticipant?.identity ?? userId;
+        if (myId.split('_').first != _authorizedStudentId!.split('_').first) {
+          return;
+        }
+      }
+    }
+
     final s = Stroke(
       points: List.from(pts),
       color: _selectedColor,

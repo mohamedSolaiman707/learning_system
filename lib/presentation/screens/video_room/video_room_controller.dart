@@ -9,6 +9,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/services/livekit_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/attendance_pdf_service.dart';
+import 'utils/classroom_participant_utils.dart';
 import 'package:http/http.dart' as http;
 
 class Stroke {
@@ -117,6 +118,10 @@ class VideoRoomController extends ChangeNotifier {
   List<Map<String, dynamic>> _seats = [];
   List<Map<String, dynamic>> get seats => _seats;
 
+  /// Stable key for Selector memoization — only changes when seat assignments change.
+  String get seatsLayoutKey =>
+      _seats.map((s) => '${s['id']}:${s['student_id']}').join('|');
+
   int get seatsPerScreen {
     if (_seats.isEmpty) return 8;
     final rightSeats = _seats.where((s) => s['zone'] == 'right').length;
@@ -134,6 +139,11 @@ class VideoRoomController extends ChangeNotifier {
   StreamSubscription? _statusSubscription;
   StreamSubscription? _seatsSubscription;
   Timer? _expiryTimer;
+  Timer? _notifyDebounce;
+  bool _isDisposed = false;
+  bool _isReconnecting = false;
+  int _reconnectAttempts = 0;
+  static const _maxReconnectAttempts = 5;
 
   String _selectedChannel = "room-cam-right";
   String get selectedChannel => _selectedChannel;
@@ -165,35 +175,80 @@ class VideoRoomController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool get isReconnecting => _isReconnecting;
+
+  void _notify({bool immediate = false}) {
+    if (_isDisposed) return;
+    if (immediate) {
+      _notifyDebounce?.cancel();
+      notifyListeners();
+      return;
+    }
+    _notifyDebounce?.cancel();
+    _notifyDebounce = Timer(const Duration(milliseconds: 48), () {
+      if (!_isDisposed) notifyListeners();
+    });
+  }
+
+  bool _seatsEqual(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i]['id'] != b[i]['id'] ||
+          a[i]['student_id'] != b[i]['student_id'] ||
+          a[i]['student_name'] != b[i]['student_name'] ||
+          a[i]['seat_number'] != b[i]['seat_number']) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _applySeatsFromServer(List<Map<String, dynamic>> data) {
+    final normalized = List<Map<String, dynamic>>.from(data);
+    if (_seatsEqual(_seats, normalized)) return;
+    _seats = normalized;
+    if (!isTeacher) {
+      final mySeat = _seats.firstWhere(
+        (s) => s['student_id'] == userId,
+        orElse: () => {},
+      );
+      _seatPickerShown = mySeat.isNotEmpty;
+    }
+    _notify();
+  }
+
+  List<Map<String, dynamic>> _cloneSeats() =>
+      _seats.map((s) => Map<String, dynamic>.from(s)).toList();
+
   void checkAndFallbackChannel() {
     if (_room == null || isTeacher) return;
 
-    final allParticipants = <Participant>[
-      if (_room!.localParticipant != null) _room!.localParticipant!,
-      ..._room!.remoteParticipants.values,
-    ];
-
-    final currentCamAlive = allParticipants.any(
-      (p) => p.identity.contains(_selectedChannel) && p.isCameraEnabled(),
+    final allParticipants = ClassroomParticipantUtils.allFromRoom(_room);
+    final channelCam = ClassroomParticipantUtils.findChannelParticipant(
+      allParticipants,
+      _selectedChannel,
     );
 
-    if (!currentCamAlive) {
-      for (final cam in roomCameraOrder) {
-        if (cam == _selectedChannel) continue;
-        final isAlive = allParticipants.any(
-          (p) => p.identity.contains(cam) && p.isCameraEnabled(),
+    if (ClassroomParticipantUtils.isRoomCamActive(channelCam)) return;
+
+    for (final cam in roomCameraOrder) {
+      if (cam == _selectedChannel) continue;
+      final candidate = ClassroomParticipantUtils.findChannelParticipant(
+        allParticipants,
+        cam,
+      );
+      if (ClassroomParticipantUtils.isRoomCamActive(candidate)) {
+        _selectedChannel = cam;
+        onNotification?.call(
+          'تم التحويل تلقائياً لـ ${getCameraLabel(cam)} 📷',
+          Colors.orange,
         );
-        if (isAlive) {
-          _selectedChannel = cam;
-          onNotification?.call(
-            "تم التحويل تلقائياً لـ ${getCameraLabel(cam)} 📷",
-            Colors.orange,
-          );
-          notifyListeners();
-          return;
-        }
+        _notify(immediate: true);
+        return;
       }
     }
+    // No active room cam — UI falls back to teacher via ClassroomParticipantUtils.
+    _notify(immediate: true);
   }
 
   String getCameraLabel(String channel) {
@@ -374,7 +429,7 @@ class VideoRoomController extends ChangeNotifier {
     _isQAOpen = false;
     _isParticipantsOpen = false;
     _isPollsOpen = false;
-    notifyListeners();
+    _notify(immediate: true);
   }
 
   void toggleQA() {
@@ -456,18 +511,10 @@ class VideoRoomController extends ChangeNotifier {
           .from('seats')
           .stream(primaryKey: ['id'])
           .eq('session_id', sessionId!)
-          .listen((data) {
-            _seats = data;
-            // التحقق من مقعد الطالب الحالي
-            if (!isTeacher) {
-              final mySeat = _seats.firstWhere(
-                (s) => s['student_id'] == userId,
-                orElse: () => {},
-              );
-              _seatPickerShown = mySeat.isNotEmpty;
-            }
-            notifyListeners();
-          });
+          .listen(
+            (data) => _applySeatsFromServer(data),
+            onError: (e) => debugPrint('Seats stream error: $e'),
+          );
     }
 
     if (sessionId != null && sessionId!.isNotEmpty) {
@@ -534,33 +581,35 @@ class VideoRoomController extends ChangeNotifier {
 
       // Load seats
       final data = await DatabaseService().getSeats(sessionId!);
-      _seats = data;
-
-      // Check if student already has seat
-      if (!isTeacher) {
-        final mySeat = _seats.firstWhere(
-          (s) => s['student_id'] == userId,
-          orElse: () => {},
-        );
-        _seatPickerShown = mySeat.isNotEmpty;
-      }
-
-      notifyListeners();
+      _applySeatsFromServer(data);
     } catch (e) {
       debugPrint("loadAndExpandSeats error: $e");
-      // في حالة الخطأ، نحاول جلب البيانات المتاحة على الأقل
       try {
         final data = await DatabaseService().getSeats(sessionId!);
-        if (data.isNotEmpty) {
-          _seats = data;
-          notifyListeners();
-        }
+        if (data.isNotEmpty) _applySeatsFromServer(data);
       } catch (_) {}
     }
   }
 
   Future<bool> claimSeat(int seatNumber) async {
     if (sessionId == null) return false;
+
+    final optimistic = _cloneSeats();
+    final seatIdx = optimistic.indexWhere((s) => s['seat_number'] == seatNumber);
+    if (seatIdx == -1) return false;
+
+    for (final s in optimistic) {
+      if (s['student_id'] == userId) {
+        s['student_id'] = null;
+        s['student_name'] = null;
+      }
+    }
+    optimistic[seatIdx]['student_id'] = userId;
+    optimistic[seatIdx]['student_name'] = userName;
+    _seats = optimistic;
+    _seatPickerShown = true;
+    _notify(immediate: true);
+
     try {
       final result = await DatabaseService().claimSeat(
         sessionId: sessionId!,
@@ -568,36 +617,48 @@ class VideoRoomController extends ChangeNotifier {
         studentId: userId,
         studentName: userName,
       );
-      if (result['success'] == true) {
-        _seatPickerShown = true;
-        await loadAndExpandSeats();
-        return true;
-      }
-      // Seat taken — expand and retry
+      if (result['success'] == true) return true;
       await loadAndExpandSeats();
       return false;
     } catch (e) {
+      debugPrint('claimSeat error: $e');
+      await loadAndExpandSeats();
       return false;
     }
   }
 
   Future<void> moveSeat(int fromSeat, int toSeat) async {
     if (sessionId == null || !isTeacher) return;
+
+    final optimistic = _cloneSeats();
+    final fromIdx = optimistic.indexWhere((s) => s['seat_number'] == fromSeat);
+    final toIdx = optimistic.indexWhere((s) => s['seat_number'] == toSeat);
+    if (fromIdx == -1 || toIdx == -1) return;
+
+    final fromData = Map<String, dynamic>.from(optimistic[fromIdx]);
+    final toData = Map<String, dynamic>.from(optimistic[toIdx]);
+    optimistic[fromIdx]['student_id'] = toData['student_id'];
+    optimistic[fromIdx]['student_name'] = toData['student_name'];
+    optimistic[toIdx]['student_id'] = fromData['student_id'];
+    optimistic[toIdx]['student_name'] = fromData['student_name'];
+    _seats = optimistic;
     _isProcessing = true;
-    notifyListeners();
+    _notify(immediate: true);
+
     try {
       await DatabaseService().moveStudentSeat(
         sessionId: sessionId!,
         fromSeat: fromSeat,
         toSeat: toSeat,
       );
-      await loadAndExpandSeats();
       onNotification?.call("تم تغيير ترتيب المقاعد بنجاح", Colors.green);
     } catch (e) {
+      debugPrint('moveSeat error: $e');
       onNotification?.call("فشل في تغيير ترتيب المقاعد", Colors.red);
+      await loadAndExpandSeats();
     } finally {
       _isProcessing = false;
-      notifyListeners();
+      _notify(immediate: true);
     }
   }
 
@@ -802,16 +863,33 @@ class VideoRoomController extends ChangeNotifier {
           debugPrint("Error handling incoming data: $e");
         }
       })
+      ..on<RoomDisconnectedEvent>((event) {
+        if (event.reason != null) {
+          _handleRoomDisconnected(event.reason!);
+        }
+      })
+      ..on<RoomAttemptReconnectEvent>((_) {
+        _isReconnecting = true;
+        onNotification?.call('جاري إعادة الاتصال...', Colors.orange);
+        _notify(immediate: true);
+      })
+      ..on<RoomReconnectedEvent>((_) {
+        _isReconnecting = false;
+        _reconnectAttempts = 0;
+        onNotification?.call('تم استعادة الاتصال ✅', Colors.green);
+        _notify(immediate: true);
+      })
       ..on<ParticipantConnectedEvent>((event) {
         loadAndExpandSeats();
-        notifyListeners();
+        checkAndFallbackChannel();
+        _notify(immediate: true);
       })
       ..on<ParticipantDisconnectedEvent>((event) {
         checkAndFallbackChannel();
         _handRaiseQueue.removeWhere(
           (item) => item['identity'] == event.participant.identity,
         );
-        notifyListeners();
+        _notify(immediate: true);
       })
       ..on<ActiveSpeakersChangedEvent>((event) {
         if (_room?.localParticipant != null && !_isMicEnabled) {
@@ -831,15 +909,57 @@ class VideoRoomController extends ChangeNotifier {
             }
           }
         }
-        notifyListeners();
+        _notify();
       })
-      ..on<TrackSubscribedEvent>((_) => notifyListeners())
+      ..on<TrackSubscribedEvent>((_) {
+        checkAndFallbackChannel();
+        _notify(immediate: true);
+      })
       ..on<TrackUnsubscribedEvent>((_) {
         checkAndFallbackChannel();
-        notifyListeners();
+        _notify(immediate: true);
       })
-      ..on<TrackMutedEvent>((_) => notifyListeners())
-      ..on<TrackUnmutedEvent>((_) => notifyListeners());
+      ..on<TrackMutedEvent>((_) {
+        checkAndFallbackChannel();
+        _notify(immediate: true);
+      })
+      ..on<TrackUnmutedEvent>((_) {
+        checkAndFallbackChannel();
+        _notify(immediate: true);
+      });
+  }
+
+  Future<void> _handleRoomDisconnected(DisconnectReason reason) async {
+    if (_isDisposed) return;
+    if (reason == DisconnectReason.clientInitiated) return;
+
+    _isReconnecting = true;
+    onNotification?.call('انقطع الاتصال — جاري إعادة المحاولة...', Colors.red);
+    _notify(immediate: true);
+    await _attemptReconnect();
+  }
+
+  Future<void> _attemptReconnect() async {
+    if (_isDisposed || !_isConnected) return;
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      _isReconnecting = false;
+      _errorMessage = 'فشل إعادة الاتصال. يرجى المحاولة يدوياً.';
+      _notify(immediate: true);
+      return;
+    }
+
+    _reconnectAttempts++;
+    await Future.delayed(Duration(seconds: min(_reconnectAttempts * 2, 10)));
+    if (_isDisposed) return;
+
+    try {
+      await connectToRoom(_currentRoomName ?? roomName);
+      _reconnectAttempts = 0;
+      _isReconnecting = false;
+    } catch (e) {
+      debugPrint('Reconnect attempt $_reconnectAttempts failed: $e');
+      await _attemptReconnect();
+    }
   }
 
   bool _isMe(String? targetId) {
@@ -1739,6 +1859,8 @@ class VideoRoomController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _notifyDebounce?.cancel();
     if (isTeacher && _isRecording) {
       LiveKitService().stopRecording(roomName, sessionId ?? "");
     }
@@ -1748,11 +1870,17 @@ class VideoRoomController extends ChangeNotifier {
       } catch (_) {}
     }
     _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
     _statusSubscription?.cancel();
+    _statusSubscription = null;
     _seatsSubscription?.cancel();
+    _seatsSubscription = null;
     _expiryTimer?.cancel();
     _breakoutTimer?.cancel();
+    _listener?.dispose();
+    _listener = null;
     _room?.disconnect();
+    _room = null;
     super.dispose();
   }
 }

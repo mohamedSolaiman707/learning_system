@@ -9,6 +9,7 @@ import 'widgets/chat_panel.dart';
 import 'widgets/qa_panel.dart';
 import 'widgets/whiteboard_panel.dart';
 import 'widgets/participants_panel.dart';
+import 'utils/classroom_participant_utils.dart';
 import 'widgets/poll_panel.dart';
 import 'widgets/seat_picker_dialog.dart';
 import '../../../core/utils/responsive.dart';
@@ -54,28 +55,41 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       };
 
       controller.onSessionEnded = (msg) {
-        _showStaticDialog("تنبيه", msg, onConfirm: () {
-          Navigator.pop(context);
-          Navigator.pop(context);
-        });
+        _showStaticDialog(
+          "تنبيه",
+          msg,
+          onConfirm: () {
+            Navigator.pop(context);
+            Navigator.pop(context);
+          },
+        );
       };
 
       controller.onNotification = (title, color) {
         if (!mounted) return;
         final bool isDesktop = Responsive.isDesktop(context);
-        
+
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.info_outline_rounded, color: Colors.white.withOpacity(0.9), size: 20),
+                Icon(
+                  Icons.info_outline_rounded,
+                  color: Colors.white.withOpacity(0.9),
+                  size: 20,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13, color: Colors.white),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ],
@@ -83,9 +97,13 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             backgroundColor: color.withOpacity(0.95),
             behavior: SnackBarBehavior.floating,
             elevation: 10,
-            width: isDesktop ? 400 : null, 
-            margin: isDesktop ? null : const EdgeInsets.fromLTRB(20, 0, 20, 100),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            width: isDesktop ? 400 : null,
+            margin: isDesktop
+                ? null
+                : const EdgeInsets.fromLTRB(20, 0, 20, 100),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
             duration: const Duration(seconds: 4),
           ),
         );
@@ -95,14 +113,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         if (!mounted) return;
         setState(() {
           for (int i = 0; i < 3; i++) {
-            _reactions.add(_FlyingEmoji(
-              key: UniqueKey(),
-              emoji: emoji,
-              delay: i * 100,
-              onComplete: () {
-                if (mounted) setState(() => _reactions.removeAt(0));
-              },
-            ));
+            _reactions.add(
+              _FlyingEmoji(
+                key: UniqueKey(),
+                emoji: emoji,
+                delay: i * 100,
+                onComplete: () {
+                  if (mounted) setState(() => _reactions.removeAt(0));
+                },
+              ),
+            );
           }
         });
       };
@@ -112,8 +132,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   void _handleSeatPicker() {
     if (!mounted || widget.isTeacher) return;
     final controller = context.read<VideoRoomController>();
-    
-    if (!controller.seatPickerShown && !_isSeatPickerOpen && !controller.isLoading) {
+
+    if (!controller.seatPickerShown &&
+        !_isSeatPickerOpen &&
+        !controller.isLoading) {
       setState(() => _isSeatPickerOpen = true);
       showDialog(
         context: context,
@@ -136,29 +158,52 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     super.dispose();
   }
 
-  void _showBreakoutInvite(String room, String name, int duration, VideoRoomController controller) {
+  void _showBreakoutInvite(
+      String room,
+      String name,
+      int duration,
+      VideoRoomController controller,
+      ) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-        title: const Text("دعوة لمجموعة عمل", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-        content: Text("تم اختيارك للانضمام إلى $name لمدة $duration دقيقة.", style: const TextStyle(fontFamily: 'Cairo')),
+        title: const Text(
+          "دعوة لمجموعة عمل",
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          "تم اختيارك للانضمام إلى $name لمدة $duration دقيقة.",
+          style: const TextStyle(fontFamily: 'Cairo'),
+        ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
             onPressed: () {
               controller.connectToRoom(room);
               Navigator.pop(context);
             },
-            child: const Text("انضمام الآن", style: TextStyle(color: Colors.white, fontFamily: 'Cairo')),
+            child: const Text(
+              "انضمام الآن",
+              style: TextStyle(color: Colors.white, fontFamily: 'Cairo'),
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _showStaticDialog(String title, String content, {VoidCallback? onConfirm}) {
+  void _showStaticDialog(
+      String title,
+      String content, {
+        VoidCallback? onConfirm,
+      }) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -167,7 +212,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         title: Text(title, style: const TextStyle(fontFamily: 'Cairo')),
         content: Text(content, style: const TextStyle(fontFamily: 'Cairo')),
         actions: [
-          ElevatedButton(onPressed: onConfirm, child: const Text("حسناً", style: TextStyle(fontFamily: 'Cairo'))),
+          ElevatedButton(
+            onPressed: onConfirm,
+            child: const Text("حسناً", style: TextStyle(fontFamily: 'Cairo')),
+          ),
         ],
       ),
     );
@@ -179,24 +227,34 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text("إعدادات وتحكم القاعة", style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            "إعدادات وتحكم القاعة",
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold),
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (widget.isTeacher) ...[
-                  const Text("صلاحيات الطلاب (قفل جماعي)", style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Colors.blue, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 10),
-                  _buildToggle(
-                    "قفل الميكروفونات",
-                    controller.isAllMuted,
-                        (val) {
-                      controller.muteAllParticipants(val);
-                      setDialogState(() {});
-                    },
-                    icon: Icons.mic_off,
+                  const Text(
+                    "صلاحيات الطلاب (قفل جماعي)",
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
+                  const SizedBox(height: 10),
+                  _buildToggle("قفل الميكروفونات", controller.isAllMuted, (
+                      val,
+                      ) {
+                    controller.muteAllParticipants(val);
+                    setDialogState(() {});
+                  }, icon: Icons.mic_off),
                   _buildToggle(
                     "قفل الكاميرات",
                     controller.isCamLocked,
@@ -252,10 +310,20 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
-  Widget _buildToggle(String title, bool value, Function(bool) onChanged, {IconData? icon}) {
+  Widget _buildToggle(
+      String title,
+      bool value,
+      Function(bool) onChanged, {
+        IconData? icon,
+      }) {
     return SwitchListTile(
-      secondary: icon != null ? Icon(icon, size: 20, color: value ? Colors.red : Colors.grey) : null,
-      title: Text(title, style: const TextStyle(fontFamily: 'Cairo', fontSize: 13)),
+      secondary: icon != null
+          ? Icon(icon, size: 20, color: value ? Colors.red : Colors.grey)
+          : null,
+      title: Text(
+        title,
+        style: const TextStyle(fontFamily: 'Cairo', fontSize: 13),
+      ),
       value: value,
       activeColor: Colors.red,
       onChanged: onChanged,
@@ -269,10 +337,14 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
     if (widget.isTeacher) return _buildTeacherLayout();
 
-    final errorMessage = context.select<VideoRoomController, String?>((c) => c.errorMessage);
+    final errorMessage = context.select<VideoRoomController, String?>(
+          (c) => c.errorMessage,
+    );
     if (errorMessage != null) return _buildErrorState(controller, isDesktop);
 
-    final isLoading = context.select<VideoRoomController, bool>((c) => c.isLoading);
+    final isLoading = context.select<VideoRoomController, bool>(
+          (c) => c.isLoading,
+    );
     if (isLoading) return _buildLoadingState();
 
     return Scaffold(
@@ -284,23 +356,27 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               // 1. Sidebar Channels
               Selector<VideoRoomController, (String, bool)>(
                 selector: (_, c) => (c.selectedChannel, c.isWhiteboardOpen),
-                builder: (context, data, child) => _buildChannelSidebar(controller),
+                builder: (context, data, child) =>
+                    _buildChannelSidebar(controller),
               ),
 
               Expanded(
                 child: Column(
                   children: [
                     // 2. Top Header
-                    Selector<VideoRoomController, ({
-                    bool isHandRaised,
-                    bool isMicEnabled,
-                    bool isCamEnabled,
-                    bool isChatOpen,
-                    bool isQAOpen,
-                    bool isPollsOpen,
-                    bool isScreenSharing,
-                    bool isScreenShareLocked,
-                    })>(
+                    Selector<
+                        VideoRoomController,
+                        ({
+                        bool isHandRaised,
+                        bool isMicEnabled,
+                        bool isCamEnabled,
+                        bool isChatOpen,
+                        bool isQAOpen,
+                        bool isPollsOpen,
+                        bool isScreenSharing,
+                        bool isScreenShareLocked,
+                        })
+                    >(
                       selector: (_, c) => (
                       isHandRaised: c.isHandRaised,
                       isMicEnabled: c.isMicEnabled,
@@ -328,43 +404,43 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                     Expanded(
                       child: Row(
                         children: [
-                          // 3. Main Stage
+                          // 3. Main Stage (layer order: video → whiteboard → floating card)
                           Expanded(
                             child: Stack(
+                              clipBehavior: Clip.hardEdge,
                               children: [
                                 Positioned.fill(
-                                  child: Selector<VideoRoomController, (String, bool, bool)>(
-                                    selector: (_, c) => (c.selectedChannel, c.isPiPExpanded, c.isWhiteboardOpen),
-                                    builder: (context, data, __) => _buildMainStage(controller),
+                                  child: _StudentMainStage(
+                                    controller: controller,
                                   ),
                                 ),
                                 Positioned.fill(
-                                  child: Selector<VideoRoomController, bool>(
-                                    selector: (_, c) => c.isWhiteboardOpen,
-                                    builder: (_, isOpen, __) => isOpen
-                                        ? const WhiteboardPanel()
-                                        : const SizedBox(),
-                                  ),
+                                  child: _StudentWhiteboardLayer(),
                                 ),
-                                _buildTeacherFloatingCard(controller),
+                                _StudentTeacherFloatingCard(
+                                  controller: controller,
+                                ),
                                 ..._reactions,
                               ],
                             ),
                           ),
 
                           // 4. Right Panel
-                          Selector<VideoRoomController, ({
-                          bool isChatOpen,
-                          bool isQAOpen,
-                          bool isPollsOpen,
-                          })>(
+                          Selector<
+                              VideoRoomController,
+                              ({bool isChatOpen, bool isQAOpen, bool isPollsOpen})
+                          >(
                             selector: (_, c) => (
                             isChatOpen: c.isChatOpen,
                             isQAOpen: c.isQAOpen,
                             isPollsOpen: c.isPollsOpen,
                             ),
                             builder: (context, data, _) {
-                              final isOpen = (data.isChatOpen || data.isQAOpen || data.isPollsOpen) && isDesktop;
+                              final isOpen =
+                                  (data.isChatOpen ||
+                                      data.isQAOpen ||
+                                      data.isPollsOpen) &&
+                                      isDesktop;
                               if (!isOpen) return const SizedBox();
                               return AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
@@ -379,14 +455,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                                         color: Colors.black.withOpacity(0.2),
                                         blurRadius: 20,
                                         offset: const Offset(0, 10),
-                                      )
+                                      ),
                                     ],
                                   ),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(24),
                                     child: data.isChatOpen
                                         ? const ChatPanel()
-                                        : (data.isQAOpen ? const QAPanel() : const PollPanel()),
+                                        : (data.isQAOpen
+                                        ? const QAPanel()
+                                        : const PollPanel()),
                                   ),
                                 ),
                               );
@@ -397,7 +475,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                     ),
 
                     // 5. Bottom Bar
-                    _buildBottomParticipantBar(controller),
+                    _StudentBottomBar(controller: controller),
                   ],
                 ),
               ),
@@ -408,16 +486,18 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
-  Widget _buildTopHeader(BuildContext context, VideoRoomController controller, {
-    bool? isHandRaised,
-    bool? isMicEnabled,
-    bool? isCamEnabled,
-    bool? isChatOpen,
-    bool? isQAOpen,
-    bool? isPollsOpen,
-    bool? isScreenSharing,
-    bool? isScreenShareLocked,
-  }) {
+  Widget _buildTopHeader(
+      BuildContext context,
+      VideoRoomController controller, {
+        bool? isHandRaised,
+        bool? isMicEnabled,
+        bool? isCamEnabled,
+        bool? isChatOpen,
+        bool? isQAOpen,
+        bool? isPollsOpen,
+        bool? isScreenSharing,
+        bool? isScreenShareLocked,
+      }) {
     return Container(
       height: 70,
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -431,12 +511,31 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(controller.title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+              Text(
+                controller.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Cairo',
+                ),
+              ),
               Row(
                 children: [
-                  const Icon(Icons.people_alt_rounded, color: Colors.blue, size: 12),
+                  const Icon(
+                    Icons.people_alt_rounded,
+                    color: Colors.blue,
+                    size: 12,
+                  ),
                   const SizedBox(width: 5),
-                  Text("${(controller.room?.remoteParticipants.length ?? 0) + 1} متصل الآن", style: const TextStyle(color: Colors.white38, fontSize: 10, fontFamily: 'Cairo')),
+                  Text(
+                    "${(controller.room?.remoteParticipants.length ?? 0) + 1} متصل الآن",
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 10,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -446,43 +545,63 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             Row(
               children: [
                 _HeaderToolButton(
-                  icon: (isHandRaised ?? controller.isHandRaised) ? Icons.front_hand : Icons.front_hand_outlined,
-                  color: (isHandRaised ?? controller.isHandRaised) ? Colors.amber : Colors.white54,
+                  icon: (isHandRaised ?? controller.isHandRaised)
+                      ? Icons.front_hand
+                      : Icons.front_hand_outlined,
+                  color: (isHandRaised ?? controller.isHandRaised)
+                      ? Colors.amber
+                      : Colors.white54,
                   onPressed: controller.toggleHand,
                   label: "رفع اليد",
                 ),
                 const SizedBox(width: 15),
                 _HeaderToolButton(
-                  icon: (isMicEnabled ?? controller.isMicEnabled) ? Icons.mic : Icons.mic_off,
-                  color: (isMicEnabled ?? controller.isMicEnabled) ? Colors.blue : Colors.redAccent,
+                  icon: (isMicEnabled ?? controller.isMicEnabled)
+                      ? Icons.mic
+                      : Icons.mic_off,
+                  color: (isMicEnabled ?? controller.isMicEnabled)
+                      ? Colors.blue
+                      : Colors.redAccent,
                   onPressed: controller.toggleMic,
-                  label: (isMicEnabled ?? controller.isMicEnabled) ? "الميكروفون" : "صامت",
+                  label: (isMicEnabled ?? controller.isMicEnabled)
+                      ? "الميكروفون"
+                      : "صامت",
                 ),
                 const SizedBox(width: 15),
                 _HeaderToolButton(
-                  icon: (isCamEnabled ?? controller.isCamEnabled) ? Icons.videocam : Icons.videocam_off,
-                  color: (isCamEnabled ?? controller.isCamEnabled) ? Colors.blue : Colors.redAccent,
+                  icon: (isCamEnabled ?? controller.isCamEnabled)
+                      ? Icons.videocam
+                      : Icons.videocam_off,
+                  color: (isCamEnabled ?? controller.isCamEnabled)
+                      ? Colors.blue
+                      : Colors.redAccent,
                   onPressed: controller.toggleCam,
                   label: "الكاميرا",
                 ),
                 const SizedBox(width: 15),
                 _HeaderToolButton(
                   icon: Icons.chat_bubble_rounded,
-                  color: (isChatOpen ?? controller.isChatOpen) ? Colors.blue : Colors.white54,
+                  color: (isChatOpen ?? controller.isChatOpen)
+                      ? Colors.blue
+                      : Colors.white54,
                   onPressed: controller.toggleChat,
                   label: "الشات",
                 ),
                 const SizedBox(width: 15),
                 _HeaderToolButton(
                   icon: Icons.help_outline_rounded,
-                  color: (isQAOpen ?? controller.isQAOpen) ? Colors.orange : Colors.white54,
+                  color: (isQAOpen ?? controller.isQAOpen)
+                      ? Colors.orange
+                      : Colors.white54,
                   onPressed: controller.toggleQA,
                   label: "الأسئلة",
                 ),
                 const SizedBox(width: 15),
                 _HeaderToolButton(
                   icon: Icons.poll_rounded,
-                  color: (isPollsOpen ?? controller.isPollsOpen) ? Colors.green : Colors.white54,
+                  color: (isPollsOpen ?? controller.isPollsOpen)
+                      ? Colors.green
+                      : Colors.white54,
                   onPressed: controller.togglePolls,
                   label: "الاستطلاع",
                 ),
@@ -491,8 +610,19 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
           const Spacer(),
           Row(
             children: [
-              IconButton(onPressed: () {}, icon: const Icon(Icons.person_pin_rounded, color: Colors.white54), tooltip: "الملف الشخصي"),
-              IconButton(onPressed: _showSettingsDialog, icon: const Icon(Icons.settings, color: Colors.white54), tooltip: "الإعدادات"),
+              IconButton(
+                onPressed: () {},
+                icon: const Icon(
+                  Icons.person_pin_rounded,
+                  color: Colors.white54,
+                ),
+                tooltip: "الملف الشخصي",
+              ),
+              IconButton(
+                onPressed: _showSettingsDialog,
+                icon: const Icon(Icons.settings, color: Colors.white54),
+                tooltip: "الإعدادات",
+              ),
               IconButton(
                 onPressed: () => _showExitConfirmation(context, controller),
                 icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
@@ -519,7 +649,15 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
       child: Column(
         children: [
           const SizedBox(height: 20),
-          const Text("Channels", style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          const Text(
+            "Channels",
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'Cairo',
+            ),
+          ),
           const SizedBox(height: 20),
           Expanded(
             child: ListView.builder(
@@ -529,7 +667,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 final bool isWhiteboard = ch['id'] == 'whiteboard';
                 final isSelected = isWhiteboard
                     ? controller.isWhiteboardOpen
-                    : (controller.selectedChannel == ch['id'] && !controller.isWhiteboardOpen);
+                    : (controller.selectedChannel == ch['id'] &&
+                    !controller.isWhiteboardOpen);
 
                 return InkWell(
                   onTap: () {
@@ -537,27 +676,47 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       controller.toggleWhiteboard();
                     } else {
                       controller.selectChannel(ch['id']!);
-                      if (controller.isWhiteboardOpen) controller.toggleWhiteboard();
+                      if (controller.isWhiteboardOpen)
+                        controller.toggleWhiteboard();
                     }
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                    margin: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 10,
+                    ),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue.withOpacity(0.15) : Colors.transparent,
+                      color: isSelected
+                          ? Colors.blue.withOpacity(0.15)
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: isSelected ? Colors.blue : Colors.white.withOpacity(0.05)),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.blue
+                            : Colors.white.withOpacity(0.05),
+                      ),
                     ),
                     child: Column(
                       children: [
                         Icon(
-                            isWhiteboard ? Icons.edit_note_rounded : Icons.video_camera_back_rounded,
-                            color: isSelected ? Colors.blue : Colors.white54,
-                            size: 24
+                          isWhiteboard
+                              ? Icons.edit_note_rounded
+                              : Icons.video_camera_back_rounded,
+                          color: isSelected ? Colors.blue : Colors.white54,
+                          size: 24,
                         ),
                         const SizedBox(height: 8),
-                        Text(ch['label']!, textAlign: TextAlign.center, style: TextStyle(color: isSelected ? Colors.blue : Colors.white54, fontSize: 10, fontWeight: FontWeight.bold)),
+                        Text(
+                          ch['label']!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: isSelected ? Colors.blue : Colors.white54,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -570,306 +729,51 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
-  List<Participant> _allParticipants(VideoRoomController controller) {
-    return [
-      if (controller.room?.localParticipant != null) controller.room!.localParticipant!,
-      ...controller.room?.remoteParticipants.values ?? [],
-    ];
-  }
-
-  Participant? _findTeacherParticipant(List<Participant> participants) {
-    return participants
-        .where((p) =>
-            p.identity.startsWith('teacher_') ||
-            p.identity.toLowerCase().contains('teacher'))
-        .firstOrNull;
-  }
-
-  Participant? _findChannelParticipant(List<Participant> participants, String channelId) {
-    if (channelId == 'whiteboard') return null;
-    return participants.where((p) => p.identity.contains(channelId)).firstOrNull;
-  }
-
-  bool _hasCameraVideo(Participant participant) {
-    if (!participant.isCameraEnabled()) return false;
-    return participant.videoTrackPublications.any((pub) =>
-        !pub.isScreenShare &&
-        pub.track != null &&
-        (participant is LocalParticipant || pub.subscribed));
-  }
-
-  bool _hasScreenShareVideo(Participant participant) {
-    if (!participant.isScreenShareEnabled()) return false;
-    return participant.videoTrackPublications.any((pub) =>
-        pub.isScreenShare &&
-        pub.track != null &&
-        (participant is LocalParticipant || pub.subscribed));
-  }
-
-  Participant? _findScreenSharingParticipant(List<Participant> participants) {
-    return participants.where(_hasScreenShareVideo).firstOrNull;
-  }
-
-  bool _isChannelBroadcasting(Participant? participant) {
-    if (participant == null) return false;
-    return _hasCameraVideo(participant) || _hasScreenShareVideo(participant);
-  }
-
-  Participant? _resolveStudentMainParticipant(
-    VideoRoomController controller,
-    List<Participant> allParticipants,
-  ) {
-    final screenSharer = _findScreenSharingParticipant(allParticipants);
-    if (screenSharer != null) return screenSharer;
-
-    final teacher = _findTeacherParticipant(allParticipants);
-    final channelCam = _findChannelParticipant(allParticipants, controller.selectedChannel);
-
-    if (_isChannelBroadcasting(channelCam)) return channelCam;
-    if (teacher != null) return teacher;
-
-    return allParticipants
-        .where((p) =>
-            p is RemoteParticipant &&
-            (_hasCameraVideo(p) || _hasScreenShareVideo(p)))
-        .firstOrNull;
-  }
-
-  bool _shouldShowTeacherFloatingCard(
-    VideoRoomController controller,
-    List<Participant> allParticipants,
-  ) {
-    if (controller.isWhiteboardOpen) return true;
-
-    final screenSharer = _findScreenSharingParticipant(allParticipants);
-    if (screenSharer != null) return true;
-
-    final channelCam = _findChannelParticipant(allParticipants, controller.selectedChannel);
-    return _isChannelBroadcasting(channelCam);
-  }
-
-  Widget _buildTeacherFloatingCard(VideoRoomController controller) {
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        controller,
-        if (controller.room != null) controller.room!,
-      ]),
-      builder: (context, _) {
-        final allParticipants = _allParticipants(controller);
-
-        final teacher = _findTeacherParticipant(allParticipants);
-        if (teacher == null) return const SizedBox.shrink();
-
-        if (!_shouldShowTeacherFloatingCard(controller, allParticipants)) {
-          return const SizedBox.shrink();
-        }
-
-        return Positioned(
-          top: 16,
-          right: 16,
-          child: Container(
-            width: 200,
-            height: 120,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.blue.withOpacity(0.5), width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.4),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(15),
-              child: ParticipantTile(
-                key: ValueKey("teacher_floating_face_${teacher.identity}"),
-                participant: teacher,
-                isMainStage: false,
-                forceShowScreen: false,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildMainStage(VideoRoomController controller) {
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        controller,
-        if (controller.room != null) controller.room!,
-      ]),
-      builder: (context, _) {
-        if (controller.isWhiteboardOpen) {
-          return const SizedBox.shrink();
-        }
-
-        final allParticipants = _allParticipants(controller);
-
-        if (allParticipants.isEmpty) {
-          return _buildWaitingState();
-        }
-
-        final mainToDisplay = _resolveStudentMainParticipant(controller, allParticipants);
-        if (mainToDisplay == null) return _buildWaitingState();
-
-        final isScreenShare = _hasScreenShareVideo(mainToDisplay);
-
-        return ParticipantTile(
-          key: ValueKey("student_main_stage_${mainToDisplay.identity}"),
-          participant: mainToDisplay,
-          isMainStage: true,
-          forceShowScreen: isScreenShare,
-        );
-      },
-    );
-  }
-
-  Widget _buildBottomParticipantBar(VideoRoomController controller) {
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
-        final allParticipants = <Participant>[
-          if (controller.room?.localParticipant != null) controller.room!.localParticipant!,
-          ...controller.room?.remoteParticipants.values ?? [],
-        ];
-
-        final localIdentity = controller.room?.localParticipant?.identity;
-
-        final rawStudents = allParticipants.where((p) => 
-          !p.identity.contains('room-cam-') && 
-          !p.identity.contains('teacher_') &&
-          p.identity != localIdentity
-        ).toList();
-        
-        final orderedStudents = <Participant>[];
-        for (var seat in controller.seats) {
-          final sId = seat['student_id'];
-          if (sId != null) {
-            final p = rawStudents.where((p) => p.identity.startsWith(sId)).firstOrNull;
-            if (p != null && !orderedStudents.contains(p)) {
-              orderedStudents.add(p);
-            }
-          }
-        }
-        
-        for (var p in rawStudents) {
-          if (!orderedStudents.contains(p)) {
-            orderedStudents.add(p);
-          }
-        }
-
-        final localPart = controller.room?.localParticipant;
-
-        return Container(
-          height: 140,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: const BoxDecoration(
-            color: Color(0xFF0F1014),
-            border: Border(top: BorderSide(color: Colors.white10, width: 0.5)),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 20),
-              const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.people_outline_rounded, color: Colors.white38, size: 20),
-                  Text("Students", style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-                ],
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: orderedStudents.length,
-                  itemBuilder: (context, index) {
-                    final p = orderedStudents[index];
-                    final seat = controller.seats.firstWhere((s) => s['student_id'] != null && p.identity.startsWith(s['student_id']), orElse: () => {});
-                    
-                    return Container(
-                      width: 180,
-                      margin: const EdgeInsets.only(right: 12),
-                      child: ParticipantTile(
-                        participant: p, 
-                        isMainStage: false,
-                        displayName: seat['student_name'],
-                      ),
-                    );
-                  },
-                ),
-              ),
-              if (localPart != null)
-                Container(
-                  width: 200,
-                  padding: const EdgeInsets.only(left: 20, right: 20),
-                  decoration: const BoxDecoration(
-                    border: Border(left: BorderSide(color: Colors.white10)),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text("My Cam", style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: ParticipantTile(
-                          participant: localPart, 
-                          isMainStage: false,
-                          displayName: controller.userName,
-                        )
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildTeacherLayout() {
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
       body: ShowCaseWidget(
         builder: (context) => Stack(
           children: [
-            const Positioned.fill(
-                child: ParticipantGrid()
-            ),
+            const Positioned.fill(child: ParticipantGrid()),
             Positioned(
-              top: 0, left: 0, right: 0,
+              top: 0,
+              left: 0,
+              right: 0,
               child: _buildTopHeader(
-                  context,
-                  context.read<VideoRoomController>()
+                context,
+                context.read<VideoRoomController>(),
               ),
             ),
             Positioned.fill(
               child: Selector<VideoRoomController, bool>(
                 selector: (_, c) => c.isWhiteboardOpen,
                 builder: (_, isOpen, __) => isOpen
-                    ? const WhiteboardPanel()
-                    : const SizedBox(),
+                    ? const Material(
+                  color: Colors.white,
+                  child: WhiteboardPanel(),
+                )
+                    : const SizedBox.shrink(),
               ),
             ),
             ..._reactions,
             Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
-                padding: const EdgeInsets.only(
-                    bottom: 20),
+                padding: const EdgeInsets.only(bottom: 20),
                 child: ControlsBar(),
               ),
             ),
             if (Responsive.isDesktop(context))
-              Selector<VideoRoomController, ({
-              bool isChatOpen,
-              bool isQAOpen,
-              bool isParticipantsOpen,
-              bool isPollsOpen,
-              })>(
+              Selector<
+                  VideoRoomController,
+                  ({
+                  bool isChatOpen,
+                  bool isQAOpen,
+                  bool isParticipantsOpen,
+                  bool isPollsOpen,
+                  })
+              >(
                 selector: (_, c) => (
                 isChatOpen: c.isChatOpen,
                 isQAOpen: c.isQAOpen,
@@ -877,16 +781,19 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 isPollsOpen: c.isPollsOpen,
                 ),
                 builder: (context, data, _) {
-                  final isOpen = data.isChatOpen ||
-                      data.isQAOpen ||
-                      data.isParticipantsOpen ||
-                      data.isPollsOpen;
+                  final isOpen =
+                      data.isChatOpen ||
+                          data.isQAOpen ||
+                          data.isParticipantsOpen ||
+                          data.isPollsOpen;
                   return Align(
                     alignment: Alignment.centerRight,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       width: isOpen ? 420 : 0,
-                      padding: isOpen ? const EdgeInsets.all(16) : EdgeInsets.zero,
+                      padding: isOpen
+                          ? const EdgeInsets.all(16)
+                          : EdgeInsets.zero,
                       child: isOpen
                           ? Container(
                         decoration: BoxDecoration(
@@ -897,7 +804,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                               color: Colors.black.withOpacity(0.1),
                               blurRadius: 20,
                               offset: const Offset(0, 10),
-                            )
+                            ),
                           ],
                         ),
                         child: ClipRRect(
@@ -940,15 +847,19 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   color: Colors.redAccent.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.wifi_off_rounded, color: Colors.redAccent, size: 60),
+                child: const Icon(
+                  Icons.wifi_off_rounded,
+                  color: Colors.redAccent,
+                  size: 60,
+                ),
               ),
               const SizedBox(height: 30),
               Text(
                 controller.errorMessage ?? "حدث خطأ غير متوقع",
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: Colors.white, 
-                  fontSize: 18, 
+                  color: Colors.white,
+                  fontSize: 18,
                   fontFamily: 'Cairo',
                   fontWeight: FontWeight.w600,
                 ),
@@ -978,7 +889,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                         Text(
                           "إعادة المحاولة",
                           style: TextStyle(
-                            fontFamily: 'Cairo', 
+                            fontFamily: 'Cairo',
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
                           ),
@@ -1004,31 +915,31 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
           children: [
             CircularProgressIndicator(color: Colors.blue),
             const SizedBox(height: 24),
-            const Text("جاري دخول القاعة التعليمية...", style: TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo')),
+            const Text(
+              "جاري دخول القاعة التعليمية...",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontFamily: 'Cairo',
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildWaitingState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(color: Colors.blue, strokeWidth: 2),
-          SizedBox(height: 16),
-          Text("في انتظار المدرس...", style: TextStyle(color: Colors.white54, fontFamily: 'Cairo', fontSize: 16)),
-        ],
-      ),
-    );
-  }
-
-  void _showExitConfirmation(BuildContext context, VideoRoomController controller) {
+  void _showExitConfirmation(
+      BuildContext context,
+      VideoRoomController controller,
+      ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("مغادرة القاعة", style: TextStyle(fontFamily: 'Cairo')),
+        title: const Text(
+          "مغادرة القاعة",
+          style: TextStyle(fontFamily: 'Cairo'),
+        ),
         content: Text(
           widget.isTeacher
               ? "هل تريد إنهاء الحصة للجميع أم المغادرة فقط؟"
@@ -1038,8 +949,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("إلغاء",
-                style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text("إلغاء", style: TextStyle(fontFamily: 'Cairo')),
           ),
           if (widget.isTeacher)
             TextButton(
@@ -1048,22 +958,313 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 Navigator.pop(context);
                 Navigator.pop(context);
               },
-              child: const Text("إنهاء للجميع",
-                  style: TextStyle(
-                      color: Colors.red,
-                      fontFamily: 'Cairo',
-                      fontWeight: FontWeight.bold)),
+              child: const Text(
+                "إنهاء للجميع",
+                style: TextStyle(
+                  color: Colors.red,
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF102A43)),
+              backgroundColor: const Color(0xFF102A43),
+            ),
             onPressed: () {
               Navigator.pop(context);
               Navigator.pop(context);
             },
-            child: const Text("مغادرة الآن",
-                style: TextStyle(
-                    color: Colors.white, fontFamily: 'Cairo')),
+            child: const Text(
+              "مغادرة الآن",
+              style: TextStyle(color: Colors.white, fontFamily: 'Cairo'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Main video layer for students — hidden while the whiteboard is open.
+class _StudentMainStage extends StatelessWidget {
+  final VideoRoomController controller;
+
+  const _StudentMainStage({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        controller,
+        if (controller.room != null) controller.room!,
+      ]),
+      builder: (context, _) {
+        if (controller.isWhiteboardOpen) {
+          return const ColoredBox(color: Color(0xFF0F1014));
+        }
+
+        final participants = ClassroomParticipantUtils.allFromRoom(
+          controller.room,
+        );
+        if (participants.isEmpty) {
+          return const _WaitingForTeacher();
+        }
+
+        final resolution = ClassroomParticipantUtils.resolveMainStage(
+          participants: participants,
+          selectedChannel: controller.selectedChannel,
+          isWhiteboardOpen: false,
+        );
+
+        if (resolution == null) return const _WaitingForTeacher();
+
+        return ParticipantTile(
+          key: ValueKey('student_main_${resolution.participant.identity}'),
+          participant: resolution.participant,
+          isMainStage: true,
+          forceShowScreen: resolution.isScreenShare,
+        );
+      },
+    );
+  }
+}
+
+/// Whiteboard sits above main stage; teacher floating card sits above this.
+class _StudentWhiteboardLayer extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Selector<VideoRoomController, bool>(
+      selector: (_, c) => c.isWhiteboardOpen,
+      builder: (_, isOpen, __) {
+        if (!isOpen) return const SizedBox.shrink();
+        return const Material(color: Colors.white, child: WhiteboardPanel());
+      },
+    );
+  }
+}
+
+class _StudentTeacherFloatingCard extends StatelessWidget {
+  final VideoRoomController controller;
+
+  const _StudentTeacherFloatingCard({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        controller,
+        if (controller.room != null) controller.room!,
+      ]),
+      builder: (context, _) {
+        final participants = ClassroomParticipantUtils.allFromRoom(
+          controller.room,
+        );
+        final teacher = ClassroomParticipantUtils.findTeacher(participants);
+        if (teacher == null) return const SizedBox.shrink();
+
+        final resolution = ClassroomParticipantUtils.resolveMainStage(
+          participants: participants,
+          selectedChannel: controller.selectedChannel,
+          isWhiteboardOpen: controller.isWhiteboardOpen,
+        );
+
+        if (resolution == null || !resolution.showTeacherFloatingCard) {
+          return const SizedBox.shrink();
+        }
+
+        return Positioned(
+          top: 16,
+          right: 16,
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(15),
+            child: Container(
+              width: 200,
+              height: 120,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: Colors.blue.withOpacity(0.5),
+                  width: 2,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(15),
+                child: ParticipantTile(
+                  key: ValueKey('teacher_floating_${teacher.identity}'),
+                  participant: teacher,
+                  isMainStage: false,
+                  forceShowScreen: false,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Bottom student strip — rebuilds only when seat layout or room roster changes.
+class _StudentBottomBar extends StatelessWidget {
+  final VideoRoomController controller;
+
+  const _StudentBottomBar({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<VideoRoomController, String>(
+      selector: (_, c) => c.seatsLayoutKey,
+      builder: (context, _, __) {
+        return ListenableBuilder(
+          listenable: controller.room ?? controller,
+          builder: (context, _) {
+            final participants = ClassroomParticipantUtils.allFromRoom(
+              controller.room,
+            );
+            final localIdentity = controller.room?.localParticipant?.identity;
+
+            final rawStudents = participants
+                .where(
+                  (p) => ClassroomParticipantUtils.isStudentParticipant(
+                p,
+                localIdentity: localIdentity,
+              ),
+            )
+                .toList();
+
+            final orderedStudents = <Participant>[];
+            for (final seat in controller.seats) {
+              final sId = seat['student_id'];
+              if (sId == null) continue;
+              final match = rawStudents
+                  .where((p) => p.identity.startsWith(sId as String))
+                  .firstOrNull;
+              if (match != null && !orderedStudents.contains(match)) {
+                orderedStudents.add(match);
+              }
+            }
+            for (final p in rawStudents) {
+              if (!orderedStudents.contains(p)) orderedStudents.add(p);
+            }
+
+            final localPart = controller.room?.localParticipant;
+
+            return Container(
+              height: 140,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: const BoxDecoration(
+                color: Color(0xFF0F1014),
+                border: Border(
+                  top: BorderSide(color: Colors.white10, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 20),
+                  const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.people_outline_rounded,
+                        color: Colors.white38,
+                        size: 20,
+                      ),
+                      Text(
+                        'Students',
+                        style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Cairo',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: orderedStudents.length,
+                      itemBuilder: (context, index) {
+                        final p = orderedStudents[index];
+                        final seat = controller.seats.firstWhere(
+                              (s) =>
+                          s['student_id'] != null &&
+                              p.identity.startsWith(s['student_id'] as String),
+                          orElse: () => <String, dynamic>{},
+                        );
+
+                        return Container(
+                          width: 180,
+                          margin: const EdgeInsets.only(right: 12),
+                          child: ParticipantTile(
+                            participant: p,
+                            isMainStage: false,
+                            displayName: seat['student_name'] as String?,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  if (localPart != null)
+                    Container(
+                      width: 200,
+                      padding: const EdgeInsets.only(left: 20, right: 20),
+                      decoration: const BoxDecoration(
+                        border: Border(left: BorderSide(color: Colors.white10)),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'My Cam',
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Expanded(
+                            child: ParticipantTile(
+                              participant: localPart,
+                              isMainStage: false,
+                              displayName: controller.userName,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _WaitingForTeacher extends StatelessWidget {
+  const _WaitingForTeacher();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: Colors.blue, strokeWidth: 2),
+          SizedBox(height: 16),
+          Text(
+            'في انتظار المدرس...',
+            style: TextStyle(
+              color: Colors.white54,
+              fontFamily: 'Cairo',
+              fontSize: 16,
+            ),
           ),
         ],
       ),
@@ -1076,7 +1277,12 @@ class _HeaderToolButton extends StatelessWidget {
   final Color color;
   final VoidCallback onPressed;
   final String? label;
-  const _HeaderToolButton({required this.icon, required this.color, required this.onPressed, this.label});
+  const _HeaderToolButton({
+    required this.icon,
+    required this.color,
+    required this.onPressed,
+    this.label,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1087,13 +1293,19 @@ class _HeaderToolButton extends StatelessWidget {
           onPressed: onPressed,
           icon: Icon(icon, color: color),
           style: IconButton.styleFrom(
-            backgroundColor: color.withOpacity(0.05), 
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            backgroundColor: color.withOpacity(0.05),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             padding: const EdgeInsets.all(8),
             minimumSize: const Size(45, 45),
           ),
         ),
-        if (label != null) Text(label!, style: TextStyle(color: color, fontSize: 8, fontFamily: 'Cairo')),
+        if (label != null)
+          Text(
+            label!,
+            style: TextStyle(color: color, fontSize: 8, fontFamily: 'Cairo'),
+          ),
       ],
     );
   }
@@ -1104,12 +1316,18 @@ class _FlyingEmoji extends StatefulWidget {
   final String emoji;
   final int delay;
   final VoidCallback onComplete;
-  const _FlyingEmoji({required this.key, required this.emoji, required this.delay, required this.onComplete}) : super(key: key);
+  const _FlyingEmoji({
+    required this.key,
+    required this.emoji,
+    required this.delay,
+    required this.onComplete,
+  }) : super(key: key);
   @override
   State<_FlyingEmoji> createState() => _FlyingEmojiState();
 }
 
-class _FlyingEmojiState extends State<_FlyingEmoji> with SingleTickerProviderStateMixin {
+class _FlyingEmojiState extends State<_FlyingEmoji>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _yAnim;
   late Animation<double> _opacityAnim;
@@ -1118,8 +1336,14 @@ class _FlyingEmojiState extends State<_FlyingEmoji> with SingleTickerProviderSta
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 2500));
-    _yAnim = Tween<double>(begin: 0, end: -400).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2500),
+    );
+    _yAnim = Tween<double>(
+      begin: 0,
+      end: -400,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _opacityAnim = TweenSequence([
       TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 20),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 60),
@@ -1133,7 +1357,9 @@ class _FlyingEmojiState extends State<_FlyingEmoji> with SingleTickerProviderSta
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _startX = MediaQuery.of(context).size.width / 2 + (DateTime.now().millisecond % 100 - 50);
+    _startX =
+        MediaQuery.of(context).size.width / 2 +
+            (DateTime.now().millisecond % 100 - 50);
   }
 
   @override
@@ -1150,7 +1376,10 @@ class _FlyingEmojiState extends State<_FlyingEmoji> with SingleTickerProviderSta
         return Positioned(
           left: _startX,
           bottom: 100 + _yAnim.value.abs(),
-          child: Opacity(opacity: _opacityAnim.value, child: Text(widget.emoji, style: const TextStyle(fontSize: 40))),
+          child: Opacity(
+            opacity: _opacityAnim.value,
+            child: Text(widget.emoji, style: const TextStyle(fontSize: 40)),
+          ),
         );
       },
     );

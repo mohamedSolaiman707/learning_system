@@ -570,26 +570,99 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
+  List<Participant> _allParticipants(VideoRoomController controller) {
+    return [
+      if (controller.room?.localParticipant != null) controller.room!.localParticipant!,
+      ...controller.room?.remoteParticipants.values ?? [],
+    ];
+  }
+
+  Participant? _findTeacherParticipant(List<Participant> participants) {
+    return participants
+        .where((p) =>
+            p.identity.startsWith('teacher_') ||
+            p.identity.toLowerCase().contains('teacher'))
+        .firstOrNull;
+  }
+
+  Participant? _findChannelParticipant(List<Participant> participants, String channelId) {
+    if (channelId == 'whiteboard') return null;
+    return participants.where((p) => p.identity.contains(channelId)).firstOrNull;
+  }
+
+  bool _hasCameraVideo(Participant participant) {
+    if (!participant.isCameraEnabled()) return false;
+    return participant.videoTrackPublications.any((pub) =>
+        !pub.isScreenShare &&
+        pub.track != null &&
+        (participant is LocalParticipant || pub.subscribed));
+  }
+
+  bool _hasScreenShareVideo(Participant participant) {
+    if (!participant.isScreenShareEnabled()) return false;
+    return participant.videoTrackPublications.any((pub) =>
+        pub.isScreenShare &&
+        pub.track != null &&
+        (participant is LocalParticipant || pub.subscribed));
+  }
+
+  Participant? _findScreenSharingParticipant(List<Participant> participants) {
+    return participants.where(_hasScreenShareVideo).firstOrNull;
+  }
+
+  bool _isChannelBroadcasting(Participant? participant) {
+    if (participant == null) return false;
+    return _hasCameraVideo(participant) || _hasScreenShareVideo(participant);
+  }
+
+  Participant? _resolveStudentMainParticipant(
+    VideoRoomController controller,
+    List<Participant> allParticipants,
+  ) {
+    final screenSharer = _findScreenSharingParticipant(allParticipants);
+    if (screenSharer != null) return screenSharer;
+
+    final teacher = _findTeacherParticipant(allParticipants);
+    final channelCam = _findChannelParticipant(allParticipants, controller.selectedChannel);
+
+    if (_isChannelBroadcasting(channelCam)) return channelCam;
+    if (teacher != null) return teacher;
+
+    return allParticipants
+        .where((p) =>
+            p is RemoteParticipant &&
+            (_hasCameraVideo(p) || _hasScreenShareVideo(p)))
+        .firstOrNull;
+  }
+
+  bool _shouldShowTeacherFloatingCard(
+    VideoRoomController controller,
+    List<Participant> allParticipants,
+  ) {
+    if (controller.isWhiteboardOpen) return true;
+
+    final screenSharer = _findScreenSharingParticipant(allParticipants);
+    if (screenSharer != null) return true;
+
+    final channelCam = _findChannelParticipant(allParticipants, controller.selectedChannel);
+    return _isChannelBroadcasting(channelCam);
+  }
+
   Widget _buildTeacherFloatingCard(VideoRoomController controller) {
     return ListenableBuilder(
-      listenable: controller,
+      listenable: Listenable.merge([
+        controller,
+        if (controller.room != null) controller.room!,
+      ]),
       builder: (context, _) {
-        final allParticipants = <Participant>[
-          if (controller.room?.localParticipant != null) controller.room!.localParticipant!,
-          ...controller.room?.remoteParticipants.values ?? [],
-        ];
+        final allParticipants = _allParticipants(controller);
 
-        final teacher = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
+        final teacher = _findTeacherParticipant(allParticipants);
         if (teacher == null) return const SizedBox.shrink();
 
-        final channelCam = allParticipants.where((p) => p.identity.contains(controller.selectedChannel)).firstOrNull;
-        bool isChannelActive = channelCam != null && channelCam.isCameraEnabled();
-
-        // لا تظهر الكارت العائم إذا كان المعلم هو أصلاً المعروض في الشاشة الكبيرة
-        // (أي إذا لم تكن السبورة مفتوحة ولم تكن هناك قناة كاميرا نشطة)
-        bool shouldShowFloating = controller.isWhiteboardOpen || (isChannelActive && !controller.isWhiteboardOpen) || controller.isScreenSharing;
-
-        if (!shouldShowFloating) return const SizedBox.shrink();
+        if (!_shouldShowTeacherFloatingCard(controller, allParticipants)) {
+          return const SizedBox.shrink();
+        }
 
         return Positioned(
           top: 16,
@@ -625,47 +698,31 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
   Widget _buildMainStage(VideoRoomController controller) {
     return ListenableBuilder(
-      listenable: controller.room ?? ChangeNotifier(),
+      listenable: Listenable.merge([
+        controller,
+        if (controller.room != null) controller.room!,
+      ]),
       builder: (context, _) {
-        final allParticipants = <Participant>[
-          if (controller.room?.localParticipant != null) controller.room!.localParticipant!,
-          ...controller.room?.remoteParticipants.values ?? [],
-        ];
+        if (controller.isWhiteboardOpen) {
+          return const SizedBox.shrink();
+        }
+
+        final allParticipants = _allParticipants(controller);
 
         if (allParticipants.isEmpty) {
-          return const Center(child: CircularProgressIndicator(color: Colors.blue, strokeWidth: 2));
+          return _buildWaitingState();
         }
 
-        Participant? teacher = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
-        
-        final channelCam = controller.selectedChannel != 'whiteboard'
-            ? allParticipants.where((p) => p.identity.contains(controller.selectedChannel)).firstOrNull
-            : null;
-
-        // التحقق من فعالية القناة: يجب أن يكون البارتيسيبانت موجوداً وكاميرته مفعلة
-        bool isChannelActive = channelCam != null && (channelCam.isCameraEnabled() || channelCam.isScreenShareEnabled());
-
-        // المنطق المصلح: إذا كانت السبورة مفتوحة، لا نعرض شيئاً تحتها (السبورة ستغطي المكان بـ Positioned.fill الخاص بها)
-        // إذا لم تكن السبورة مفتوحة، نتحقق من القناة المختارة، فإذا كانت غير فعالة نعرض المدرس كافتراضي
-        Participant? mainToDisplay;
-        if (controller.isWhiteboardOpen) {
-          mainToDisplay = null; // سيتم عرض السبورة من الـ Stack الخارجي
-        } else if (isChannelActive) {
-          mainToDisplay = channelCam;
-        } else {
-          mainToDisplay = teacher;
-        }
-
-        mainToDisplay ??= allParticipants.firstOrNull;
-
+        final mainToDisplay = _resolveStudentMainParticipant(controller, allParticipants);
         if (mainToDisplay == null) return _buildWaitingState();
 
-        return Positioned.fill(
-          child: ParticipantTile(
-            key: ValueKey("main_stage_${mainToDisplay.identity}"),
-            participant: mainToDisplay,
-            isMainStage: true,
-          ),
+        final isScreenShare = _hasScreenShareVideo(mainToDisplay);
+
+        return ParticipantTile(
+          key: ValueKey("student_main_stage_${mainToDisplay.identity}"),
+          participant: mainToDisplay,
+          isMainStage: true,
+          forceShowScreen: isScreenShare,
         );
       },
     );

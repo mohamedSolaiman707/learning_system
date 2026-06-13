@@ -8,6 +8,28 @@ import '../video_room_controller.dart';
 class ParticipantGrid extends StatelessWidget {
   const ParticipantGrid({super.key});
 
+  static Participant? _findTeacher(List<Participant> participants) {
+    return participants
+        .where((p) =>
+            p.identity.startsWith('teacher_') ||
+            p.identity.toLowerCase().contains('teacher'))
+        .firstOrNull;
+  }
+
+  static bool _hasCameraVideo(Participant participant) {
+    if (!participant.isCameraEnabled()) return false;
+    return participant.videoTrackPublications.any((pub) =>
+        !pub.isScreenShare &&
+        pub.track != null &&
+        (participant is LocalParticipant || pub.subscribed));
+  }
+
+  static bool _isChannelBroadcasting(Participant? participant) {
+    if (participant == null) return false;
+    if (!participant.isCameraEnabled()) return false;
+    return _hasCameraVideo(participant);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Selector<VideoRoomController, Room?>(
@@ -54,11 +76,13 @@ class ParticipantGrid extends StatelessWidget {
     
     Participant? mainParticipant = screenSharingParticipant;
     if (mainParticipant == null) {
-      final channelCam = allParticipants.where((p) => p.identity.contains(controller.selectedChannel)).firstOrNull;
-      if (channelCam != null && channelCam.isCameraEnabled()) {
+      final channelCam = allParticipants
+          .where((p) => p.identity.contains(controller.selectedChannel))
+          .firstOrNull;
+      if (_isChannelBroadcasting(channelCam)) {
         mainParticipant = channelCam;
       } else {
-        mainParticipant = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
+        mainParticipant = _findTeacher(allParticipants);
       }
       mainParticipant ??= allParticipants.firstOrNull;
     }
@@ -127,14 +151,16 @@ class ParticipantGrid extends StatelessWidget {
     }
 
     // 2. البحث عن المدرس (هو البديل الدائم)
-    final teacherParticipant = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
-    
-    // 3. البحث عن القناة المختارة (بشرط أن تكون نشطة)
-    final channelParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
-    bool isChannelActive = channelParticipant != null && channelParticipant.isCameraEnabled();
+    final teacherParticipant = _findTeacher(allParticipants);
+
+    // 3. البحث عن القناة المختارة (بشرط أن يكون لديها فيديو فعلي)
+    final channelParticipant = allParticipants
+        .where((p) => p.identity.contains(selectedChannel))
+        .firstOrNull;
 
     // 4. تحديد من سيظهر في الشاشة الكبيرة: القناة النشطة أو المدرس
-    final mainToDisplay = isChannelActive ? channelParticipant : teacherParticipant;
+    final mainToDisplay =
+        _isChannelBroadcasting(channelParticipant) ? channelParticipant : teacherParticipant;
 
     if (mainToDisplay != null) {
       return ParticipantTile(
@@ -263,7 +289,7 @@ class ParticipantGrid extends StatelessWidget {
             forceShowScreen: true,
           ),
         ),
-        if (camPart != null && camPart.isCameraEnabled())
+        if (camPart != null && _hasCameraVideo(camPart))
           Positioned(
             top: 20, right: 20,
             child: GestureDetector(
@@ -361,7 +387,8 @@ class ParticipantTile extends StatelessWidget {
           }
         }
 
-        final bool hasVideo = activeVideoTrack != null && (isScreen || participant.isCameraEnabled());
+        final bool hasVideo = activeVideoTrack != null &&
+            (isScreen || (participant.isCameraEnabled() && !isScreen));
 
         return AnimatedContainer(
           duration: const Duration(milliseconds: 500),

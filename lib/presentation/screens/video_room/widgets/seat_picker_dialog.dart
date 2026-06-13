@@ -17,7 +17,14 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
   Widget build(BuildContext context) {
     final controller = context.watch<VideoRoomController>();
     final seats = controller.seats;
-    final seatsPerScreen = controller.seatsPerScreen;
+    final screenZones = controller.screenZones;
+    final screenCount = controller.screenCount;
+
+    // Determine columns per row based on screen count
+    final columnsPerRow = screenCount <= 3 ? screenCount
+      : screenCount <= 6 ? 3
+      : screenCount <= 9 ? 3
+      : 4;
 
     return PopScope(
       canPop: false,
@@ -49,34 +56,143 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
                 ),
                 const SizedBox(height: 24),
 
-                // 3 screens layout
                 Expanded(
-                  child: Row(
-                    children: [
-                      _buildScreenColumn(
-                        context,
-                        controller,
-                        "📺 شاشة 1",
-                        seats.where((s) => s['zone'] == 'right').toList(),
-                        seatsPerScreen,
-                      ),
-                      const SizedBox(width: 12),
-                      _buildScreenColumn(
-                        context,
-                        controller,
-                        "📺 شاشة 2",
-                        seats.where((s) => s['zone'] == 'center').toList(),
-                        seatsPerScreen,
-                      ),
-                      const SizedBox(width: 12),
-                      _buildScreenColumn(
-                        context,
-                        controller,
-                        "📺 شاشة 3",
-                        seats.where((s) => s['zone'] == 'left').toList(),
-                        seatsPerScreen,
-                      ),
-                    ],
+                  child: GridView.builder(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columnsPerRow,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 0.55,
+                    ),
+                    itemCount: screenCount,
+                    itemBuilder: (context, index) {
+                      final zone = screenZones[index];
+                      final zoneSeats = seats
+                        .where((s) => s['zone'] == zone)
+                        .toList()
+                        ..sort((a, b) =>
+                          (a['seat_number'] as int)
+                            .compareTo(b['seat_number'] as int));
+
+                      return Column(
+                        children: [
+                          // Screen label
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.blue.withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              "📺 شاشة ${index + 1}",
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.blue,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Cairo',
+                              )),
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Seats
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: zoneSeats.length,
+                              itemBuilder: (context, si) {
+                                final seat = zoneSeats[si];
+                                final seatNum = 
+                                  seat['seat_number'] as int;
+                                final studentId = seat['student_id'];
+                                final studentName = seat['student_name'];
+                                final isMyId = studentId == 
+                                  controller.userId;
+                                final isOccupied = studentId != null 
+                                  && !isMyId;
+                                final isSelected = 
+                                  _selectedSeat == seatNum;
+
+                                Color bgColor = Colors.transparent;
+                                Color borderColor = Colors.white24;
+                                Color textColor = Colors.white70;
+                                String text = "مقعد $seatNum";
+
+                                if (isMyId) {
+                                  bgColor = Colors.blue;
+                                  borderColor = Colors.blue;
+                                  textColor = Colors.white;
+                                  text = "أنت ✓";
+                                } else if (isOccupied) {
+                                  bgColor = Colors.white
+                                    .withOpacity(0.05);
+                                  borderColor = Colors.transparent;
+                                  textColor = Colors.white38;
+                                  text = studentName ?? "محجوز";
+                                } else if (isSelected) {
+                                  bgColor = Colors.blue
+                                    .withOpacity(0.3);
+                                  borderColor = Colors.blue;
+                                  textColor = Colors.white;
+                                }
+
+                                return GestureDetector(
+                                  onTap: isOccupied || isMyId 
+                                    ? null 
+                                    : () => setState(() =>
+                                      _selectedSeat = isSelected 
+                                        ? null : seatNum),
+                                  child: Container(
+                                    margin: const EdgeInsets.only(
+                                      bottom: 5),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: bgColor,
+                                      borderRadius: 
+                                        BorderRadius.circular(7),
+                                      border: Border.all(
+                                        color: borderColor, width: 1),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                      children: [
+                                        if (isOccupied)
+                                          const Icon(Icons.person,
+                                            color: Colors.white24,
+                                            size: 10),
+                                        if (isOccupied)
+                                          const SizedBox(width: 3),
+                                        Flexible(
+                                          child: Text(text,
+                                            textAlign: TextAlign.center,
+                                            maxLines: 1,
+                                            overflow: 
+                                              TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: textColor,
+                                              fontSize: 10,
+                                              fontFamily: 'Cairo',
+                                              fontWeight: isSelected 
+                                                || isMyId
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                            )),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
 
@@ -129,103 +245,6 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildScreenColumn(
-    BuildContext context,
-    VideoRoomController controller,
-    String label,
-    List<Map<String, dynamic>> zoneSeats,
-    int seatsPerScreen,
-  ) {
-    zoneSeats.sort((a, b) => (a['seat_number'] as int).compareTo(b['seat_number'] as int));
-
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.withOpacity(0.2)),
-            ),
-            child: Text(label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.blue,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Cairo',
-                )),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: zoneSeats.isEmpty
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                : ListView.builder(
-                    itemCount: zoneSeats.length,
-                    itemBuilder: (context, index) {
-                      final seat = zoneSeats[index];
-                      final seatNum = seat['seat_number'] as int;
-                      final studentId = seat['student_id'];
-                      final studentName = seat['student_name'];
-                      final isMyId = studentId == controller.userId;
-                      final isOccupied = studentId != null && !isMyId;
-                      final isSelected = _selectedSeat == seatNum;
-
-                      Color bgColor = Colors.white.withOpacity(0.03);
-                      Color borderColor = Colors.white10;
-                      Color textColor = Colors.white60;
-                      String text = "مقعد $seatNum";
-
-                      if (isMyId) {
-                        bgColor = Colors.blue;
-                        borderColor = Colors.blue;
-                        textColor = Colors.white;
-                        text = "أنت هنا ✓";
-                      } else if (isOccupied) {
-                        bgColor = Colors.white.withOpacity(0.05);
-                        borderColor = Colors.transparent;
-                        textColor = Colors.white24;
-                        text = studentName ?? "محجوز";
-                      } else if (isSelected) {
-                        bgColor = Colors.blue.withOpacity(0.2);
-                        borderColor = Colors.blue;
-                        textColor = Colors.white;
-                      }
-
-                      return GestureDetector(
-                        onTap: isOccupied || isMyId
-                            ? null
-                            : () => setState(() => _selectedSeat = isSelected ? null : seatNum),
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: bgColor,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: borderColor, width: 1),
-                          ),
-                          child: Text(text,
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: 11,
-                                fontFamily: 'Cairo',
-                                fontWeight: isSelected || isMyId ? FontWeight.bold : FontWeight.normal,
-                              )),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
       ),
     );
   }

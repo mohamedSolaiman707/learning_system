@@ -688,35 +688,37 @@ class DatabaseService {
     }
   }
 
-  Future<void> initializeSeats(String sessionId, {int totalStudents = 24}) async {
+  Future<void> initializeSeats(
+    String sessionId, {
+    int screenCount = 3,
+    int seatsPerScreen = 8,
+  }) async {
     try {
       final existing = await _supabase
-          .from('seats')
-          .select('id')
-          .eq('session_id', sessionId)
-          .limit(1)
-          .maybeSingle();
+        .from('seats')
+        .select('id')
+        .eq('session_id', sessionId)
+        .limit(1)
+        .maybeSingle();
 
-      final seatsPerScreen = max(8, (totalStudents / 3).ceil());
-      final totalSeats = seatsPerScreen * 3;
+      final totalSeats = screenCount * seatsPerScreen;
 
       if (existing == null) {
         final List<Map<String, dynamic>> seats = [];
-        for (int i = 1; i <= totalSeats; i++) {
-          String zone;
-          if (i <= seatsPerScreen) zone = 'right';
-          else if (i <= seatsPerScreen * 2) zone = 'center';
-          else zone = 'left';
-
-          seats.add({
-            'session_id': sessionId,
-            'seat_number': i,
-            'zone': zone,
-          });
+        for (int screen = 1; screen <= screenCount; screen++) {
+          for (int seat = 1; seat <= seatsPerScreen; seat++) {
+            final seatNumber = ((screen - 1) * seatsPerScreen) + seat;
+            seats.add({
+              'session_id': sessionId,
+              'seat_number': seatNumber,
+              'zone': 'screen_$screen',
+            });
+          }
         }
         await _supabase.from('seats').insert(seats);
       } else {
-        final currentSeats = await _supabase
+        // Check if we need more seats
+        final currentMax = await _supabase
           .from('seats')
           .select('seat_number')
           .eq('session_id', sessionId)
@@ -724,20 +726,17 @@ class DatabaseService {
           .limit(1)
           .maybeSingle();
 
-        final currentMax = currentSeats?['seat_number'] ?? 0;
+        final currentTotal = currentMax?['seat_number'] ?? 0;
 
-        if (totalSeats > currentMax) {
+        if (totalSeats > currentTotal) {
           final List<Map<String, dynamic>> newSeats = [];
-          for (int i = currentMax + 1; i <= totalSeats; i++) {
-            String zone;
-            if (i <= seatsPerScreen) zone = 'right';
-            else if (i <= seatsPerScreen * 2) zone = 'center';
-            else zone = 'left';
-
+          for (int i = currentTotal + 1; i <= totalSeats; i++) {
+            // Calculate which screen this seat belongs to
+            final screen = ((i - 1) ~/ seatsPerScreen) + 1;
             newSeats.add({
               'session_id': sessionId,
               'seat_number': i,
-              'zone': zone,
+              'zone': 'screen_$screen',
             });
           }
           await _supabase.from('seats').insert(newSeats);
@@ -745,6 +744,38 @@ class DatabaseService {
       }
     } catch (e) {
       debugPrint("Error initializing seats: $e");
+    }
+  }
+
+  Future<Map<String, dynamic>> getSessionScreenConfig(
+    String sessionId) async {
+    try {
+      final res = await _supabase
+        .from('sessions')
+        .select('screen_count, seats_per_screen')
+        .eq('id', sessionId)
+        .maybeSingle();
+      return {
+        'screen_count': res?['screen_count'] ?? 3,
+        'seats_per_screen': res?['seats_per_screen'] ?? 8,
+      };
+    } catch (e) {
+      return {'screen_count': 3, 'seats_per_screen': 8};
+    }
+  }
+
+  Future<void> updateSessionScreenConfig(
+    String sessionId, {
+    required int screenCount,
+    required int seatsPerScreen,
+  }) async {
+    try {
+      await _supabase.from('sessions').update({
+        'screen_count': screenCount,
+        'seats_per_screen': seatsPerScreen,
+      }).eq('id', sessionId);
+    } catch (e) {
+      debugPrint("Error updating screen config: $e");
     }
   }
 

@@ -122,10 +122,19 @@ class VideoRoomController extends ChangeNotifier {
   String get seatsLayoutKey =>
       _seats.map((s) => '${s['id']}:${s['student_id']}').join('|');
 
-  int get seatsPerScreen {
-    if (_seats.isEmpty) return 8;
-    final rightSeats = _seats.where((s) => s['zone'] == 'right').length;
-    return rightSeats > 0 ? rightSeats : 8;
+  int _screenCount = 3;
+  int _seatsPerScreen = 8;
+  int get screenCount => _screenCount;
+  int get seatsPerScreen => _seatsPerScreen;
+
+  List<String> get screenZones {
+    return List.generate(_screenCount, (i) => 'screen_${i + 1}');
+  }
+
+  List<Map<String, dynamic>> seatsForZone(String zone) {
+    return _seats.where((s) => s['zone'] == zone).toList()..sort(
+      (a, b) => (a['seat_number'] as int).compareTo(b['seat_number'] as int),
+    );
   }
 
   final Map<String, bool> _remoteHandStates = {};
@@ -170,7 +179,7 @@ class VideoRoomController extends ChangeNotifier {
       _selectedChannel =
           roomCameraOrder[(currentIndex + 1) % roomCameraOrder.length];
     }
-    _isWhiteboardOpen = false;
+    // تم إزالة إغلاق السبورة من هنا للسماح بالتبديل
     _triggerHaptic();
     notifyListeners();
   }
@@ -283,7 +292,7 @@ class VideoRoomController extends ChangeNotifier {
       cycleRoomCamera();
     } else {
       _selectedChannel = trackName;
-      _isWhiteboardOpen = false;
+      // تم إزالة إغلاق السبورة من هنا
       notifyListeners();
     }
   }
@@ -562,21 +571,16 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> loadAndExpandSeats() async {
     if (sessionId == null) return;
     try {
-      // Count current online students
-      final participantsCount =
-          _room?.remoteParticipants.values
-              .where(
-                (p) =>
-                    !p.identity.contains('room-cam-') &&
-                    !p.identity.contains('teacher_'),
-              )
-              .length ??
-          0;
+      // Load screen config from session
+      final config = await DatabaseService().getSessionScreenConfig(sessionId!);
+      _screenCount = config['screen_count'];
+      _seatsPerScreen = config['seats_per_screen'];
 
-      // Initialize/expand seats if needed
+      // Initialize seats with config
       await DatabaseService().initializeSeats(
         sessionId!,
-        totalStudents: max(24, participantsCount),
+        screenCount: _screenCount,
+        seatsPerScreen: _seatsPerScreen,
       );
 
       // Load seats
@@ -591,11 +595,30 @@ class VideoRoomController extends ChangeNotifier {
     }
   }
 
+  Future<void> updateScreenConfig({
+    required int screenCount,
+    required int seatsPerScreen,
+  }) async {
+    if (!isTeacher || sessionId == null) return;
+    _screenCount = screenCount;
+    _seatsPerScreen = seatsPerScreen;
+    await DatabaseService().updateSessionScreenConfig(
+      sessionId!,
+      screenCount: screenCount,
+      seatsPerScreen: seatsPerScreen,
+    );
+    // Re-initialize seats with new config
+    await loadAndExpandSeats();
+    notifyListeners();
+  }
+
   Future<bool> claimSeat(int seatNumber) async {
     if (sessionId == null) return false;
 
     final optimistic = _cloneSeats();
-    final seatIdx = optimistic.indexWhere((s) => s['seat_number'] == seatNumber);
+    final seatIdx = optimistic.indexWhere(
+      (s) => s['seat_number'] == seatNumber,
+    );
     if (seatIdx == -1) return false;
 
     for (final s in optimistic) {
@@ -1342,10 +1365,7 @@ class VideoRoomController extends ChangeNotifier {
   void grantPenToStudent(String? studentId) {
     if (!isTeacher) return;
     _authorizedStudentId = studentId;
-    sendData({
-      'type': 'pen_authority_changed',
-      'authorized_id': studentId,
-    });
+    sendData({'type': 'pen_authority_changed', 'authorized_id': studentId});
 
     if (studentId != null) {
       onNotification?.call("تم منح صلاحية الكتابة للطالب", Colors.green);

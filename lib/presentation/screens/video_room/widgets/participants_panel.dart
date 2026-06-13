@@ -185,36 +185,66 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
     );
   }
 
-  Widget _buildSeatingGrid(BuildContext context, VideoRoomController controller) {
-    final seats = controller.seats;
-    if (seats.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+  Widget _buildSeatingGrid(
+    BuildContext context,
+    VideoRoomController controller,
+  ) {
+    if (controller.seats.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator());
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("سحب وإفلات الطالب لتغيير مكانه", 
-            style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.grey)),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final zones = controller.screenZones;
+    final columnsPerRow = zones.length <= 3 ? zones.length
+      : zones.length <= 6 ? 3
+      : 4;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
             children: [
-              _buildZoneColumn(controller, "اليمين", "right"),
-              const SizedBox(width: 8),
-              _buildZoneColumn(controller, "الوسط", "center"),
-              const SizedBox(width: 8),
-              _buildZoneColumn(controller, "اليسار", "left"),
+              const Icon(Icons.info_outline,
+                size: 14, color: Colors.blue),
+              const SizedBox(width: 6),
+              Text(
+                "${zones.length} شاشات — "
+                "${controller.seatsPerScreen} مقاعد/شاشة",
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 12,
+                  color: Colors.blue,
+                )),
             ],
           ),
-        ],
-      ),
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: 
+              SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columnsPerRow,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 0.5,
+              ),
+            itemCount: zones.length,
+            itemBuilder: (context, index) {
+              final zone = zones[index];
+              return _buildScreenColumn(
+                controller,
+                "شاشة ${index + 1}",
+                zone,
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildZoneColumn(
+  Widget _buildScreenColumn(
     VideoRoomController controller,
     String label,
     String zoneKey,
@@ -226,279 +256,340 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
         (a['seat_number'] as int)
           .compareTo(b['seat_number'] as int));
 
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.blue,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'Cairo',
-              )),
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.blue.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
           ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: zoneSeats.length,
-              itemBuilder: (context, index) {
-                final seat = zoneSeats[index];
-                final int seatNum = seat['seat_number'];
-                final String? studentId = seat['student_id'];
-                final String? studentName = 
-                  seat['student_name'];
-                final bool isOccupied = 
-                  studentId != null && 
-                  studentId.isNotEmpty;
+          child: Text(label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.blue,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'Cairo',
+            )),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: zoneSeats.length,
+            itemBuilder: (context, index) {
+              final seat = zoneSeats[index];
+              final int seatNum = seat['seat_number'];
+              final String? studentId = seat['student_id'];
+              final String? studentName = 
+                seat['student_name'];
+              final bool isOccupied = 
+                studentId != null && 
+                studentId.isNotEmpty;
 
-                // Empty seat
-                if (!isOccupied) {
-                  return DragTarget<int>(
-                    onWillAcceptWithDetails: (details) =>
-                      details.data != seatNum,
-                    onAcceptWithDetails: (details) {
-                      controller.moveSeat(
-                        details.data, seatNum);
-                    },
-                    builder: (context, candidate, _) {
-                      return Container(
-                        margin: const EdgeInsets.only(
-                          bottom: 8),
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10, horizontal: 4),
-                        decoration: BoxDecoration(
+              // Empty seat
+              if (!isOccupied) {
+                return DragTarget<int>(
+                  onWillAcceptWithDetails: (details) =>
+                    details.data != seatNum,
+                  onAcceptWithDetails: (details) {
+                    controller.moveSeat(
+                      details.data, seatNum);
+                  },
+                  builder: (context, candidate, _) {
+                    return Container(
+                      margin: const EdgeInsets.only(
+                        bottom: 8),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10, horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: candidate.isNotEmpty
+                          ? Colors.blue.withOpacity(0.2)
+                          : Colors.grey.withOpacity(0.05),
+                        borderRadius: 
+                          BorderRadius.circular(10),
+                        border: Border.all(
                           color: candidate.isNotEmpty
-                            ? Colors.blue.withOpacity(0.2)
-                            : Colors.grey.withOpacity(0.05),
-                          borderRadius: 
-                            BorderRadius.circular(10),
-                          border: Border.all(
+                            ? Colors.blue
+                            : Colors.grey.withOpacity(0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment:
+                          MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            candidate.isNotEmpty
+                              ? Icons.add_circle
+                              : Icons.add_circle_outline,
                             color: candidate.isNotEmpty
                               ? Colors.blue
-                              : Colors.grey.withOpacity(0.2),
-                            width: 1,
+                              : Colors.grey.shade300,
+                            size: 18,
                           ),
-                        ),
-                        child: Column(
-                          mainAxisAlignment:
-                            MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              candidate.isNotEmpty
-                                ? Icons.add_circle
-                                : Icons.add_circle_outline,
+                          const SizedBox(height: 4),
+                          Text(
+                            "مقعد $seatNum",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
                               color: candidate.isNotEmpty
                                 ? Colors.blue
                                 : Colors.grey.shade300,
-                              size: 18,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "مقعد $seatNum",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: candidate.isNotEmpty
-                                  ? Colors.blue
-                                  : Colors.grey.shade300,
-                                fontSize: 9,
-                                fontFamily: 'Cairo',
-                              )),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                }
-
-                // Occupied seat — draggable
-                final seatWidget = Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 10, horizontal: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.blue.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        studentName ?? "طالب",
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.black87,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'Cairo',
-                        )),
-                      const SizedBox(height: 2),
-                      Text(
-                        "مقعد $seatNum",
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontSize: 8,
-                          fontFamily: 'Cairo',
-                        )),
-                      const Icon(
-                        Icons.drag_indicator,
-                        size: 14,
-                        color: Colors.blue,
+                              fontSize: 9,
+                              fontFamily: 'Cairo',
+                            )),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 );
+              }
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: DragTarget<int>(
-                    onWillAcceptWithDetails: (details) =>
-                      details.data != seatNum,
-                    onAcceptWithDetails: (details) {
-                      controller.moveSeat(
-                        details.data, seatNum);
-                    },
-                    builder: (context, candidate, _) {
-                      return Draggable<int>(
-                        data: seatNum,
-                        feedback: Material(
-                          color: Colors.transparent,
-                          child: Container(
-                            width: 100,
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.blue,
-                              borderRadius:
-                                BorderRadius.circular(8),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black38,
-                                  blurRadius: 8,
-                                )
-                              ],
-                            ),
-                            child: Text(
-                              studentName ?? "طالب",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontFamily: 'Cairo',
-                              )),
-                          ),
-                        ),
-                        childWhenDragging: Opacity(
-                          opacity: 0.3,
-                          child: seatWidget,
-                        ),
-                        child: candidate.isNotEmpty
-                          ? Container(
-                              decoration: BoxDecoration(
-                                borderRadius:
-                                  BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: Colors.blue,
-                                  width: 2,
-                                ),
-                              ),
-                              child: seatWidget,
-                            )
-                          : seatWidget,
-                      );
-                    },
+              // Occupied seat — draggable
+              final seatWidget = Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10, horizontal: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.blue.withOpacity(0.3),
+                    width: 1,
                   ),
-                );
-              },
-            ),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      studentName ?? "طالب",
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Cairo',
+                      )),
+                    const SizedBox(height: 2),
+                    Text(
+                      "مقعد $seatNum",
+                      style: const TextStyle(
+                        color: Colors.blue,
+                        fontSize: 8,
+                        fontFamily: 'Cairo',
+                      )),
+                    const Icon(
+                      Icons.drag_indicator,
+                      size: 14,
+                      color: Colors.blue,
+                    ),
+                  ],
+                ),
+              );
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: DragTarget<int>(
+                  onWillAcceptWithDetails: (details) =>
+                    details.data != seatNum,
+                  onAcceptWithDetails: (details) {
+                    controller.moveSeat(
+                      details.data, seatNum);
+                  },
+                  builder: (context, candidate, _) {
+                    return Draggable<int>(
+                      data: seatNum,
+                      feedback: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          width: 100,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue,
+                            borderRadius:
+                              BorderRadius.circular(8),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black38,
+                                blurRadius: 8,
+                              )
+                            ],
+                          ),
+                          child: Text(
+                            studentName ?? "طالب",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.bold,
+                            )),
+                        ),
+                      ),
+                      childWhenDragging: Opacity(
+                        opacity: 0.3,
+                        child: seatWidget,
+                      ),
+                      child: candidate.isNotEmpty
+                        ? Container(
+                            decoration: BoxDecoration(
+                              borderRadius:
+                                BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.blue,
+                                width: 2,
+                              ),
+                            ),
+                            child: seatWidget,
+                          )
+                        : seatWidget,
+                    );
+                  },
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildWallControls(BuildContext context, VideoRoomController controller) {
+  Widget _buildWallControls(
+    BuildContext context,
+    VideoRoomController controller,
+  ) {
+    final zones = controller.screenZones;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.blue.withOpacity(0.05),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.blue.withOpacity(0.1)),
+        border: Border.all(
+          color: Colors.blue.withOpacity(0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.desktop_windows_rounded, color: Colors.blue, size: 18),
-              SizedBox(width: 8),
-              Text(
-                "شاشات عرض الفصل (Wall Display)",
-                style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo', fontSize: 13),
-              ),
-            ],
-          ),
+          const Row(children: [
+            Icon(Icons.desktop_windows_rounded,
+              color: Colors.blue, size: 18),
+            SizedBox(width: 8),
+            Text("شاشات عرض القاعة (Wall Display)",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Cairo',
+                fontSize: 13,
+              )),
+          ]),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildZoneControl(context, controller, 'right', 'اليمنى'),
-              _buildZoneControl(context, controller, 'center', 'الوسطى'),
-              _buildZoneControl(context, controller, 'left', 'اليسرى'),
-            ],
+          // Dynamic grid of screen links
+          GridView.builder(
+            shrinkWrap: true,
+            physics: 
+              const NeverScrollableScrollPhysics(),
+            gridDelegate:
+              SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: zones.length <= 4 
+                  ? zones.length : 4,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1.5,
+              ),
+            itemCount: zones.length,
+            itemBuilder: (context, index) {
+              final zone = zones[index];
+              final baseUrl = Uri.base.origin;
+              final wallUrl = 
+                "$baseUrl/#/wall-display"
+                "?sessionId=${controller.sessionId}"
+                "&zone=$zone"
+                "&roomName=${controller.roomName}";
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: 
+                    BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.blue
+                      .withOpacity(0.2)),
+                ),
+                child: Column(
+                  mainAxisAlignment:
+                    MainAxisAlignment.center,
+                  children: [
+                    Text("شاشة ${index + 1}",
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      )),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment:
+                        MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.open_in_new_rounded,
+                            color: Colors.blue,
+                            size: 18),
+                          onPressed: () => 
+                            launchUrl(
+                              Uri.parse(wallUrl)),
+                          tooltip: "فتح",
+                          padding: EdgeInsets.zero,
+                          constraints: 
+                            const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.copy_rounded,
+                            color: Colors.grey,
+                            size: 16),
+                          onPressed: () {
+                            Clipboard.setData(
+                              ClipboardData(
+                                text: wallUrl));
+                            ScaffoldMessenger
+                              .of(context)
+                              .showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    "تم نسخ رابط "
+                                    "شاشة ${index+1}",
+                                    style: const TextStyle(
+                                      fontFamily: 'Cairo'
+                                    )),
+                                  backgroundColor:
+                                    Colors.green,
+                                  behavior: 
+                                    SnackBarBehavior
+                                      .floating,
+                                ));
+                          },
+                          padding: EdgeInsets.zero,
+                          constraints:
+                            const BoxConstraints(),
+                          tooltip: "نسخ الرابط",
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildZoneControl(BuildContext context, VideoRoomController controller, String zone, String label) {
-    final String baseUrl = Uri.base.origin;
-    final String wallUrl = "$baseUrl/#/wall-display?sessionId=${controller.sessionId}&zone=$zone&roomName=${controller.roomName}";
-
-    return Column(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.open_in_new_rounded, color: Colors.blue, size: 22),
-          onPressed: () => launchUrl(Uri.parse(wallUrl)),
-          tooltip: "فتح في تبويب جديد",
-        ),
-        Text(label, style: const TextStyle(fontSize: 10, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        InkWell(
-          onTap: () {
-            Clipboard.setData(ClipboardData(text: wallUrl));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("تم نسخ رابط الشاشة بنجاح", style: TextStyle(fontFamily: 'Cairo')),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Text("نسخ الرابط", style: TextStyle(fontSize: 9, color: Colors.blue, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
-          ),
-        ),
-      ],
     );
   }
 
@@ -539,6 +630,14 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
           else
             Row(
               children: [
+                IconButton(
+                  icon: const Icon(Icons.tv_rounded,
+                    color: Colors.blue),
+                  tooltip: "إعداد الشاشات",
+                  onPressed: () => _showScreenConfigDialog(
+                    context, controller),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _ActionButton(
                     label: "غرف التقسيم",
@@ -560,6 +659,156 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
               ],
             ),
         ],
+      ),
+    );
+  }
+
+  void _showScreenConfigDialog(
+    BuildContext context,
+    VideoRoomController controller,
+  ) {
+    int screenCount = controller.screenCount;
+    int seatsPerScreen = controller.seatsPerScreen;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDS) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            "إعداد شاشات القاعة",
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontWeight: FontWeight.bold,
+            )),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Screen count
+              Row(
+                mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("عدد الشاشات",
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.bold,
+                    )),
+                  Row(children: [
+                    IconButton(
+                      onPressed: screenCount > 1
+                        ? () => setDS(() => screenCount--)
+                        : null,
+                      icon: const Icon(
+                        Icons.remove_circle_outline,
+                        color: Colors.blue)),
+                    Text("$screenCount",
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      )),
+                    IconButton(
+                      onPressed: screenCount < 20
+                        ? () => setDS(() => screenCount++)
+                        : null,
+                      icon: const Icon(
+                        Icons.add_circle_outline,
+                        color: Colors.blue)),
+                  ]),
+                ],
+              ),
+              const Divider(),
+              // Seats per screen
+              Row(
+                mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("طلاب لكل شاشة",
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.bold,
+                    )),
+                  Row(children: [
+                    IconButton(
+                      onPressed: seatsPerScreen > 4
+                        ? () => setDS(
+                            () => seatsPerScreen--)
+                        : null,
+                      icon: const Icon(
+                        Icons.remove_circle_outline,
+                        color: Colors.blue)),
+                    Text("$seatsPerScreen",
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      )),
+                    IconButton(
+                      onPressed: seatsPerScreen < 16
+                        ? () => setDS(
+                            () => seatsPerScreen++)
+                        : null,
+                      icon: const Icon(
+                        Icons.add_circle_outline,
+                        color: Colors.blue)),
+                  ]),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Summary
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment:
+                    MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.people_alt_rounded,
+                      color: Colors.blue, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      "إجمالي المقاعد: "
+                      "${screenCount * seatsPerScreen} مقعد",
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        color: Colors.blue,
+                        fontWeight: FontWeight.bold,
+                      )),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("إلغاء",
+                style: TextStyle(fontFamily: 'Cairo'))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                shape: RoundedRectangleBorder(
+                  borderRadius: 
+                    BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                controller.updateScreenConfig(
+                  screenCount: screenCount,
+                  seatsPerScreen: seatsPerScreen,
+                );
+                Navigator.pop(context);
+              },
+              child: const Text("حفظ وتطبيق",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.bold,
+                ))),
+          ],
+        ),
       ),
     );
   }

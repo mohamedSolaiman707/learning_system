@@ -65,6 +65,7 @@ class ClassroomParticipantUtils {
 
   static bool isRoomCamActive(Participant? participant) {
     if (participant == null) return false;
+    // إضافة فحص إضافي للتأكد من وجود تراك فعلي يعمل
     return hasCameraVideo(participant);
   }
 
@@ -83,14 +84,20 @@ class ClassroomParticipantUtils {
     Participant? main;
     var isScreenShare = false;
 
+    // المنطق المحسن للأولويات
     if (screenSharer != null) {
       main = screenSharer;
       isScreenShare = true;
     } else if (isRoomCamActive(channelCam)) {
       main = channelCam;
+    } else if (teacher != null && hasCameraVideo(teacher)) {
+      // إذا كان المدرس موجوداً وبث الفيديو نشط، نختاره
+      main = teacher;
     } else if (teacher != null) {
+      // إذا كان المدرس موجوداً حتى بدون فيديو (كخيار افتراضي)
       main = teacher;
     } else {
+      // البحث عن أي مشترك آخر يبث فيديو كخيار أخير
       main = participants
           .where((p) =>
               p is RemoteParticipant &&
@@ -98,8 +105,9 @@ class ClassroomParticipantUtils {
           .firstOrNull;
     }
 
+    // Fallback النهائي
     main ??= teacher ??
-        participants.whereType<RemoteParticipant>().firstOrNull ??
+        participants.where((p) => !p.identity.contains('room-cam-')).firstOrNull ??
         participants.first;
 
     final showFloating = shouldShowTeacherFloatingCard(
@@ -124,13 +132,18 @@ class ClassroomParticipantUtils {
   }) {
     final teacher = findTeacher(participants);
     if (teacher == null) return false;
+    
+    // دائماً نظهر المدرس في كارت عائم إذا كانت السبورة مفتوحة
     if (isWhiteboardOpen) return true;
 
     final screenSharer = findScreenSharingParticipant(participants);
-    if (screenSharer != null) return true;
+    if (screenSharer != null && mainParticipant?.identity == screenSharer.identity) {
+      return true; // المدرس يظهر عائماً فوق الشير سكرين
+    }
 
     final channelCam = findChannelParticipant(participants, selectedChannel);
-    if (isRoomCamActive(channelCam) && mainParticipant?.identity != teacher.identity) {
+    if (isRoomCamActive(channelCam) && mainParticipant?.identity == channelCam.identity) {
+      // إذا كانت كاميرا القاعة هي المعروضة، نظهر المدرس عائماً
       return true;
     }
 

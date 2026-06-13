@@ -38,14 +38,10 @@ class ParticipantGrid extends StatelessWidget {
               return _buildStudentLayout(context, allParticipants, screenSharingParticipant, selectedChannel);
             }
 
-            // --- منطق المدرس ---
-            
-            // إذا كان "وضع جدار الفيديو" مفعلاً عبر الزر
             if (controller.isVideoWallMode) {
               return _buildTeacherVideoWall(context, controller, allParticipants, screenSharingParticipant);
             }
 
-            // الوضع الافتراضي للمدرس: عرض احترافي للمتصلين فقط
             return _buildProfessionalTeacherLayout(context, controller, allParticipants, screenSharingParticipant);
           },
         );
@@ -53,15 +49,15 @@ class ParticipantGrid extends StatelessWidget {
     );
   }
 
-  // الوضع الافتراضي للمدرس: عرض الحاضرين فقط لتركيز أفضل
   Widget _buildProfessionalTeacherLayout(BuildContext context, VideoRoomController controller, List<Participant> allParticipants, Participant? screenSharingParticipant) {
     final isDesktop = Responsive.isDesktop(context);
     
-    // تحديد المشارك الرئيسي (المدرس نفسه أو كاميرا القاعة أو من يشارك الشاشة)
     Participant? mainParticipant = screenSharingParticipant;
     if (mainParticipant == null) {
-      mainParticipant = allParticipants.where((p) => p.identity.contains(controller.selectedChannel)).firstOrNull;
-      if (mainParticipant == null) {
+      final channelCam = allParticipants.where((p) => p.identity.contains(controller.selectedChannel)).firstOrNull;
+      if (channelCam != null && channelCam.isCameraEnabled()) {
+        mainParticipant = channelCam;
+      } else {
         mainParticipant = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
       }
       mainParticipant ??= allParticipants.firstOrNull;
@@ -121,17 +117,25 @@ class ParticipantGrid extends StatelessWidget {
     );
   }
 
-  // واجهة الطالب التقليدية
   Widget _buildStudentLayout(BuildContext context, List<Participant> allParticipants, Participant? screenSharingParticipant, String selectedChannel) {
     final controller = context.read<VideoRoomController>();
-    final teacherParticipant = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
-    final channelParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
-
+    
+    // 1. الأولوية القصوى لمشاركة الشاشة
     if (screenSharingParticipant != null) {
+      final channelParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
       return _buildHybridStudentLayout(context, screenSharingParticipant, channelParticipant);
     }
 
-    final mainToDisplay = channelParticipant ?? teacherParticipant;
+    // 2. البحث عن المدرس (هو البديل الدائم)
+    final teacherParticipant = allParticipants.where((p) => p.identity.toLowerCase().contains('teacher')).firstOrNull;
+    
+    // 3. البحث عن القناة المختارة (بشرط أن تكون نشطة)
+    final channelParticipant = allParticipants.where((p) => p.identity.contains(selectedChannel)).firstOrNull;
+    bool isChannelActive = channelParticipant != null && channelParticipant.isCameraEnabled();
+
+    // 4. تحديد من سيظهر في الشاشة الكبيرة: القناة النشطة أو المدرس
+    final mainToDisplay = isChannelActive ? channelParticipant : teacherParticipant;
+
     if (mainToDisplay != null) {
       return ParticipantTile(
           key: ValueKey("student_main_${mainToDisplay.identity}"),
@@ -140,10 +144,12 @@ class ParticipantGrid extends StatelessWidget {
       );
     }
 
-    return _buildWaitingState();
+    // 5. إذا لم يوجد أحد (الافتراضي)
+    return allParticipants.isNotEmpty 
+      ? ParticipantTile(participant: allParticipants.first, isMainStage: true)
+      : _buildWaitingState();
   }
 
-  // واجهة جدار الفيديو (تظهر فقط عند تفعيل الزر)
   Widget _buildTeacherVideoWall(BuildContext context, VideoRoomController controller, List<Participant> allParticipants, Participant? screenSharingParticipant) {
     final isDesktop = Responsive.isDesktop(context);
     final seats = controller.seats;
@@ -257,7 +263,7 @@ class ParticipantGrid extends StatelessWidget {
             forceShowScreen: true,
           ),
         ),
-        if (camPart != null)
+        if (camPart != null && camPart.isCameraEnabled())
           Positioned(
             top: 20, right: 20,
             child: GestureDetector(

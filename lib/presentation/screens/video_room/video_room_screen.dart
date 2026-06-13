@@ -60,7 +60,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         });
       };
 
-      // تحسين التنبيهات (SnackBar) لتكون ريسبونسف واحترافية
       controller.onNotification = (title, color) {
         if (!mounted) return;
         final bool isDesktop = Responsive.isDesktop(context);
@@ -84,7 +83,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             backgroundColor: color.withOpacity(0.95),
             behavior: SnackBarBehavior.floating,
             elevation: 10,
-            // جعل العرض محدوداً في الديسك توب (Responsive)
             width: isDesktop ? 400 : null, 
             margin: isDesktop ? null : const EdgeInsets.fromLTRB(20, 0, 20, 100),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -335,9 +333,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                             child: Stack(
                               children: [
                                 Positioned.fill(
-                                  child: Selector<VideoRoomController, (String, bool)>(
-                                    selector: (_, c) => (c.selectedChannel, c.isPiPExpanded),
-                                    builder: (context, _, __) => _buildMainStage(controller),
+                                  child: Selector<VideoRoomController, (String, bool, bool)>(
+                                    selector: (_, c) => (c.selectedChannel, c.isPiPExpanded, c.isWhiteboardOpen),
+                                    builder: (context, data, __) => _buildMainStage(controller),
                                   ),
                                 ),
                                 Positioned.fill(
@@ -589,7 +587,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
         // لا تظهر الكارت العائم إذا كان المعلم هو أصلاً المعروض في الشاشة الكبيرة
         // (أي إذا لم تكن السبورة مفتوحة ولم تكن هناك قناة كاميرا نشطة)
-        bool shouldShowFloating = controller.isWhiteboardOpen || isChannelActive || controller.isScreenSharing;
+        bool shouldShowFloating = controller.isWhiteboardOpen || (isChannelActive && !controller.isWhiteboardOpen) || controller.isScreenSharing;
 
         if (!shouldShowFloating) return const SizedBox.shrink();
 
@@ -643,12 +641,23 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         final channelCam = controller.selectedChannel != 'whiteboard'
             ? allParticipants.where((p) => p.identity.contains(controller.selectedChannel)).firstOrNull
             : null;
+
+        // التحقق من فعالية القناة: يجب أن يكون البارتيسيبانت موجوداً وكاميرته مفعلة
         bool isChannelActive = channelCam != null && (channelCam.isCameraEnabled() || channelCam.isScreenShareEnabled());
 
-        // bool isChannelValid = channelCam != null && (channelCam.isCameraEnabled() || channelCam.videoTrackPublications.any((v) => v.isScreenShare));
+        // المنطق المصلح: إذا كانت السبورة مفتوحة، لا نعرض شيئاً تحتها (السبورة ستغطي المكان بـ Positioned.fill الخاص بها)
+        // إذا لم تكن السبورة مفتوحة، نتحقق من القناة المختارة، فإذا كانت غير فعالة نعرض المدرس كافتراضي
+        Participant? mainToDisplay;
+        if (controller.isWhiteboardOpen) {
+          mainToDisplay = null; // سيتم عرض السبورة من الـ Stack الخارجي
+        } else if (isChannelActive) {
+          mainToDisplay = channelCam;
+        } else {
+          mainToDisplay = teacher;
+        }
 
-        Participant? mainToDisplay = isChannelActive ? channelCam : teacher;
         mainToDisplay ??= allParticipants.firstOrNull;
+
         if (mainToDisplay == null) return _buildWaitingState();
 
         return Positioned.fill(

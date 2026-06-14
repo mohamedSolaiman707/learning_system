@@ -65,9 +65,9 @@ class ClassroomParticipantUtils {
   }
 
   /// Resolves main-stage content with improved priority:
-  /// 1. Screen Share
-  /// 2. Teacher with Camera Video (Priority over Room Cams)
-  /// 3. Selected Room Camera (if active)
+  /// 1. Screen Share (Priority 1)
+  /// 2. Teacher if Camera is ON (Priority 2 - Even if not yet fully subscribed)
+  /// 3. Selected Room Camera (Priority 3)
   /// 4. Teacher Avatar (Default)
   static MainStageResolution? resolveMainStage({
     required List<Participant> participants,
@@ -83,17 +83,16 @@ class ClassroomParticipantUtils {
     Participant? main;
     var isScreenShare = false;
 
-    // 1. أولوية قصوى لمشاركة الشاشة
+    // 1. أولوية لمشاركة الشاشة
     if (screenSharer != null) {
       main = screenSharer;
       isScreenShare = true;
     } 
-    // 2. فيديو المدرس (إذا كان مفعلاً) - لضمان ظهوره للطالب فوراً
-    else if (teacher != null && hasCameraVideo(teacher)) {
+    // 2. فيديو المدرس (بمجرد تفعيل الكاميرا) لضمان ظهوره للطالب فوراً
+    else if (teacher != null && teacher.isCameraEnabled()) {
       main = teacher;
     }
-
-    // 3. كاميرا القاعة المختارة (إذا كانت تبث فيديو ولم يكن المدرس فاتح كاميرا)
+    // 3. كاميرا القاعة المختارة (إذا كانت نشطة)
     else if (isRoomCamActive(channelCam)) {
       main = channelCam;
     } 
@@ -101,9 +100,13 @@ class ClassroomParticipantUtils {
     else if (teacher != null) {
       main = teacher;
     }
-    // 5. أي مشترك آخر يبث فيديو كخيار احتياطي
+    // 5. Fallback لأي مشترك آخر يبث فيديو
     else {
-      main = participants.first;
+      main = participants
+          .where((p) =>
+              p is RemoteParticipant &&
+              (hasCameraVideo(p) || hasScreenShareVideo(p)))
+          .firstOrNull;
     }
 
     // Fallback النهائي جداً

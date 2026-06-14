@@ -32,33 +32,10 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
     final screenZones = controller.screenZones;
     final screenCount = controller.screenCount;
 
-    // Show loading state when seats is empty
+    // If seats are not loaded yet, don't show the dialog content
+    // The parent screen should handle waiting for data before opening this dialog.
     if (seats.isEmpty) {
-      return Dialog(
-        backgroundColor: const Color(0xFF1A1B1F),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24)),
-        child: const SizedBox(
-          width: 400, height: 300,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(
-                  color: Colors.blue),
-                SizedBox(height: 16),
-                Text(
-                  "جاري تحميل المقاعد...",
-                  style: TextStyle(
-                    color: Colors.white54,
-                    fontFamily: 'Cairo',
-                    fontSize: 14,
-                  )),
-              ],
-            ),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     // Determine columns per row based on screen count

@@ -133,9 +133,16 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     if (!mounted || widget.isTeacher) return;
     final controller = context.read<VideoRoomController>();
 
+    // نمنع فتح الحوار إذا كان هناك تحميل أو إذا كانت المقاعد فارغة تماماً
     if (!controller.seatPickerShown &&
         !_isSeatPickerOpen &&
-        !controller.isLoading) {
+        !controller.isLoading &&
+        controller.seats.isNotEmpty) {
+      
+      // تأكد من أن هناك بيانات فعلية (مثلاً وجود زون واحد على الأقل)
+      final hasData = controller.seats.any((s) => s['zone'] != null);
+      if (!hasData) return;
+
       setState(() => _isSeatPickerOpen = true);
       showDialog(
         context: context,
@@ -610,19 +617,21 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
           const Spacer(),
           Row(
             children: [
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(
-                  Icons.person_pin_rounded,
-                  color: Colors.white54,
+              if (widget.isTeacher) ...[
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(
+                    Icons.person_pin_rounded,
+                    color: Colors.white54,
+                  ),
+                  tooltip: "الملف الشخصي",
                 ),
-                tooltip: "الملف الشخصي",
-              ),
-              IconButton(
-                onPressed: _showSettingsDialog,
-                icon: const Icon(Icons.settings, color: Colors.white54),
-                tooltip: "الإعدادات",
-              ),
+                IconButton(
+                  onPressed: _showSettingsDialog,
+                  icon: const Icon(Icons.settings, color: Colors.white54),
+                  tooltip: "الإعدادات",
+                ),
+              ],
               IconButton(
                 onPressed: () => _showExitConfirmation(context, controller),
                 icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),

@@ -191,11 +191,9 @@ class DatabaseService {
       
       double totalMinutes = 0;
       int completedSessions = 0;
-      if (attendanceRes != null) {
-        for (var row in (attendanceRes as List)) {
-          totalMinutes += (row['total_duration_minutes'] ?? 0);
-          completedSessions++;
-        }
+      for (var row in (attendanceRes as List)) {
+        totalMinutes += (row['total_duration_minutes'] ?? 0);
+        completedSessions++;
       }
 
       final quizRes = await _supabase
@@ -204,11 +202,9 @@ class DatabaseService {
           .eq('student_id', studentId);
       
       int quizPoints = 0;
-      if (quizRes != null) {
-        for (var row in (quizRes as List)) {
-          if (row['is_correct'] == true) {
-            quizPoints += 10;
-          }
+      for (var row in (quizRes as List)) {
+        if (row['is_correct'] == true) {
+          quizPoints += 10;
         }
       }
 

@@ -133,16 +133,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     if (!mounted || widget.isTeacher) return;
     final controller = context.read<VideoRoomController>();
 
-    // نمنع فتح الحوار إذا كان هناك تحميل أو إذا كانت المقاعد فارغة تماماً
+    // Open picker if not shown, not already open, and controller finished initial loading
     if (!controller.seatPickerShown &&
         !_isSeatPickerOpen &&
-        !controller.isLoading &&
-        controller.seats.isNotEmpty) {
+        !controller.isLoading) {
       
-      // تأكد من أن هناك بيانات فعلية (مثلاً وجود زون واحد على الأقل)
-      final hasData = controller.seats.any((s) => s['zone'] != null);
-      if (!hasData) return;
-
       setState(() => _isSeatPickerOpen = true);
       showDialog(
         context: context,

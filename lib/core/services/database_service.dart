@@ -620,6 +620,7 @@ class DatabaseService {
 
   // --- Virtual Seating ---
   Future<List<Map<String, dynamic>>> getSeats(String sessionId) async {
+    if (sessionId.isEmpty) return [];
     try {
       final response = await _supabase
           .from('seats')
@@ -628,7 +629,8 @@ class DatabaseService {
           .order('seat_number', ascending: true);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      rethrow;
+      debugPrint("getSeats error: $e");
+      return [];
     }
   }
 
@@ -693,6 +695,7 @@ class DatabaseService {
         int screenCount = 3,
         int seatsPerScreen = 8,
       }) async {
+    if (sessionId.isEmpty) return;
     try {
       // 1. جلب كافة المقاعد الحالية للحصة
       final existingRes = await _supabase
@@ -721,7 +724,6 @@ class DatabaseService {
       }
 
       // 3. تحديث كافة الـ Zones لضمان توافقها مع التقسيم الحالي (screen_n)
-      // هذا سيقوم بتحويل المقاعد القديمة (right, center, left) إلى (screen_1, screen_2...)
       for (int screen = 1; screen <= screenCount; screen++) {
         final int startSeat = ((screen - 1) * seatsPerScreen) + 1;
         final int endSeat = screen * seatsPerScreen;
@@ -740,6 +742,7 @@ class DatabaseService {
 
   Future<Map<String, dynamic>> getSessionScreenConfig(
       String sessionId) async {
+    if (sessionId.isEmpty) return {'screen_count': 3, 'seats_per_screen': 8};
     try {
       final res = await _supabase
           .from('sessions')

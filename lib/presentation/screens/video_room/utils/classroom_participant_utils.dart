@@ -38,19 +38,20 @@ class ClassroomParticipantUtils {
   }
 
   static bool hasCameraVideo(Participant participant) {
+    // We check if camera is enabled. In LiveKit, if it's enabled, a track should be available or upcoming.
     if (!participant.isCameraEnabled()) return false;
+    
+    // Check publications more carefully
     return participant.videoTrackPublications.any((pub) =>
         !pub.isScreenShare &&
-        pub.track != null &&
-        (participant is LocalParticipant || pub.subscribed));
+        (participant is LocalParticipant || pub.subscribed || pub.track != null));
   }
 
   static bool hasScreenShareVideo(Participant participant) {
     if (!participant.isScreenShareEnabled()) return false;
     return participant.videoTrackPublications.any((pub) =>
         pub.isScreenShare &&
-        pub.track != null &&
-        (participant is LocalParticipant || pub.subscribed));
+        (participant is LocalParticipant || pub.subscribed || pub.track != null));
   }
 
   static Participant? findScreenSharingParticipant(
@@ -61,14 +62,15 @@ class ClassroomParticipantUtils {
 
   static bool isRoomCamActive(Participant? participant) {
     if (participant == null) return false;
+    // Room cams are considered active if they are transmitting video
     return hasCameraVideo(participant);
   }
 
   /// Resolves main-stage content with improved priority:
   /// 1. Screen Share (Priority 1)
-  /// 2. Teacher if Camera is ON (Priority 2 - Even if not yet fully subscribed)
-  /// 3. Selected Room Camera (Priority 3)
-  /// 4. Teacher Avatar (Default)
+  /// 2. Teacher (Priority 2) - Preferred if they exist, even if camera is off (shows avatar)
+  /// 3. Selected Room Camera (Priority 3) - Only if actively streaming video
+  /// 4. Any other participant with video
   static MainStageResolution? resolveMainStage({
     required List<Participant> participants,
     required String selectedChannel,
@@ -83,24 +85,20 @@ class ClassroomParticipantUtils {
     Participant? main;
     var isScreenShare = false;
 
-    // 1. أولوية لمشاركة الشاشة
+    // 1. أولوية مطلقة لمشاركة الشاشة
     if (screenSharer != null) {
       main = screenSharer;
       isScreenShare = true;
     } 
-    // 2. فيديو المدرس (بمجرد تفعيل الكاميرا) لضمان ظهوره للطالب فوراً
-    else if (teacher != null && teacher.isCameraEnabled()) {
+    // 2. المدرس هو الخيار المفضل دائماً (ليظهر للطالب فوراً)
+    else if (teacher != null) {
       main = teacher;
     }
     // 3. كاميرا القاعة المختارة (إذا كانت نشطة)
     else if (isRoomCamActive(channelCam)) {
       main = channelCam;
     } 
-    // 4. المدرس كخيار افتراضي (Avatar)
-    else if (teacher != null) {
-      main = teacher;
-    }
-    // 5. Fallback لأي مشترك آخر يبث فيديو
+    // 4. Fallback لأي مشترك آخر يبث فيديو
     else {
       main = participants
           .where((p) =>
@@ -137,8 +135,10 @@ class ClassroomParticipantUtils {
     final teacher = findTeacher(participants);
     if (teacher == null) return false;
     
+    // دائماً نظهر المدرس في كارت عائم إذا كانت السبورة مفتوحة
     if (isWhiteboardOpen) return true;
 
+    // إذا كان المعروض حالياً في الشاشة الرئيسية ليس المدرس (مثل شاشة مشاركة أو كاميرا قاعة)، نظهر المدرس عائماً
     if (mainParticipant != null && mainParticipant.identity != teacher.identity) {
       return true;
     }

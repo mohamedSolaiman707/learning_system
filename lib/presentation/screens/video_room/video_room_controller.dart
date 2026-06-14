@@ -179,7 +179,6 @@ class VideoRoomController extends ChangeNotifier {
       _selectedChannel =
           roomCameraOrder[(currentIndex + 1) % roomCameraOrder.length];
     }
-    // تم إزالة إغلاق السبورة من هنا للسماح بالتبديل
     _triggerHaptic();
     notifyListeners();
   }
@@ -256,7 +255,6 @@ class VideoRoomController extends ChangeNotifier {
         return;
       }
     }
-    // No active room cam — UI falls back to teacher via ClassroomParticipantUtils.
     _notify(immediate: true);
   }
 
@@ -292,7 +290,6 @@ class VideoRoomController extends ChangeNotifier {
       cycleRoomCamera();
     } else {
       _selectedChannel = trackName;
-      // تم إزالة إغلاق السبورة من هنا
       notifyListeners();
     }
   }
@@ -514,7 +511,6 @@ class VideoRoomController extends ChangeNotifier {
       return;
     }
 
-    // بدئ الاستماع للمقاعد فوراً قبل أي انتظار طويل
     if (sessionId != null) {
       _seatsSubscription = supabase
           .from('seats')
@@ -542,7 +538,7 @@ class VideoRoomController extends ChangeNotifier {
     try {
       await _loadChatHistory();
       await _loadActiveLiveQuestion();
-      if (isTeacher && sessionId != null) {
+      if (sessionId != null) {
         await DatabaseService().initializeSeats(sessionId!);
       }
       await loadAndExpandSeats();
@@ -571,27 +567,20 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> loadAndExpandSeats() async {
     if (sessionId == null) return;
     try {
-      // Load screen config from session
       final config = await DatabaseService().getSessionScreenConfig(sessionId!);
       _screenCount = config['screen_count'];
       _seatsPerScreen = config['seats_per_screen'];
 
-      // Initialize seats with config
       await DatabaseService().initializeSeats(
         sessionId!,
         screenCount: _screenCount,
         seatsPerScreen: _seatsPerScreen,
       );
 
-      // Load seats
       final data = await DatabaseService().getSeats(sessionId!);
       _applySeatsFromServer(data);
     } catch (e) {
       debugPrint("loadAndExpandSeats error: $e");
-      try {
-        final data = await DatabaseService().getSeats(sessionId!);
-        if (data.isNotEmpty) _applySeatsFromServer(data);
-      } catch (_) {}
     }
   }
 
@@ -607,7 +596,6 @@ class VideoRoomController extends ChangeNotifier {
       screenCount: screenCount,
       seatsPerScreen: seatsPerScreen,
     );
-    // Re-initialize seats with new config
     await loadAndExpandSeats();
     notifyListeners();
   }
@@ -724,6 +712,8 @@ class VideoRoomController extends ChangeNotifier {
       final DateTime endTime = DateTime.parse(res['end_time']);
       _isRecording = res['is_recording'] ?? false;
       _isRecordingPaused = res['is_recording_paused'] ?? false;
+      _screenCount = res['screen_count'] ?? 3;
+      _seatsPerScreen = res['seats_per_screen'] ?? 8;
 
       if (_isRecording && !isTeacher) {
         Future.delayed(const Duration(seconds: 3), () {
@@ -745,6 +735,16 @@ class VideoRoomController extends ChangeNotifier {
           .listen((data) {
             if (data.isNotEmpty) {
               final sessionData = data.first;
+              
+              // Real-time screen config sync
+              int newScreenCount = sessionData['screen_count'] ?? 3;
+              int newSeatsPerScreen = sessionData['seats_per_screen'] ?? 8;
+              if (newScreenCount != _screenCount || newSeatsPerScreen != _seatsPerScreen) {
+                _screenCount = newScreenCount;
+                _seatsPerScreen = newSeatsPerScreen;
+                loadAndExpandSeats();
+              }
+
               bool dbRecording = sessionData['is_recording'] ?? false;
               bool dbPaused = sessionData['is_recording_paused'] ?? false;
               if (dbRecording != _isRecording ||

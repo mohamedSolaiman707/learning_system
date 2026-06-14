@@ -260,7 +260,6 @@ class DatabaseService {
     }
   }
 
-  // ... rest of the file ...
   Future<void> addRecordingRecord(Map<String, dynamic> data) async {
     try {
       await _supabase.from('recordings').insert(data);
@@ -530,7 +529,7 @@ class DatabaseService {
     if (dateStr == null || dateStr == '---') return '---';
     try {
       final dt = DateTime.parse(dateStr).toLocal();
-      // تحويل الوقت لنظام 12 ساعة مع ص/م
+      // نظام 12 ساعة
       final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
       final period = dt.hour >= 12 ? 'م' : 'ص';
       return "${hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} $period";
@@ -694,20 +693,25 @@ class DatabaseService {
     int seatsPerScreen = 8,
   }) async {
     try {
-      // 1. جلب كافة المقاعد الحالية للحصة
-      final existingRes = await _supabase
-        .from('seats')
-        .select('id, seat_number, zone')
-        .eq('session_id', sessionId)
-        .order('seat_number', ascending: true);
-      
-      final List<dynamic> existingSeats = existingRes as List<dynamic>;
       final int totalSeatsNeeded = screenCount * seatsPerScreen;
 
-      // 2. إضافة مقاعد جديدة إذا كان العدد المطلوب أكبر من الحالي
+      // 1. جلب كافة المقاعد الحالية للحصة
+      final existingRes = await _supabase
+          .from('seats')
+          .select('seat_number')
+          .eq('session_id', sessionId);
+      
+      final List existingSeats = existingRes as List;
+
+      // 2. إضافة المقاعد المفقودة
       if (existingSeats.length < totalSeatsNeeded) {
         final List<Map<String, dynamic>> newSeats = [];
-        for (int i = existingSeats.length + 1; i <= totalSeatsNeeded; i++) {
+        int maxExisting = 0;
+        if (existingSeats.isNotEmpty) {
+           maxExisting = existingSeats.map((e) => e['seat_number'] as int).reduce(max);
+        }
+        
+        for (int i = maxExisting + 1; i <= totalSeatsNeeded; i++) {
           final int screen = ((i - 1) ~/ seatsPerScreen) + 1;
           newSeats.add({
             'session_id': sessionId,
@@ -721,17 +725,16 @@ class DatabaseService {
       }
 
       // 3. تحديث كافة الـ Zones لضمان توافقها مع التقسيم الحالي (screen_n)
-      // هذا سيقوم بتحويل المقاعد القديمة (right, center, left) إلى (screen_1, screen_2...)
       for (int screen = 1; screen <= screenCount; screen++) {
         final int startSeat = ((screen - 1) * seatsPerScreen) + 1;
         final int endSeat = screen * seatsPerScreen;
         
         await _supabase
-          .from('seats')
-          .update({'zone': 'screen_$screen'})
-          .eq('session_id', sessionId)
-          .gte('seat_number', startSeat)
-          .lte('seat_number', endSeat);
+            .from('seats')
+            .update({'zone': 'screen_$screen'})
+            .eq('session_id', sessionId)
+            .gte('seat_number', startSeat)
+            .lte('seat_number', endSeat);
       }
     } catch (e) {
       debugPrint("Error initializing seats: $e");

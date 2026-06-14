@@ -64,7 +64,11 @@ class ClassroomParticipantUtils {
     return hasCameraVideo(participant);
   }
 
-  /// Resolves main-stage content. Returns null only when [participants] is empty.
+  /// Resolves main-stage content with improved priority:
+  /// 1. Screen Share
+  /// 2. Teacher with Camera Video (Priority over Room Cams)
+  /// 3. Selected Room Camera (if active)
+  /// 4. Teacher Avatar (Default)
   static MainStageResolution? resolveMainStage({
     required List<Participant> participants,
     required String selectedChannel,
@@ -79,26 +83,27 @@ class ClassroomParticipantUtils {
     Participant? main;
     var isScreenShare = false;
 
-    // 1. أولوية لمشاركة الشاشة
+    // 1. أولوية قصوى لمشاركة الشاشة
     if (screenSharer != null) {
       main = screenSharer;
       isScreenShare = true;
     } 
-    // 2. كاميرا القاعة المختارة (إذا كانت نشطة)
+    // 2. فيديو المدرس (إذا كان مفعلاً) - لضمان ظهوره للطالب فوراً
+    else if (teacher != null && hasCameraVideo(teacher)) {
+      main = teacher;
+    }
+
+    // 3. كاميرا القاعة المختارة (إذا كانت تبث فيديو ولم يكن المدرس فاتح كاميرا)
     else if (isRoomCamActive(channelCam)) {
       main = channelCam;
     } 
-    // 3. المدرس هو الخيار الافتراضي (سواء فيديو أو Avatar)
+    // 4. المدرس كخيار افتراضي (Avatar)
     else if (teacher != null) {
       main = teacher;
     }
-    // 4. Fallback لأي مشترك آخر يبث فيديو
+    // 5. أي مشترك آخر يبث فيديو كخيار احتياطي
     else {
-      main = participants
-          .where((p) =>
-              p is RemoteParticipant &&
-              (hasCameraVideo(p) || hasScreenShareVideo(p)))
-          .firstOrNull;
+      main = participants.first;
     }
 
     // Fallback النهائي جداً
@@ -129,10 +134,8 @@ class ClassroomParticipantUtils {
     final teacher = findTeacher(participants);
     if (teacher == null) return false;
     
-    // دائماً نظهر المدرس في كارت عائم إذا كانت السبورة مفتوحة
     if (isWhiteboardOpen) return true;
 
-    // إذا كان المعروض حالياً هو الشاشة أو كاميرا القاعة، نظهر المدرس عائماً
     if (mainParticipant != null && mainParticipant.identity != teacher.identity) {
       return true;
     }

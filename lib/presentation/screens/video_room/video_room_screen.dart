@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:showcaseview/showcaseview.dart';
@@ -135,8 +134,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
     // Open picker if not shown, not already open, and controller finished initial loading
     if (!controller.seatPickerShown &&
-        !_isSeatPickerOpen &&
-        !controller.isLoading) {
+        !_isSeatPickerOpen) {
       
       setState(() => _isSeatPickerOpen = true);
       showDialog(

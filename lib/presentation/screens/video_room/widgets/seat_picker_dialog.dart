@@ -16,7 +16,6 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
   @override
   void initState() {
     super.initState();
-    // Load seats when dialog opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctrl = context.read<VideoRoomController>();
       if (ctrl.seats.isEmpty) {
@@ -32,13 +31,32 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
     final screenZones = controller.screenZones;
     final screenCount = controller.screenCount;
 
-    // If seats are not loaded yet, don't show the dialog content
-    // The parent screen should handle waiting for data before opening this dialog.
+    // إذا كانت المقاعد فارغة، نظهر حالة التحميل داخل الحوار لمنع الطالب من الدخول للايف
     if (seats.isEmpty) {
-      return const SizedBox.shrink();
+      return Dialog(
+        backgroundColor: const Color(0xFF1A1B1F),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: const SizedBox(
+          width: 400, height: 300,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(color: Colors.blue),
+                SizedBox(height: 16),
+                Text("جاري تحميل خريطة المقاعد...",
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontFamily: 'Cairo',
+                      fontSize: 14,
+                    )),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
-    // Determine columns per row based on screen count
     final columnsPerRow = screenCount <= 3 ? screenCount
       : screenCount <= 6 ? 3
       : screenCount <= 9 ? 3
@@ -94,16 +112,13 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
 
                       return Column(
                         children: [
-                          // Screen label
                           Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 6),
+                            padding: const EdgeInsets.symmetric(vertical: 6),
                             decoration: BoxDecoration(
                               color: Colors.blue.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Colors.blue.withOpacity(0.3)),
+                              border: Border.all(color: Colors.blue.withOpacity(0.3)),
                             ),
                             child: Text(
                               "📺 شاشة ${index + 1}",
@@ -117,27 +132,19 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
                           ),
                           const SizedBox(height: 8),
 
-                          // Seats
                           Expanded(
                             child: ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                minHeight: 200,
-                                maxHeight: 400,
-                              ),
+                              constraints: const BoxConstraints(minHeight: 200, maxHeight: 400),
                               child: ListView.builder(
                                 itemCount: zoneSeats.length,
                                 itemBuilder: (context, si) {
                                   final seat = zoneSeats[si];
-                                  final seatNum = 
-                                    seat['seat_number'] as int;
+                                  final seatNum = seat['seat_number'] as int;
                                   final studentId = seat['student_id'];
                                   final studentName = seat['student_name'];
-                                  final isMyId = studentId == 
-                                    controller.userId;
-                                  final isOccupied = studentId != null 
-                                    && !isMyId;
-                                  final isSelected = 
-                                    _selectedSeat == seatNum;
+                                  final isMyId = studentId == controller.userId;
+                                  final isOccupied = studentId != null && !isMyId;
+                                  final isSelected = _selectedSeat == seatNum;
 
                                   Color bgColor = Colors.transparent;
                                   Color borderColor = Colors.white24;
@@ -150,60 +157,41 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
                                     textColor = Colors.white;
                                     text = "أنت ✓";
                                   } else if (isOccupied) {
-                                    bgColor = Colors.white
-                                      .withOpacity(0.05);
+                                    bgColor = Colors.white.withOpacity(0.05);
                                     borderColor = Colors.transparent;
                                     textColor = Colors.white38;
                                     text = studentName ?? "محجوز";
                                   } else if (isSelected) {
-                                    bgColor = Colors.blue
-                                      .withOpacity(0.3);
+                                    bgColor = Colors.blue.withOpacity(0.3);
                                     borderColor = Colors.blue;
                                     textColor = Colors.white;
                                   }
 
                                   return GestureDetector(
-                                    onTap: isOccupied || isMyId 
-                                      ? null 
-                                      : () => setState(() =>
-                                        _selectedSeat = isSelected 
-                                          ? null : seatNum),
+                                    onTap: isOccupied || isMyId ? null : () => setState(() => _selectedSeat = isSelected ? null : seatNum),
                                     child: Container(
-                                      margin: const EdgeInsets.only(
-                                        bottom: 5),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 8),
+                                      margin: const EdgeInsets.only(bottom: 5),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                                       decoration: BoxDecoration(
                                         color: bgColor,
-                                        borderRadius: 
-                                          BorderRadius.circular(7),
-                                        border: Border.all(
-                                          color: borderColor, width: 1),
+                                        borderRadius: BorderRadius.circular(7),
+                                        border: Border.all(color: borderColor, width: 1),
                                       ),
                                       child: Row(
-                                        mainAxisAlignment:
-                                          MainAxisAlignment.center,
+                                        mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          if (isOccupied)
-                                            const Icon(Icons.person,
-                                              color: Colors.white24,
-                                              size: 10),
-                                          if (isOccupied)
-                                            const SizedBox(width: 3),
+                                          if (isOccupied) const Icon(Icons.person, color: Colors.white24, size: 10),
+                                          if (isOccupied) const SizedBox(width: 3),
                                           Flexible(
                                             child: Text(text,
                                               textAlign: TextAlign.center,
                                               maxLines: 1,
-                                              overflow: 
-                                                TextOverflow.ellipsis,
+                                              overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 color: textColor,
                                                 fontSize: 10,
                                                 fontFamily: 'Cairo',
-                                                fontWeight: isSelected 
-                                                  || isMyId
-                                                  ? FontWeight.bold
-                                                  : FontWeight.normal,
+                                                fontWeight: isSelected || isMyId ? FontWeight.bold : FontWeight.normal,
                                               )),
                                           ),
                                         ],
@@ -222,7 +210,6 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
 
                 const SizedBox(height: 20),
 
-                // Confirm button
                 SizedBox(
                   width: double.infinity,
                   height: 55,
@@ -240,8 +227,7 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
                                 _selectedSeat = null;
                               });
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                content: Text("المقعد محجوز، اختر مقعداً آخر",
-                                    style: TextStyle(fontFamily: 'Cairo')),
+                                content: Text("المقعد محجوز، اختر مقعداً آخر", style: TextStyle(fontFamily: 'Cairo')),
                                 backgroundColor: Colors.red,
                                 behavior: SnackBarBehavior.floating,
                               ));
@@ -252,10 +238,7 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     ),
                     child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Text("تأكيد المكان الآن",
                             style: TextStyle(
                               color: Colors.white,

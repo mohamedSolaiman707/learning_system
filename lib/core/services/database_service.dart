@@ -188,31 +188,35 @@ class DatabaseService {
           .from('attendance')
           .select('total_duration_minutes')
           .eq('student_id', studentId);
-      
+
       double totalMinutes = 0;
       int completedSessions = 0;
-      for (var row in (attendanceRes as List)) {
-        totalMinutes += (row['total_duration_minutes'] ?? 0);
-        completedSessions++;
+      if (attendanceRes != null) {
+        for (var row in (attendanceRes as List)) {
+          totalMinutes += (row['total_duration_minutes'] ?? 0);
+          completedSessions++;
+        }
       }
 
       final quizRes = await _supabase
           .from('quiz_results')
           .select('is_correct')
           .eq('student_id', studentId);
-      
+
       int quizPoints = 0;
-      for (var row in (quizRes as List)) {
-        if (row['is_correct'] == true) {
-          quizPoints += 10;
+      if (quizRes != null) {
+        for (var row in (quizRes as List)) {
+          if (row['is_correct'] == true) {
+            quizPoints += 10;
+          }
         }
       }
 
       int hours = (totalMinutes / 60).floor();
       int mins = (totalMinutes % 60).round();
 
-      String formattedHours = hours > 0 
-          ? "$hours س ${mins > 0 ? 'و $mins د' : ''}" 
+      String formattedHours = hours > 0
+          ? "$hours س ${mins > 0 ? 'و $mins د' : ''}"
           : "$mins دقيقة";
 
       return {
@@ -256,6 +260,7 @@ class DatabaseService {
     }
   }
 
+  // ... rest of the file ...
   Future<void> addRecordingRecord(Map<String, dynamic> data) async {
     try {
       await _supabase.from('recordings').insert(data);
@@ -396,18 +401,18 @@ class DatabaseService {
   }
 
   Future<void> logStudentEntry(
-    String sessionId, 
-    String studentId, 
-    String studentName,
-  ) async {
+      String sessionId,
+      String studentId,
+      String studentName,
+      ) async {
     try {
       final result = await _supabase.rpc('log_student_entry', params: {
         'p_student_id': studentId,
         'p_student_name': studentName,
         'p_session_id': sessionId,
       });
-      
-      if (result['success'] == false && 
+
+      if (result['success'] == false &&
           result['reason'] == 'kicked') {
         debugPrint("Student $studentId is kicked");
       }
@@ -426,7 +431,7 @@ class DatabaseService {
 
       if (record != null) {
         if (record['status'] == 'kicked') return;
-        if (record['left_at'] != null) return; 
+        if (record['left_at'] != null) return;
 
         final joinTime = record['joined_at'] != null ? DateTime.parse(record['joined_at']) : DateTime.now().toUtc();
         final exitTime = DateTime.now().toUtc();
@@ -525,7 +530,7 @@ class DatabaseService {
     if (dateStr == null || dateStr == '---') return '---';
     try {
       final dt = DateTime.parse(dateStr).toLocal();
-      // نظام 12 ساعة
+      // تحويل الوقت لنظام 12 ساعة مع ص/م
       final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
       final period = dt.hour >= 12 ? 'م' : 'ص';
       return "${hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} $period";
@@ -656,9 +661,9 @@ class DatabaseService {
       await _supabase
           .from('seats')
           .update({
-            'student_id': (studentId == null || studentId.isEmpty) ? null : studentId,
-            'student_name': (studentName == null || studentName.isEmpty) ? null : studentName,
-          })
+        'student_id': (studentId == null || studentId.isEmpty) ? null : studentId,
+        'student_name': (studentName == null || studentName.isEmpty) ? null : studentName,
+      })
           .eq('session_id', sessionId)
           .eq('seat_number', seatNumber);
     } catch (e) {
@@ -684,30 +689,25 @@ class DatabaseService {
   }
 
   Future<void> initializeSeats(
-    String sessionId, {
-    int screenCount = 3,
-    int seatsPerScreen = 8,
-  }) async {
+      String sessionId, {
+        int screenCount = 3,
+        int seatsPerScreen = 8,
+      }) async {
     try {
-      final int totalSeatsNeeded = screenCount * seatsPerScreen;
-
       // 1. جلب كافة المقاعد الحالية للحصة
       final existingRes = await _supabase
           .from('seats')
-          .select('seat_number')
-          .eq('session_id', sessionId);
-      
-      final List existingSeats = existingRes as List;
+          .select('id, seat_number, zone')
+          .eq('session_id', sessionId)
+          .order('seat_number', ascending: true);
 
-      // 2. إضافة المقاعد المفقودة
+      final List<dynamic> existingSeats = existingRes as List<dynamic>;
+      final int totalSeatsNeeded = screenCount * seatsPerScreen;
+
+      // 2. إضافة مقاعد جديدة إذا كان العدد المطلوب أكبر من الحالي
       if (existingSeats.length < totalSeatsNeeded) {
         final List<Map<String, dynamic>> newSeats = [];
-        int maxExisting = 0;
-        if (existingSeats.isNotEmpty) {
-           maxExisting = existingSeats.map((e) => e['seat_number'] as int).reduce(max);
-        }
-        
-        for (int i = maxExisting + 1; i <= totalSeatsNeeded; i++) {
+        for (int i = existingSeats.length + 1; i <= totalSeatsNeeded; i++) {
           final int screen = ((i - 1) ~/ seatsPerScreen) + 1;
           newSeats.add({
             'session_id': sessionId,
@@ -721,10 +721,11 @@ class DatabaseService {
       }
 
       // 3. تحديث كافة الـ Zones لضمان توافقها مع التقسيم الحالي (screen_n)
+      // هذا سيقوم بتحويل المقاعد القديمة (right, center, left) إلى (screen_1, screen_2...)
       for (int screen = 1; screen <= screenCount; screen++) {
         final int startSeat = ((screen - 1) * seatsPerScreen) + 1;
         final int endSeat = screen * seatsPerScreen;
-        
+
         await _supabase
             .from('seats')
             .update({'zone': 'screen_$screen'})
@@ -738,13 +739,13 @@ class DatabaseService {
   }
 
   Future<Map<String, dynamic>> getSessionScreenConfig(
-    String sessionId) async {
+      String sessionId) async {
     try {
       final res = await _supabase
-        .from('sessions')
-        .select('screen_count, seats_per_screen')
-        .eq('id', sessionId)
-        .maybeSingle();
+          .from('sessions')
+          .select('screen_count, seats_per_screen')
+          .eq('id', sessionId)
+          .maybeSingle();
       return {
         'screen_count': res?['screen_count'] ?? 3,
         'seats_per_screen': res?['seats_per_screen'] ?? 8,
@@ -755,10 +756,10 @@ class DatabaseService {
   }
 
   Future<void> updateSessionScreenConfig(
-    String sessionId, {
-    required int screenCount,
-    required int seatsPerScreen,
-  }) async {
+      String sessionId, {
+        required int screenCount,
+        required int seatsPerScreen,
+      }) async {
     try {
       await _supabase.from('sessions').update({
         'screen_count': screenCount,

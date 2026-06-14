@@ -133,7 +133,7 @@ class VideoRoomController extends ChangeNotifier {
 
   List<Map<String, dynamic>> seatsForZone(String zone) {
     return _seats.where((s) => s['zone'] == zone).toList()..sort(
-      (a, b) => (a['seat_number'] as int).compareTo(b['seat_number'] as int),
+          (a, b) => (a['seat_number'] as int).compareTo(b['seat_number'] as int),
     );
   }
 
@@ -177,8 +177,9 @@ class VideoRoomController extends ChangeNotifier {
       _selectedChannel = roomCameraOrder.first;
     } else {
       _selectedChannel =
-          roomCameraOrder[(currentIndex + 1) % roomCameraOrder.length];
+      roomCameraOrder[(currentIndex + 1) % roomCameraOrder.length];
     }
+    // تم إزالة إغلاق السبورة من هنا للسماح بالتبديل
     _triggerHaptic();
     notifyListeners();
   }
@@ -217,7 +218,7 @@ class VideoRoomController extends ChangeNotifier {
     _seats = normalized;
     if (!isTeacher) {
       final mySeat = _seats.firstWhere(
-        (s) => s['student_id'] == userId,
+            (s) => s['student_id'] == userId,
         orElse: () => {},
       );
       _seatPickerShown = mySeat.isNotEmpty;
@@ -255,6 +256,7 @@ class VideoRoomController extends ChangeNotifier {
         return;
       }
     }
+    // No active room cam — UI falls back to teacher via ClassroomParticipantUtils.
     _notify(immediate: true);
   }
 
@@ -276,10 +278,10 @@ class VideoRoomController extends ChangeNotifier {
     int totalParticipants = _room!.remoteParticipants.length;
     int activeParticipants =
         _handRaiseQueue.length +
-        (_activePoll != null
-            ? _pollResults.values.fold<int>(0, (a, b) => a + b)
-            : 0) +
-        _questions.where((q) => q['created_at'] != null).length;
+            (_activePoll != null
+                ? _pollResults.values.fold<int>(0, (a, b) => a + b)
+                : 0) +
+            _questions.where((q) => q['created_at'] != null).length;
 
     double score = (activeParticipants / totalParticipants) * 100;
     return score.clamp(0.0, 100.0);
@@ -290,6 +292,7 @@ class VideoRoomController extends ChangeNotifier {
       cycleRoomCamera();
     } else {
       _selectedChannel = trackName;
+      // تم إزالة إغلاق السبورة من هنا
       notifyListeners();
     }
   }
@@ -483,10 +486,10 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> init() async {
     _currentRoomName = roomName;
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      event,
-    ) {
+        event,
+        ) {
       final hasInternet = event.any(
-        (result) => result != ConnectivityResult.none,
+            (result) => result != ConnectivityResult.none,
       );
       if (_isConnected && !hasInternet) {
         _isConnected = false;
@@ -511,6 +514,7 @@ class VideoRoomController extends ChangeNotifier {
       return;
     }
 
+    // بدئ الاستماع للمقاعد فوراً قبل أي انتظار طويل
     if (sessionId != null) {
       _seatsSubscription = supabase
           .from('seats')
@@ -518,8 +522,8 @@ class VideoRoomController extends ChangeNotifier {
           .eq('session_id', sessionId!)
           .listen(
             (data) => _applySeatsFromServer(data),
-            onError: (e) => debugPrint('Seats stream error: $e'),
-          );
+        onError: (e) => debugPrint('Seats stream error: $e'),
+      );
     }
 
     if (sessionId != null && sessionId!.isNotEmpty) {
@@ -538,7 +542,7 @@ class VideoRoomController extends ChangeNotifier {
     try {
       await _loadChatHistory();
       await _loadActiveLiveQuestion();
-      if (sessionId != null) {
+      if (isTeacher && sessionId != null) {
         await DatabaseService().initializeSeats(sessionId!);
       }
       await loadAndExpandSeats();
@@ -567,20 +571,27 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> loadAndExpandSeats() async {
     if (sessionId == null) return;
     try {
+      // Load screen config from session
       final config = await DatabaseService().getSessionScreenConfig(sessionId!);
       _screenCount = config['screen_count'];
       _seatsPerScreen = config['seats_per_screen'];
 
+      // Initialize seats with config
       await DatabaseService().initializeSeats(
         sessionId!,
         screenCount: _screenCount,
         seatsPerScreen: _seatsPerScreen,
       );
 
+      // Load seats
       final data = await DatabaseService().getSeats(sessionId!);
       _applySeatsFromServer(data);
     } catch (e) {
       debugPrint("loadAndExpandSeats error: $e");
+      try {
+        final data = await DatabaseService().getSeats(sessionId!);
+        if (data.isNotEmpty) _applySeatsFromServer(data);
+      } catch (_) {}
     }
   }
 
@@ -596,6 +607,7 @@ class VideoRoomController extends ChangeNotifier {
       screenCount: screenCount,
       seatsPerScreen: seatsPerScreen,
     );
+    // Re-initialize seats with new config
     await loadAndExpandSeats();
     notifyListeners();
   }
@@ -605,7 +617,7 @@ class VideoRoomController extends ChangeNotifier {
 
     final optimistic = _cloneSeats();
     final seatIdx = optimistic.indexWhere(
-      (s) => s['seat_number'] == seatNumber,
+          (s) => s['seat_number'] == seatNumber,
     );
     if (seatIdx == -1) return false;
 
@@ -712,8 +724,6 @@ class VideoRoomController extends ChangeNotifier {
       final DateTime endTime = DateTime.parse(res['end_time']);
       _isRecording = res['is_recording'] ?? false;
       _isRecordingPaused = res['is_recording_paused'] ?? false;
-      _screenCount = res['screen_count'] ?? 3;
-      _seatsPerScreen = res['seats_per_screen'] ?? 8;
 
       if (_isRecording && !isTeacher) {
         Future.delayed(const Duration(seconds: 3), () {
@@ -733,55 +743,45 @@ class VideoRoomController extends ChangeNotifier {
       _statusSubscription = DatabaseService()
           .watchSessionStatus(sessionId!)
           .listen((data) {
-            if (data.isNotEmpty) {
-              final sessionData = data.first;
-              
-              // Real-time screen config sync
-              int newScreenCount = sessionData['screen_count'] ?? 3;
-              int newSeatsPerScreen = sessionData['seats_per_screen'] ?? 8;
-              if (newScreenCount != _screenCount || newSeatsPerScreen != _seatsPerScreen) {
-                _screenCount = newScreenCount;
-                _seatsPerScreen = newSeatsPerScreen;
-                loadAndExpandSeats();
-              }
-
-              bool dbRecording = sessionData['is_recording'] ?? false;
-              bool dbPaused = sessionData['is_recording_paused'] ?? false;
-              if (dbRecording != _isRecording ||
-                  dbPaused != _isRecordingPaused) {
-                _isRecording = dbRecording;
-                _isRecordingPaused = dbPaused;
-                if (_isRecording) {
-                  onNotification?.call(
-                    _isRecordingPaused
-                        ? "⏸️ تم إيقاف التسجيل مؤقتاً"
-                        : "🔴 يتم الآن تسجيل الحصة",
-                    _isRecordingPaused ? Colors.orange : Colors.red,
-                  );
-                } else {
-                  onNotification?.call(
-                    "⏹️ تم إيقاف التسجيل نهائياً",
-                    Colors.blueGrey,
-                  );
-                }
-                notifyListeners();
-              }
-              if (sessionData['status'] == 'ended' ||
-                  sessionData['status'] == 'archived') {
-                onNotification?.call(
-                  "🔴 تم إنهاء البث المباشر.",
-                  Colors.redAccent,
-                );
-                Future.delayed(
-                  const Duration(seconds: 3),
-                  () => onSessionEnded?.call("انتهت الحصة الدراسية."),
-                );
-              }
+        if (data.isNotEmpty) {
+          final sessionData = data.first;
+          bool dbRecording = sessionData['is_recording'] ?? false;
+          bool dbPaused = sessionData['is_recording_paused'] ?? false;
+          if (dbRecording != _isRecording ||
+              dbPaused != _isRecordingPaused) {
+            _isRecording = dbRecording;
+            _isRecordingPaused = dbPaused;
+            if (_isRecording) {
+              onNotification?.call(
+                _isRecordingPaused
+                    ? "⏸️ تم إيقاف التسجيل مؤقتاً"
+                    : "🔴 يتم الآن تسجيل الحصة",
+                _isRecordingPaused ? Colors.orange : Colors.red,
+              );
+            } else {
+              onNotification?.call(
+                "⏹️ تم إيقاف التسجيل نهائياً",
+                Colors.blueGrey,
+              );
             }
-          });
+            notifyListeners();
+          }
+          if (sessionData['status'] == 'ended' ||
+              sessionData['status'] == 'archived') {
+            onNotification?.call(
+              "🔴 تم إنهاء البث المباشر.",
+              Colors.redAccent,
+            );
+            Future.delayed(
+              const Duration(seconds: 3),
+                  () => onSessionEnded?.call("انتهت الحصة الدراسية."),
+            );
+          }
+        }
+      });
       _expiryTimer = Timer(
         endTime.difference(DateTime.now()),
-        () => onSessionEnded?.call("انتهى وقت الحصة."),
+            () => onSessionEnded?.call("انتهى وقت الحصة."),
       );
       return true;
     } catch (e) {
@@ -835,12 +835,12 @@ class VideoRoomController extends ChangeNotifier {
           dynacast: true,
           defaultVideoPublishOptions: isTeacher
               ? const VideoPublishOptions(
-                  videoEncoding: VideoEncoding(
-                    maxBitrate: 4000000,
-                    maxFramerate: 30,
-                  ),
-                  simulcast: true,
-                )
+            videoEncoding: VideoEncoding(
+              maxBitrate: 4000000,
+              maxFramerate: 30,
+            ),
+            simulcast: true,
+          )
               : const VideoPublishOptions(simulcast: true),
         ),
       );
@@ -861,8 +861,8 @@ class VideoRoomController extends ChangeNotifier {
         DatabaseService()
             .logStudentEntry(sessionId!, userId, userName)
             .catchError((e) {
-              debugPrint("Log student entry error (Background): $e");
-            });
+          debugPrint("Log student entry error (Background): $e");
+        });
       }
     } catch (e) {
       debugPrint("Connect to room error: $e");
@@ -910,14 +910,14 @@ class VideoRoomController extends ChangeNotifier {
       ..on<ParticipantDisconnectedEvent>((event) {
         checkAndFallbackChannel();
         _handRaiseQueue.removeWhere(
-          (item) => item['identity'] == event.participant.identity,
+              (item) => item['identity'] == event.participant.identity,
         );
         _notify(immediate: true);
       })
       ..on<ActiveSpeakersChangedEvent>((event) {
         if (_room?.localParticipant != null && !_isMicEnabled) {
           final isSpeaking = event.speakers.any(
-            (s) => s.identity == _room!.localParticipant!.identity,
+                (s) => s.identity == _room!.localParticipant!.identity,
           );
           if (isSpeaking) {
             final now = DateTime.now();
@@ -999,7 +999,7 @@ class VideoRoomController extends ChangeNotifier {
         break;
       case 'edit_chat_message':
         final index = _messages.indexWhere(
-          (m) => m['id'].toString() == data['id'].toString(),
+              (m) => m['id'].toString() == data['id'].toString(),
         );
         if (index != -1) {
           final updatedMsg = Map<String, dynamic>.from(_messages[index]);
@@ -1059,7 +1059,7 @@ class VideoRoomController extends ChangeNotifier {
         break;
       case 'upvote_question':
         final qIndex = _questions.indexWhere(
-          (q) => q['id'] == data['question_id'],
+              (q) => q['id'] == data['question_id'],
         );
         if (qIndex != -1) {
           final updatedQ = Map<String, dynamic>.from(_questions[qIndex]);
@@ -1070,7 +1070,7 @@ class VideoRoomController extends ChangeNotifier {
         break;
       case 'mark_answered':
         final qIndex = _questions.indexWhere(
-          (q) => q['id'] == data['question_id'],
+              (q) => q['id'] == data['question_id'],
         );
         if (qIndex != -1) {
           final updatedQ = Map<String, dynamic>.from(_questions[qIndex]);
@@ -1086,7 +1086,7 @@ class VideoRoomController extends ChangeNotifier {
         _spotlightedQuestionId = data['question_id'];
         if (_spotlightedQuestionId != null) {
           final q = _questions.firstWhere(
-            (element) => element['id'] == _spotlightedQuestionId,
+                (element) => element['id'] == _spotlightedQuestionId,
             orElse: () => {},
           );
           if (q.isNotEmpty) {
@@ -1130,7 +1130,7 @@ class VideoRoomController extends ChangeNotifier {
         onNotification?.call("🔴 تم إنهاء البث.", Colors.redAccent);
         Future.delayed(
           const Duration(seconds: 2),
-          () => onSessionEnded?.call("انتهت الحصة."),
+              () => onSessionEnded?.call("انتهت الحصة."),
         );
         break;
       case 'whiteboard_draw':
@@ -1527,11 +1527,11 @@ class VideoRoomController extends ChangeNotifier {
       final response = await supabase
           .from('messages')
           .insert({
-            'room_name': roomName,
-            'user_name': userName,
-            'content': text.trim(),
-            'reply_to': replyTo,
-          })
+        'room_name': roomName,
+        'user_name': userName,
+        'content': text.trim(),
+        'reply_to': replyTo,
+      })
           .select()
           .single();
 
@@ -1548,7 +1548,7 @@ class VideoRoomController extends ChangeNotifier {
 
   void editMessage(String messageId, String newContent) async {
     final index = _messages.indexWhere(
-      (m) => m['id'].toString() == messageId.toString(),
+          (m) => m['id'].toString() == messageId.toString(),
     );
     if (index == -1) return;
 
@@ -1692,20 +1692,20 @@ class VideoRoomController extends ChangeNotifier {
     try {
       final response = await http
           .post(
-            Uri.parse(
-              '${LiveKitService.supabaseUrl}/functions/v1/livekit-recording',
-            ),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ${LiveKitService.supabaseAnonKey}',
-            },
-            body: jsonEncode({
-              'action': 'start',
-              'roomName': roomName,
-              'sessionId': sessionId,
-              'title': title,
-            }),
-          )
+        Uri.parse(
+          '${LiveKitService.supabaseUrl}/functions/v1/livekit-recording',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${LiveKitService.supabaseAnonKey}',
+        },
+        body: jsonEncode({
+          'action': 'start',
+          'roomName': roomName,
+          'sessionId': sessionId,
+          'title': title,
+        }),
+      )
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {

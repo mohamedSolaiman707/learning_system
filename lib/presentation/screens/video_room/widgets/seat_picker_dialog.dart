@@ -14,11 +14,52 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Load seats when dialog opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctrl = context.read<VideoRoomController>();
+      if (ctrl.seats.isEmpty) {
+        ctrl.loadAndExpandSeats();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final controller = context.watch<VideoRoomController>();
     final seats = controller.seats;
     final screenZones = controller.screenZones;
     final screenCount = controller.screenCount;
+
+    // Show loading state when seats is empty
+    if (seats.isEmpty) {
+      return Dialog(
+        backgroundColor: const Color(0xFF1A1B1F),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24)),
+        child: const SizedBox(
+          width: 400, height: 300,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  color: Colors.blue),
+                SizedBox(height: 16),
+                Text(
+                  "جاري تحميل المقاعد...",
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontFamily: 'Cairo',
+                    fontSize: 14,
+                  )),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     // Determine columns per row based on screen count
     final columnsPerRow = screenCount <= 3 ? screenCount
@@ -101,93 +142,99 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
 
                           // Seats
                           Expanded(
-                            child: ListView.builder(
-                              itemCount: zoneSeats.length,
-                              itemBuilder: (context, si) {
-                                final seat = zoneSeats[si];
-                                final seatNum = 
-                                  seat['seat_number'] as int;
-                                final studentId = seat['student_id'];
-                                final studentName = seat['student_name'];
-                                final isMyId = studentId == 
-                                  controller.userId;
-                                final isOccupied = studentId != null 
-                                  && !isMyId;
-                                final isSelected = 
-                                  _selectedSeat == seatNum;
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minHeight: 200,
+                                maxHeight: 400,
+                              ),
+                              child: ListView.builder(
+                                itemCount: zoneSeats.length,
+                                itemBuilder: (context, si) {
+                                  final seat = zoneSeats[si];
+                                  final seatNum = 
+                                    seat['seat_number'] as int;
+                                  final studentId = seat['student_id'];
+                                  final studentName = seat['student_name'];
+                                  final isMyId = studentId == 
+                                    controller.userId;
+                                  final isOccupied = studentId != null 
+                                    && !isMyId;
+                                  final isSelected = 
+                                    _selectedSeat == seatNum;
 
-                                Color bgColor = Colors.transparent;
-                                Color borderColor = Colors.white24;
-                                Color textColor = Colors.white70;
-                                String text = "مقعد $seatNum";
+                                  Color bgColor = Colors.transparent;
+                                  Color borderColor = Colors.white24;
+                                  Color textColor = Colors.white70;
+                                  String text = "مقعد $seatNum";
 
-                                if (isMyId) {
-                                  bgColor = Colors.blue;
-                                  borderColor = Colors.blue;
-                                  textColor = Colors.white;
-                                  text = "أنت ✓";
-                                } else if (isOccupied) {
-                                  bgColor = Colors.white
-                                    .withOpacity(0.05);
-                                  borderColor = Colors.transparent;
-                                  textColor = Colors.white38;
-                                  text = studentName ?? "محجوز";
-                                } else if (isSelected) {
-                                  bgColor = Colors.blue
-                                    .withOpacity(0.3);
-                                  borderColor = Colors.blue;
-                                  textColor = Colors.white;
-                                }
+                                  if (isMyId) {
+                                    bgColor = Colors.blue;
+                                    borderColor = Colors.blue;
+                                    textColor = Colors.white;
+                                    text = "أنت ✓";
+                                  } else if (isOccupied) {
+                                    bgColor = Colors.white
+                                      .withOpacity(0.05);
+                                    borderColor = Colors.transparent;
+                                    textColor = Colors.white38;
+                                    text = studentName ?? "محجوز";
+                                  } else if (isSelected) {
+                                    bgColor = Colors.blue
+                                      .withOpacity(0.3);
+                                    borderColor = Colors.blue;
+                                    textColor = Colors.white;
+                                  }
 
-                                return GestureDetector(
-                                  onTap: isOccupied || isMyId 
-                                    ? null 
-                                    : () => setState(() =>
-                                      _selectedSeat = isSelected 
-                                        ? null : seatNum),
-                                  child: Container(
-                                    margin: const EdgeInsets.only(
-                                      bottom: 5),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: bgColor,
-                                      borderRadius: 
-                                        BorderRadius.circular(7),
-                                      border: Border.all(
-                                        color: borderColor, width: 1),
+                                  return GestureDetector(
+                                    onTap: isOccupied || isMyId 
+                                      ? null 
+                                      : () => setState(() =>
+                                        _selectedSeat = isSelected 
+                                          ? null : seatNum),
+                                    child: Container(
+                                      margin: const EdgeInsets.only(
+                                        bottom: 5),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: bgColor,
+                                        borderRadius: 
+                                          BorderRadius.circular(7),
+                                        border: Border.all(
+                                          color: borderColor, width: 1),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                        children: [
+                                          if (isOccupied)
+                                            const Icon(Icons.person,
+                                              color: Colors.white24,
+                                              size: 10),
+                                          if (isOccupied)
+                                            const SizedBox(width: 3),
+                                          Flexible(
+                                            child: Text(text,
+                                              textAlign: TextAlign.center,
+                                              maxLines: 1,
+                                              overflow: 
+                                                TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: textColor,
+                                                fontSize: 10,
+                                                fontFamily: 'Cairo',
+                                                fontWeight: isSelected 
+                                                  || isMyId
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                              )),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                        MainAxisAlignment.center,
-                                      children: [
-                                        if (isOccupied)
-                                          const Icon(Icons.person,
-                                            color: Colors.white24,
-                                            size: 10),
-                                        if (isOccupied)
-                                          const SizedBox(width: 3),
-                                        Flexible(
-                                          child: Text(text,
-                                            textAlign: TextAlign.center,
-                                            maxLines: 1,
-                                            overflow: 
-                                              TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: textColor,
-                                              fontSize: 10,
-                                              fontFamily: 'Cairo',
-                                              fontWeight: isSelected 
-                                                || isMyId
-                                                ? FontWeight.bold
-                                                : FontWeight.normal,
-                                            )),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         ],

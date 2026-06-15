@@ -542,16 +542,13 @@ class VideoRoomController extends ChangeNotifier {
     try {
       await _loadChatHistory();
       await _loadActiveLiveQuestion();
-      if (isTeacher && sessionId != null) {
-        await DatabaseService().initializeSeats(sessionId!);
-      }
+      // استدعاء واحد فقط لتهيئة المقاعد لتجنب التكرار
       await loadAndExpandSeats();
     } catch (e) {
       debugPrint("Load data error: $e");
     }
 
     await connectToRoom(roomName);
-    await loadAndExpandSeats();
   }
 
   Future<void> _loadActiveLiveQuestion() async {
@@ -571,48 +568,47 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> loadAndExpandSeats() async {
     if (sessionId == null) return;
     try {
-      // Load config first
+      if (_seats.isEmpty) {
+        _isProcessing = true;
+        _notify();
+      }
+
+      // Load config
       final config = await DatabaseService()
           .getSessionScreenConfig(sessionId!);
       _screenCount = config['screen_count'];
       _seatsPerScreen = config['seats_per_screen'];
 
-      // Check if seats exist first
+      // Get current seats
       final existing = await DatabaseService()
           .getSeats(sessionId!);
 
-      if (existing.isEmpty) {
-        // Only initialize if no seats exist
-        await DatabaseService().initializeSeats(
-          sessionId!,
-          screenCount: _screenCount,
-          seatsPerScreen: _seatsPerScreen,
-        );
-      } else if (existing.length <
-          _screenCount * _seatsPerScreen) {
-        // Expand if needed
-        await DatabaseService().initializeSeats(
-          sessionId!,
-          screenCount: _screenCount,
-          seatsPerScreen: _seatsPerScreen,
-        );
+      if (existing.isEmpty || existing.length != (_screenCount * _seatsPerScreen)) {
+        // تهيئة المقاعد للمدرس فقط
+        if (isTeacher) {
+          await DatabaseService().initializeSeats(
+            sessionId!,
+            screenCount: _screenCount,
+            seatsPerScreen: _seatsPerScreen,
+          );
+          
+          final freshData = await DatabaseService().getSeats(sessionId!);
+          _applySeatsFromServer(freshData);
+        } else {
+          // الطالب ينتظر البيانات من السيرفر عبر الـ Stream
+          if (existing.isNotEmpty) {
+             _applySeatsFromServer(existing);
+          }
+        }
+      } else {
+        _applySeatsFromServer(existing);
       }
-
-      // Load final seats
-      final data = await DatabaseService()
-          .getSeats(sessionId!);
-      _applySeatsFromServer(data);
 
     } catch (e) {
       debugPrint("loadAndExpandSeats error: $e");
-      // Try to load whatever exists
-      try {
-        final data = await DatabaseService()
-            .getSeats(sessionId!);
-        if (data.isNotEmpty) {
-          _applySeatsFromServer(data);
-        }
-      } catch (_) {}
+    } finally {
+      _isProcessing = false;
+      _notify();
     }
   }
 
@@ -623,14 +619,24 @@ class VideoRoomController extends ChangeNotifier {
     if (!isTeacher || sessionId == null) return;
     _screenCount = screenCount;
     _seatsPerScreen = seatsPerScreen;
-    await DatabaseService().updateSessionScreenConfig(
-      sessionId!,
-      screenCount: screenCount,
-      seatsPerScreen: seatsPerScreen,
-    );
-    // Re-initialize seats with new config
-    await loadAndExpandSeats();
+    _isProcessing = true;
     notifyListeners();
+
+    try {
+      await DatabaseService().updateSessionScreenConfig(
+        sessionId!,
+        screenCount: screenCount,
+        seatsPerScreen: seatsPerScreen,
+      );
+      // Re-initialize seats with new config
+      await loadAndExpandSeats();
+      onNotification?.call("تم تحديث إعدادات القاعة بنجاح", Colors.green);
+    } catch (e) {
+      onNotification?.call("فشل تحديث الإعدادات", Colors.red);
+    } finally {
+      _isProcessing = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> claimSeat(int seatNumber) async {
@@ -787,6 +793,18 @@ class VideoRoomController extends ChangeNotifier {
             }
             notifyListeners();
           }
+
+          // مزامنة إعدادات القاعة والشاشات للطلاب بشكل حي
+          final int? dbScreenCount = sessionData['screen_count'];
+          final int? dbSeatsPerScreen = sessionData['seats_per_screen'];
+          if (dbScreenCount != null && dbSeatsPerScreen != null) {
+            if (dbScreenCount != _screenCount || dbSeatsPerScreen != _seatsPerScreen) {
+              _screenCount = dbScreenCount;
+              _seatsPerScreen = dbSeatsPerScreen;
+              _notify();
+            }
+          }
+
           if (sessionData['status'] == 'ended' ||
               sessionData['status'] == 'archived') {
             onNotification?.call(
@@ -1630,7 +1648,8 @@ class VideoRoomController extends ChangeNotifier {
 
   void markQuestionAsAnswered(String questionId) {
     if (!isTeacher) return;
-    final qIndex = _questions.indexWhere((q) => q['id'] == questionId);
+    final qIndex = _questions.indexWhere(
+    (q) => q['id'] == questionId);
     if (qIndex != -1) {
       final updatedQ = Map<String, dynamic>.from(_questions[qIndex]);
       updatedQ['is_answered'] = true;

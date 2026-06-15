@@ -260,7 +260,6 @@ class DatabaseService {
     }
   }
 
-  // ... rest of the file ...
   Future<void> addRecordingRecord(Map<String, dynamic> data) async {
     try {
       await _supabase.from('recordings').insert(data);
@@ -697,50 +696,55 @@ class DatabaseService {
       }) async {
     if (sessionId.isEmpty) return;
     try {
-      // 1. جلب كافة المقاعد الحالية للحصة
+      // 1. جلب كافة المقاعد الحالية للحصة بما فيها بيانات الحجز
       final existingRes = await _supabase
           .from('seats')
-          .select('id, seat_number, zone')
+          .select('id, seat_number, zone, student_id, student_name')
           .eq('session_id', sessionId)
           .order('seat_number', ascending: true);
 
       final List<dynamic> existingSeats = existingRes as List<dynamic>;
       final int totalSeatsNeeded = screenCount * seatsPerScreen;
 
-      // 2. إضافة مقاعد جديدة إذا كان العدد المطلوب أكبر من الحالي
-      if (existingSeats.length < totalSeatsNeeded) {
-        final List<Map<String, dynamic>> newSeats = [];
-        for (int i = existingSeats.length + 1; i <= totalSeatsNeeded; i++) {
-          final int screen = ((i - 1) ~/ seatsPerScreen) + 1;
-          newSeats.add({
-            'session_id': sessionId,
-            'seat_number': i,
-            'zone': 'screen_$screen',
-          });
-        }
-        if (newSeats.isNotEmpty) {
-          await _supabase.from('seats').insert(newSeats);
-        }
+      // 2. إذا كان العدد المطلوب أقل من الحالي، نقوم بحذف المقاعد الإضافية
+      if (existingSeats.length > totalSeatsNeeded) {
+        await _supabase
+            .from('seats')
+            .delete()
+            .eq('session_id', sessionId)
+            .gt('seat_number', totalSeatsNeeded);
       }
 
-      // 3. تحديث كافة الـ Zones لضمان توافقها مع التقسيم الحالي (screen_n)
-      try {
-        for (int screen = 1; screen <= screenCount; screen++) {
-          final int startSeat = ((screen - 1) * seatsPerScreen) + 1;
-          final int endSeat = screen * seatsPerScreen;
-          await _supabase
-              .from('seats')
-              .update({'zone': 'screen_$screen'})
-              .eq('session_id', sessionId)
-              .gte('seat_number', startSeat)
-              .lte('seat_number', endSeat);
-        }
-      } catch (e) {
-        debugPrint("Zone update error: $e");
-        // Don't rethrow — seats still exist
+      // 3. إضافة مقاعد جديدة أو تحديثها بشكل آمن باستخدام upsert لتفادي تصادم التهيئة المزدوجة
+      final List<Map<String, dynamic>> seatsToUpsert = [];
+      for (int i = 1; i <= totalSeatsNeeded; i++) {
+        final int screen = ((i - 1) ~/ seatsPerScreen) + 1;
+        
+        // البحث عن بيانات المقعد الحالي للاحتفاظ ببيانات الطالب
+        final existingSeat = existingSeats.firstWhere(
+          (s) => s['seat_number'] == i,
+          orElse: () => null,
+        );
+
+        seatsToUpsert.add({
+          if (existingSeat != null) 'id': existingSeat['id'], // استخدام نفس المعرف الفريد لتفادي التكرار
+          'session_id': sessionId,
+          'seat_number': i,
+          'zone': 'screen_$screen',
+          'student_id': existingSeat?['student_id'],
+          'student_name': existingSeat?['student_name'],
+        });
+      }
+
+      if (seatsToUpsert.isNotEmpty) {
+        await _supabase.from('seats').upsert(
+          seatsToUpsert,
+          onConflict: 'session_id, seat_number',
+        );
       }
     } catch (e) {
       debugPrint("Error initializing seats: $e");
+      rethrow; // نعيد الخطأ ليتم التعامل معه في الـ Controller
     }
   }
 
@@ -774,6 +778,7 @@ class DatabaseService {
       }).eq('id', sessionId);
     } catch (e) {
       debugPrint("Error updating screen config: $e");
+      rethrow;
     }
   }
 

@@ -571,26 +571,47 @@ class VideoRoomController extends ChangeNotifier {
   Future<void> loadAndExpandSeats() async {
     if (sessionId == null) return;
     try {
-      // Load screen config from session
-      final config = await DatabaseService().getSessionScreenConfig(sessionId!);
+      // Load config first
+      final config = await DatabaseService()
+          .getSessionScreenConfig(sessionId!);
       _screenCount = config['screen_count'];
       _seatsPerScreen = config['seats_per_screen'];
 
-      // Initialize seats with config
-      await DatabaseService().initializeSeats(
-        sessionId!,
-        screenCount: _screenCount,
-        seatsPerScreen: _seatsPerScreen,
-      );
+      // Check if seats exist first
+      final existing = await DatabaseService()
+          .getSeats(sessionId!);
 
-      // Load seats
-      final data = await DatabaseService().getSeats(sessionId!);
+      if (existing.isEmpty) {
+        // Only initialize if no seats exist
+        await DatabaseService().initializeSeats(
+          sessionId!,
+          screenCount: _screenCount,
+          seatsPerScreen: _seatsPerScreen,
+        );
+      } else if (existing.length <
+          _screenCount * _seatsPerScreen) {
+        // Expand if needed
+        await DatabaseService().initializeSeats(
+          sessionId!,
+          screenCount: _screenCount,
+          seatsPerScreen: _seatsPerScreen,
+        );
+      }
+
+      // Load final seats
+      final data = await DatabaseService()
+          .getSeats(sessionId!);
       _applySeatsFromServer(data);
+
     } catch (e) {
       debugPrint("loadAndExpandSeats error: $e");
+      // Try to load whatever exists
       try {
-        final data = await DatabaseService().getSeats(sessionId!);
-        if (data.isNotEmpty) _applySeatsFromServer(data);
+        final data = await DatabaseService()
+            .getSeats(sessionId!);
+        if (data.isNotEmpty) {
+          _applySeatsFromServer(data);
+        }
       } catch (_) {}
     }
   }

@@ -13,31 +13,24 @@ class SeatPickerDialog extends StatefulWidget {
 class _SeatPickerDialogState extends State<SeatPickerDialog> {
   int? _selectedSeat;
   bool _isLoading = false;
-  bool _showSkipOption = false;
-  Timer? _loadingTimer;
 
   @override
   void initState() {
     super.initState();
-    // إظهار خيار التخطي بعد 7 ثوانٍ إذا لم تحمل المقاعد
-    _loadingTimer = Timer(const Duration(seconds: 7), () {
-      if (mounted && context.read<VideoRoomController>().seats.isEmpty) {
-        setState(() => _showSkipOption = true);
-      }
-    });
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctrl = context.read<VideoRoomController>();
       if (ctrl.seats.isEmpty) {
-        ctrl.loadAndExpandSeats();
+        ctrl.loadAndExpandSeats().timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            // Try one more time
+            if (mounted) {
+              ctrl.loadAndExpandSeats();
+            }
+          },
+        );
       }
     });
-  }
-
-  @override
-  void dispose() {
-    _loadingTimer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -47,35 +40,48 @@ class _SeatPickerDialogState extends State<SeatPickerDialog> {
     final screenZones = controller.screenZones;
     final screenCount = controller.screenCount;
 
-    // حالة التحميل مع خيار التخطي
     if (seats.isEmpty) {
       return Dialog(
         backgroundColor: const Color(0xFF1A1B1F),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-          padding: const EdgeInsets.all(30),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24)),
+        child: SizedBox(
+          width: 400,
+          height: 300,
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(color: Colors.blue),
+              const CircularProgressIndicator(
+                  color: Colors.blue),
+              const SizedBox(height: 20),
+              const Text(
+                  "جاري تحميل خريطة المقاعد...",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'Cairo',
+                    fontSize: 16,
+                  )),
+              const SizedBox(height: 8),
+              const Text(
+                  "تأكد من استقرار الإنترنت لديك",
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                  )),
               const SizedBox(height: 24),
-              const Text("جاري تحميل خريطة المقاعد...",
-                  style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 16)),
-              const SizedBox(height: 10),
-              const Text("تأكد من استقرار الإنترنت لديك",
-                  style: TextStyle(color: Colors.white54, fontFamily: 'Cairo', fontSize: 12)),
-              if (_showSkipOption) ...[
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white10),
-                  child: const Text("تخطي والدخول للقاعة", style: TextStyle(color: Colors.white, fontFamily: 'Cairo')),
-                ),
-                TextButton(
-                  onPressed: () => controller.loadAndExpandSeats(),
-                  child: const Text("إعادة المحاولة", style: TextStyle(color: Colors.blue, fontFamily: 'Cairo')),
-                ),
-              ]
+              TextButton(
+                onPressed: () {
+                  context.read<VideoRoomController>()
+                      .loadAndExpandSeats();
+                },
+                child: const Text(
+                    "إعادة المحاولة",
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontFamily: 'Cairo',
+                    )),
+              ),
             ],
           ),
         ),

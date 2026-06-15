@@ -724,16 +724,20 @@ class DatabaseService {
       }
 
       // 3. تحديث كافة الـ Zones لضمان توافقها مع التقسيم الحالي (screen_n)
-      for (int screen = 1; screen <= screenCount; screen++) {
-        final int startSeat = ((screen - 1) * seatsPerScreen) + 1;
-        final int endSeat = screen * seatsPerScreen;
-
-        await _supabase
-            .from('seats')
-            .update({'zone': 'screen_$screen'})
-            .eq('session_id', sessionId)
-            .gte('seat_number', startSeat)
-            .lte('seat_number', endSeat);
+      try {
+        for (int screen = 1; screen <= screenCount; screen++) {
+          final int startSeat = ((screen - 1) * seatsPerScreen) + 1;
+          final int endSeat = screen * seatsPerScreen;
+          await _supabase
+              .from('seats')
+              .update({'zone': 'screen_$screen'})
+              .eq('session_id', sessionId)
+              .gte('seat_number', startSeat)
+              .lte('seat_number', endSeat);
+        }
+      } catch (e) {
+        debugPrint("Zone update error: $e");
+        // Don't rethrow — seats still exist
       }
     } catch (e) {
       debugPrint("Error initializing seats: $e");

@@ -15,12 +15,21 @@ class AttendancePdfService {
     
     final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
+    final totalCount = studentsData.length;
+    final presentCount = studentsData.where((s) => s['present'] == true).length;
+
     pdf.addPage(
       pw.MultiPage(
         theme: pw.ThemeData.withFont(base: arabicFont, bold: boldFont),
         textDirection: pw.TextDirection.rtl,
         build: (context) => [
-          _buildHeader(subjectName, teacherName, dateStr, studentsData.length),
+          _buildHeader(
+            subjectName: subjectName,
+            teacherName: teacherName,
+            dateStr: dateStr,
+            presentCount: presentCount,
+            totalCount: totalCount,
+          ),
           pw.SizedBox(height: 20),
           _buildTable(studentsData),
           pw.SizedBox(height: 40),
@@ -35,7 +44,13 @@ class AttendancePdfService {
     );
   }
 
-  pw.Widget _buildHeader(String subject, String teacher, String date, int count) {
+  pw.Widget _buildHeader({
+    required String subjectName,
+    required String teacherName,
+    required String dateStr,
+    required int presentCount,
+    required int totalCount,
+  }) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -50,15 +65,15 @@ class AttendancePdfService {
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('المادة: $subject', style: const pw.TextStyle(fontSize: 14)),
-                pw.Text('المعلم: $teacher', style: const pw.TextStyle(fontSize: 14)),
+                pw.Text('المادة: $subjectName', style: const pw.TextStyle(fontSize: 14)),
+                pw.Text('المعلم: $teacherName', style: const pw.TextStyle(fontSize: 14)),
               ],
             ),
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('التاريخ: $date', style: const pw.TextStyle(fontSize: 14)),
-                pw.Text('إجمالي الحضور: $count', style: const pw.TextStyle(fontSize: 14)),
+                pw.Text('التاريخ: $dateStr', style: const pw.TextStyle(fontSize: 14)),
+                pw.Text('إجمالي الحاضرين: $presentCount / $totalCount', style: const pw.TextStyle(fontSize: 14)),
               ],
             ),
           ],

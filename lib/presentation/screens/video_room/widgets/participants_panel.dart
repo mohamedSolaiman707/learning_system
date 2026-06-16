@@ -185,6 +185,14 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
     );
   }
 
+  List<List<String>> _chunkList(List<String> list, int chunkSize) {
+    List<List<String>> chunks = [];
+    for (var i = 0; i < list.length; i += chunkSize) {
+      chunks.add(list.sublist(i, i + chunkSize > list.length ? list.length : i + chunkSize));
+    }
+    return chunks;
+  }
+
   Widget _buildSeatingGrid(
     BuildContext context,
     VideoRoomController controller,
@@ -199,48 +207,66 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
       : zones.length <= 6 ? 3
       : 4;
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              const Icon(Icons.info_outline,
-                size: 14, color: Colors.blue),
-              const SizedBox(width: 6),
-              Text(
-                "${zones.length} شاشات — "
-                "${controller.seatsPerScreen} مقاعد/شاشة",
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 12,
-                  color: Colors.blue,
-                )),
-            ],
-          ),
-        ),
-        Expanded(
-          child: GridView.builder(
+    final chunkedZones = _chunkList(zones, columnsPerRow);
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
             padding: const EdgeInsets.all(12),
-            gridDelegate: 
-              SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columnsPerRow,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                childAspectRatio: 0.5,
-              ),
-            itemCount: zones.length,
-            itemBuilder: (context, index) {
-              final zone = zones[index];
-              return _buildScreenColumn(
-                controller,
-                "شاشة ${index + 1}",
-                zone,
-              );
-            },
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline,
+                  size: 14, color: Colors.blue),
+                const SizedBox(width: 6),
+                Text(
+                  "${zones.length} شاشات — "
+                  "${controller.seatsPerScreen} مقاعد/شاشة",
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    color: Colors.blue,
+                  )),
+              ],
+            ),
           ),
-        ),
-      ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Column(
+              children: chunkedZones.map((rowZones) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ...rowZones.asMap().entries.map((entry) {
+                        final zone = entry.value;
+                        final globalIndex = zones.indexOf(zone);
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: _buildScreenColumn(
+                              controller,
+                              "شاشة ${globalIndex + 1}",
+                              zone,
+                            ),
+                          ),
+                        );
+                      }),
+                      // إضافة مساحات فارغة إذا كان الصف الأخير غير مكتمل للحفاظ على العرض المتساوي
+                      ...List.generate(
+                        columnsPerRow - rowZones.length,
+                        (_) => const Expanded(child: SizedBox()),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -257,6 +283,7 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
           .compareTo(b['seat_number'] as int));
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.symmetric(vertical: 6),
@@ -275,185 +302,183 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
             )),
         ),
         const SizedBox(height: 12),
-        Expanded(
-          child: ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: zoneSeats.length,
-            itemBuilder: (context, index) {
-              final seat = zoneSeats[index];
-              final int seatNum = seat['seat_number'];
-              final String? studentId = seat['student_id'];
-              final String? studentName = 
-                seat['student_name'];
-              final bool isOccupied = 
-                studentId != null && 
-                studentId.isNotEmpty;
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: zoneSeats.length,
+          itemBuilder: (context, index) {
+            final seat = zoneSeats[index];
+            final int seatNum = seat['seat_number'];
+            final String? studentId = seat['student_id'];
+            final String? studentName = 
+              seat['student_name'];
+            final bool isOccupied = 
+              studentId != null && 
+              studentId.isNotEmpty;
 
-              // Empty seat
-              if (!isOccupied) {
-                return DragTarget<int>(
-                  onWillAcceptWithDetails: (details) =>
-                    details.data != seatNum,
-                  onAcceptWithDetails: (details) {
-                    controller.moveSeat(
-                      details.data, seatNum);
-                  },
-                  builder: (context, candidate, _) {
-                    return Container(
-                      margin: const EdgeInsets.only(
-                        bottom: 8),
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 10, horizontal: 4),
-                      decoration: BoxDecoration(
+            // Empty seat
+            if (!isOccupied) {
+              return DragTarget<int>(
+                onWillAcceptWithDetails: (details) =>
+                  details.data != seatNum,
+                onAcceptWithDetails: (details) {
+                  controller.moveSeat(
+                    details.data, seatNum);
+                },
+                builder: (context, candidate, _) {
+                  return Container(
+                    margin: const EdgeInsets.only(
+                      bottom: 8),
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10, horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: candidate.isNotEmpty
+                        ? Colors.blue.withOpacity(0.2)
+                        : Colors.grey.withOpacity(0.05),
+                      borderRadius: 
+                        BorderRadius.circular(10),
+                      border: Border.all(
                         color: candidate.isNotEmpty
-                          ? Colors.blue.withOpacity(0.2)
-                          : Colors.grey.withOpacity(0.05),
-                        borderRadius: 
-                          BorderRadius.circular(10),
-                        border: Border.all(
+                          ? Colors.blue
+                          : Colors.grey.withOpacity(0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment:
+                        MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          candidate.isNotEmpty
+                            ? Icons.add_circle
+                            : Icons.add_circle_outline,
                           color: candidate.isNotEmpty
                             ? Colors.blue
-                            : Colors.grey.withOpacity(0.2),
-                          width: 1,
+                            : Colors.grey.shade300,
+                          size: 18,
                         ),
-                      ),
-                      child: Column(
-                        mainAxisAlignment:
-                          MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            candidate.isNotEmpty
-                              ? Icons.add_circle
-                              : Icons.add_circle_outline,
+                        const SizedBox(height: 4),
+                        Text(
+                          "مقعد $seatNum",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
                             color: candidate.isNotEmpty
                               ? Colors.blue
                               : Colors.grey.shade300,
-                            size: 18,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "مقعد $seatNum",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: candidate.isNotEmpty
-                                ? Colors.blue
-                                : Colors.grey.shade300,
-                              fontSize: 9,
-                              fontFamily: 'Cairo',
-                            )),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              }
-
-              // Occupied seat — draggable
-              final seatWidget = Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 10, horizontal: 4),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.blue.withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      studentName ?? "طالب",
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Cairo',
-                      )),
-                    const SizedBox(height: 2),
-                    Text(
-                      "مقعد $seatNum",
-                      style: const TextStyle(
-                        color: Colors.blue,
-                        fontSize: 8,
-                        fontFamily: 'Cairo',
-                      )),
-                    const Icon(
-                      Icons.drag_indicator,
-                      size: 14,
-                      color: Colors.blue,
+                            fontSize: 9,
+                            fontFamily: 'Cairo',
+                          )),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               );
+            }
 
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: DragTarget<int>(
-                  onWillAcceptWithDetails: (details) =>
-                    details.data != seatNum,
-                  onAcceptWithDetails: (details) {
-                    controller.moveSeat(
-                      details.data, seatNum);
-                  },
-                  builder: (context, candidate, _) {
-                    return Draggable<int>(
-                      data: seatNum,
-                      feedback: Material(
-                        color: Colors.transparent,
-                        child: Container(
-                          width: 100,
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.blue,
-                            borderRadius:
-                              BorderRadius.circular(8),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black38,
-                                blurRadius: 8,
-                              )
-                            ],
-                          ),
-                          child: Text(
-                            studentName ?? "طالب",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontFamily: 'Cairo',
-                              fontWeight: FontWeight.bold,
-                            )),
-                        ),
-                      ),
-                      childWhenDragging: Opacity(
-                        opacity: 0.3,
-                        child: seatWidget,
-                      ),
-                      child: candidate.isNotEmpty
-                        ? Container(
-                            decoration: BoxDecoration(
-                              borderRadius:
-                                BorderRadius.circular(10),
-                              border: Border.all(
-                                color: Colors.blue,
-                                width: 2,
-                              ),
-                            ),
-                            child: seatWidget,
-                          )
-                        : seatWidget,
-                    );
-                  },
+            // Occupied seat — draggable
+            final seatWidget = Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                vertical: 10, horizontal: 4),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.blue.withOpacity(0.3),
+                  width: 1,
                 ),
-              );
-            },
-          ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    studentName ?? "طالب",
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.black87,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Cairo',
+                    )),
+                  const SizedBox(height: 2),
+                  Text(
+                    "مقعد $seatNum",
+                    style: const TextStyle(
+                      color: Colors.blue,
+                      fontSize: 8,
+                      fontFamily: 'Cairo',
+                    )),
+                  const Icon(
+                    Icons.drag_indicator,
+                    size: 14,
+                    color: Colors.blue,
+                  ),
+                ],
+              ),
+            );
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: DragTarget<int>(
+                onWillAcceptWithDetails: (details) =>
+                  details.data != seatNum,
+                onAcceptWithDetails: (details) {
+                  controller.moveSeat(
+                    details.data, seatNum);
+                },
+                builder: (context, candidate, _) {
+                  return Draggable<int>(
+                    data: seatNum,
+                    feedback: Material(
+                      color: Colors.transparent,
+                      child: Container(
+                        width: 100,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          borderRadius:
+                            BorderRadius.circular(8),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black38,
+                              blurRadius: 8,
+                            )
+                          ],
+                        ),
+                        child: Text(
+                          studentName ?? "طالب",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.bold,
+                          )),
+                      ),
+                    ),
+                    childWhenDragging: Opacity(
+                      opacity: 0.3,
+                      child: seatWidget,
+                    ),
+                    child: candidate.isNotEmpty
+                      ? Container(
+                          decoration: BoxDecoration(
+                            borderRadius:
+                              BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.blue,
+                              width: 2,
+                            ),
+                          ),
+                          child: seatWidget,
+                        )
+                      : seatWidget,
+                  );
+                },
+              ),
+            );
+          },
         ),
       ],
     );

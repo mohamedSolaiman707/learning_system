@@ -94,9 +94,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
     super.initState();
     _capturedParams = _extractParams();
 
-    // إذا كان الرابط يحتوي على توكن استعادة أو دخول مباشر
-    if (_capturedParams!.containsKey('access_token') ||
-        _capturedParams!.containsKey('lms_id') ||
+    final token = _capturedParams!['token'] ?? _capturedParams!['access_token'];
+    final sessionId = _capturedParams!['sessionId'] ?? _capturedParams!['session_id'] ?? _capturedParams!['lms_id'];
+
+    // إذا كان الرابط يحتوي على توكن استعادة أو معاملات الدخول المباشر
+    if (token != null ||
+        sessionId != null ||
         _capturedParams!['type'] == 'recovery') {
       _isRedirecting = true;
     }
@@ -154,28 +157,52 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
 
       // 2. معالجة الدخول التلقائي (LTI أو غيره)
-      final accessToken = params['access_token'];
-      if (accessToken != null) {
+      final token = params['token'] ?? params['access_token'];
+      if (token != null) {
         try {
-          await Supabase.instance.client.auth.setSession(accessToken);
-          await Future.delayed(const Duration(seconds: 1));
+          if (mounted) setState(() => _isRedirecting = true);
+          await Supabase.instance.client.auth.setSession(token);
+          // الانتظار قليلاً لضمان تحديث مستمع حالة تسجيل الدخول
+          await Future.delayed(const Duration(milliseconds: 500));
         } catch (e) {
           debugPrint("AutoLogin Error: $e");
         }
       }
 
-      // 3. معالجة الدخول المباشر للقاعات
-      final lmsId = params['lms_id'];
-      if (lmsId != null && authProvider.isAuthenticated) {
+      // 3. معالجة تحديث الملف الشخصي في حالة الدخول القادم من Blackboard
+      final externalId = params['external_id'] ?? params['externalId'];
+      final role = params['role'];
+      final fullName = params['full_name'] ?? params['userName'] ?? params['username'];
+
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      if (currentUser != null && externalId != null) {
+        final email = params['email'] ?? currentUser.email ?? '${externalId}@blackboard.com';
+        await authProvider.handleExternalAuth(
+          externalId: externalId,
+          email: email,
+          fullName: fullName ?? 'مستخدم Blackboard',
+          role: role ?? 'student',
+        );
+      }
+
+      // 4. معالجة الدخول المباشر للقاعات
+      final sessionId = params['sessionId'] ?? params['session_id'] ?? params['lms_id'];
+      if (sessionId != null && currentUser != null) {
         _linkProcessed = true;
         if (mounted) setState(() => _isRedirecting = true);
 
         final dbService = Provider.of<DatabaseService>(context, listen: false);
-        final sessionData = await dbService.getSessionByLmsId(lmsId);
+        
+        // محاولة جلب الجلسة أولاً بـ ID الجلسة المباشر، ثم بـ lmsId
+        var sessionData = await dbService.getSessionById(sessionId);
+        sessionData ??= await dbService.getSessionByLmsId(sessionId);
 
         if (sessionData != null && mounted) {
-          if (authProvider.role == 'student') {
-            await dbService.enrollStudentBySessionId(authProvider.user!.id, sessionData['id']);
+          final isTeacherRole = (role == 'teacher' || authProvider.role == 'teacher');
+          final userId = currentUser.id;
+
+          if (!isTeacherRole) {
+            await dbService.enrollStudentBySessionId(userId, sessionData['id']);
           }
 
           Navigator.of(context).pushNamedAndRemoveUntil(
@@ -184,9 +211,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
             arguments: {
               'roomName': 'room_${sessionData['id']}',
               'title': sessionData['subject_name'] ?? 'قاعة تعليمية',
-              'userName': authProvider.profile?['full_name'] ?? 'User',
-              'userId': authProvider.user?.id ?? '',
-              'isTeacher': authProvider.role == 'teacher',
+              'userName': authProvider.profile?['full_name'] ?? fullName ?? 'User',
+              'userId': userId,
+              'isTeacher': isTeacherRole,
               'sessionId': sessionData['id'],
             },
           );

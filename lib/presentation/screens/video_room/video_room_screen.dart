@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:learning_by_video_call/presentation/screens/video_room/widgets/dynamic_stage.dart';
 import 'package:provider/provider.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'video_room_controller.dart';
@@ -8,7 +9,6 @@ import 'widgets/chat_panel.dart';
 import 'widgets/qa_panel.dart';
 import 'widgets/whiteboard_panel.dart';
 import 'widgets/participants_panel.dart';
-import 'widgets/dynamic_stage.dart';
 import 'utils/classroom_participant_utils.dart';
 import 'widgets/poll_panel.dart';
 import 'widgets/source_manager_sidebar.dart';
@@ -135,9 +135,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     final controller = context.read<VideoRoomController>();
 
     // Open picker if not shown, not already open, and controller finished initial loading
-    if (!controller.seatPickerShown &&
-        !_isSeatPickerOpen) {
-
+    if (!controller.seatPickerShown && !_isSeatPickerOpen) {
       setState(() => _isSeatPickerOpen = true);
       showDialog(
         context: context,
@@ -161,11 +159,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 
   void _showBreakoutInvite(
-      String room,
-      String name,
-      int duration,
-      VideoRoomController controller,
-      ) {
+    String room,
+    String name,
+    int duration,
+    VideoRoomController controller,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -202,10 +200,10 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 
   void _showStaticDialog(
-      String title,
-      String content, {
-        VoidCallback? onConfirm,
-      }) {
+    String title,
+    String content, {
+    VoidCallback? onConfirm,
+  }) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -252,15 +250,15 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   ),
                   const SizedBox(height: 10),
                   _buildToggle("قفل الميكروفونات", controller.isAllMuted, (
-                      val,
-                      ) {
+                    val,
+                  ) {
                     controller.muteAllParticipants(val);
                     setDialogState(() {});
                   }, icon: Icons.mic_off),
                   _buildToggle(
                     "قفل الكاميرات",
                     controller.isCamLocked,
-                        (val) {
+                    (val) {
                       controller.disableAllCameras(val);
                       setDialogState(() {});
                     },
@@ -269,7 +267,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   _buildToggle(
                     "قفل الشات",
                     controller.isChatLocked,
-                        (val) {
+                    (val) {
                       controller.toggleChatLock();
                       setDialogState(() {});
                     },
@@ -278,7 +276,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   _buildToggle(
                     "قفل السبورة",
                     controller.isWhiteboardLocked,
-                        (val) {
+                    (val) {
                       controller.toggleWhiteboardLock();
                       setDialogState(() {});
                     },
@@ -287,7 +285,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   _buildToggle(
                     "قفل مشاركة الشاشة",
                     controller.isScreenShareLocked,
-                        (val) {
+                    (val) {
                       controller.toggleScreenShareLock();
                       setDialogState(() {});
                     },
@@ -297,7 +295,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   _buildToggle(
                     "وضع جدار الفيديو (Wall)",
                     controller.isVideoWallMode,
-                        (val) {
+                    (val) {
                       controller.toggleVideoWallMode();
                       setDialogState(() {});
                     },
@@ -313,11 +311,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 
   Widget _buildToggle(
-      String title,
-      bool value,
-      Function(bool) onChanged, {
-        IconData? icon,
-      }) {
+    String title,
+    bool value,
+    Function(bool) onChanged, {
+    IconData? icon,
+  }) {
     return SwitchListTile(
       secondary: icon != null
           ? Icon(icon, size: 20, color: value ? Colors.red : Colors.grey)
@@ -340,12 +338,12 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     if (widget.isTeacher) return _buildTeacherLayout();
 
     final errorMessage = context.select<VideoRoomController, String?>(
-          (c) => c.errorMessage,
+      (c) => c.errorMessage,
     );
     if (errorMessage != null) return _buildErrorState(controller, isDesktop);
 
     final isLoading = context.select<VideoRoomController, bool>(
-          (c) => c.isLoading,
+      (c) => c.isLoading,
     );
     if (isLoading) return _buildLoadingState();
 
@@ -358,8 +356,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               // 1. Source Manager Sidebar (Multi-Source)
               Selector<VideoRoomController, String>(
                 selector: (_, c) => c.multiSourceKey,
-                builder: (context, _, __) =>
-                     SourceManagerSidebar(),
+                builder: (context, _, __) => SourceManagerSidebar(),
               ),
 
               Expanded(
@@ -367,8 +364,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                   children: [
                     // 2. Top Header
                     Selector<
-                        VideoRoomController,
-                        ({
+                      VideoRoomController,
+                      ({
                         bool isHandRaised,
                         bool isMicEnabled,
                         bool isCamEnabled,
@@ -377,17 +374,17 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                         bool isPollsOpen,
                         bool isScreenSharing,
                         bool isScreenShareLocked,
-                        })
+                      })
                     >(
                       selector: (_, c) => (
-                      isHandRaised: c.isHandRaised,
-                      isMicEnabled: c.isMicEnabled,
-                      isCamEnabled: c.isCamEnabled,
-                      isChatOpen: c.isChatOpen,
-                      isQAOpen: c.isQAOpen,
-                      isPollsOpen: c.isPollsOpen,
-                      isScreenSharing: c.isScreenSharing,
-                      isScreenShareLocked: c.isScreenShareLocked,
+                        isHandRaised: c.isHandRaised,
+                        isMicEnabled: c.isMicEnabled,
+                        isCamEnabled: c.isCamEnabled,
+                        isChatOpen: c.isChatOpen,
+                        isQAOpen: c.isQAOpen,
+                        isPollsOpen: c.isPollsOpen,
+                        isScreenSharing: c.isScreenSharing,
+                        isScreenShareLocked: c.isScreenShareLocked,
                       ),
                       builder: (context, data, _) => _buildTopHeader(
                         context,
@@ -412,9 +409,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                               clipBehavior: Clip.hardEdge,
                               children: [
                                 Positioned.fill(
-                                  child: DynamicStage(
-                                    controller: controller,
-                                  ),
+                                  child: DynamicStage(controller: controller),
                                 ),
                                 ..._reactions,
                               ],
@@ -423,20 +418,20 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
                           // 4. Right Panel
                           Selector<
-                              VideoRoomController,
-                              ({bool isChatOpen, bool isQAOpen, bool isPollsOpen})
+                            VideoRoomController,
+                            ({bool isChatOpen, bool isQAOpen, bool isPollsOpen})
                           >(
                             selector: (_, c) => (
-                            isChatOpen: c.isChatOpen,
-                            isQAOpen: c.isQAOpen,
-                            isPollsOpen: c.isPollsOpen,
+                              isChatOpen: c.isChatOpen,
+                              isQAOpen: c.isQAOpen,
+                              isPollsOpen: c.isPollsOpen,
                             ),
                             builder: (context, data, _) {
                               final isOpen =
                                   (data.isChatOpen ||
                                       data.isQAOpen ||
                                       data.isPollsOpen) &&
-                                      isDesktop;
+                                  isDesktop;
                               if (!isOpen) return const SizedBox();
                               return AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
@@ -459,8 +454,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                                     child: data.isChatOpen
                                         ? const ChatPanel()
                                         : (data.isQAOpen
-                                        ? const QAPanel()
-                                        : const PollPanel()),
+                                              ? const QAPanel()
+                                              : const PollPanel()),
                                   ),
                                 ),
                               );
@@ -483,17 +478,17 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 
   Widget _buildTopHeader(
-      BuildContext context,
-      VideoRoomController controller, {
-        bool? isHandRaised,
-        bool? isMicEnabled,
-        bool? isCamEnabled,
-        bool? isChatOpen,
-        bool? isQAOpen,
-        bool? isPollsOpen,
-        bool? isScreenSharing,
-        bool? isScreenShareLocked,
-      }) {
+    BuildContext context,
+    VideoRoomController controller, {
+    bool? isHandRaised,
+    bool? isMicEnabled,
+    bool? isCamEnabled,
+    bool? isChatOpen,
+    bool? isQAOpen,
+    bool? isPollsOpen,
+    bool? isScreenSharing,
+    bool? isScreenShareLocked,
+  }) {
     return Container(
       height: 70,
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -656,9 +651,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                 selector: (_, c) => c.isWhiteboardOpen,
                 builder: (_, isOpen, __) => isOpen
                     ? const Material(
-                  color: Colors.white,
-                  child: WhiteboardPanel(),
-                )
+                        color: Colors.white,
+                        child: WhiteboardPanel(),
+                      )
                     : const SizedBox.shrink(),
               ),
             ),
@@ -672,26 +667,26 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             ),
             if (Responsive.isDesktop(context))
               Selector<
-                  VideoRoomController,
-                  ({
+                VideoRoomController,
+                ({
                   bool isChatOpen,
                   bool isQAOpen,
                   bool isParticipantsOpen,
                   bool isPollsOpen,
-                  })
+                })
               >(
                 selector: (_, c) => (
-                isChatOpen: c.isChatOpen,
-                isQAOpen: c.isQAOpen,
-                isParticipantsOpen: c.isParticipantsOpen,
-                isPollsOpen: c.isPollsOpen,
+                  isChatOpen: c.isChatOpen,
+                  isQAOpen: c.isQAOpen,
+                  isParticipantsOpen: c.isParticipantsOpen,
+                  isPollsOpen: c.isPollsOpen,
                 ),
                 builder: (context, data, _) {
                   final isOpen =
                       data.isChatOpen ||
-                          data.isQAOpen ||
-                          data.isParticipantsOpen ||
-                          data.isPollsOpen;
+                      data.isQAOpen ||
+                      data.isParticipantsOpen ||
+                      data.isPollsOpen;
                   return Align(
                     alignment: Alignment.centerRight,
                     child: AnimatedContainer(
@@ -702,22 +697,22 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                           : EdgeInsets.zero,
                       child: isOpen
                           ? Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(24),
-                          child: _buildTeacherSidebar(data),
-                        ),
-                      )
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(24),
+                                child: _buildTeacherSidebar(data),
+                              ),
+                            )
                           : const SizedBox(),
                     ),
                   );
@@ -836,9 +831,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 
   void _showExitConfirmation(
-      BuildContext context,
-      VideoRoomController controller,
-      ) {
+    BuildContext context,
+    VideoRoomController controller,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -927,7 +922,9 @@ class _SourceCard extends StatelessWidget {
         : (isActive ? Colors.blue : Colors.white.withOpacity(0.06));
     final bgColor = isPinned
         ? Colors.amber.withOpacity(0.06)
-        : (isActive ? Colors.blue.withOpacity(0.06) : Colors.white.withOpacity(0.02));
+        : (isActive
+              ? Colors.blue.withOpacity(0.06)
+              : Colors.white.withOpacity(0.02));
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
@@ -940,7 +937,9 @@ class _SourceCard extends StatelessWidget {
         boxShadow: isActive
             ? [
                 BoxShadow(
-                  color: (isPinned ? Colors.amber : Colors.blue).withOpacity(0.08),
+                  color: (isPinned ? Colors.amber : Colors.blue).withOpacity(
+                    0.08,
+                  ),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -963,7 +962,11 @@ class _SourceCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Row(
               children: [
-                Icon(icon, color: isActive ? Colors.blue : Colors.white30, size: 14),
+                Icon(
+                  icon,
+                  color: isActive ? Colors.blue : Colors.white30,
+                  size: 14,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -979,7 +982,9 @@ class _SourceCard extends StatelessWidget {
                 ),
                 // Eye toggle (add/remove from stage)
                 _MiniIconButton(
-                  icon: isActive ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                  icon: isActive
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_rounded,
                   color: isActive ? Colors.blue : Colors.white24,
                   onTap: onToggle,
                   tooltip: isActive ? 'إزالة من المسرح' : 'إضافة للمسرح',
@@ -1097,7 +1102,6 @@ class _MiniIconButton extends StatelessWidget {
   }
 }
 
-
 /// Bottom student strip — rebuilds only when seat layout or room roster changes.
 class _StudentBottomBar extends StatelessWidget {
   final VideoRoomController controller;
@@ -1120,10 +1124,10 @@ class _StudentBottomBar extends StatelessWidget {
             final rawStudents = participants
                 .where(
                   (p) => ClassroomParticipantUtils.isStudentParticipant(
-                p,
-                localIdentity: localIdentity,
-              ),
-            )
+                    p,
+                    localIdentity: localIdentity,
+                  ),
+                )
                 .toList();
 
             final orderedStudents = <Participant>[];
@@ -1182,8 +1186,8 @@ class _StudentBottomBar extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final p = orderedStudents[index];
                         final seat = controller.seats.firstWhere(
-                              (s) =>
-                          s['student_id'] != null &&
+                          (s) =>
+                              s['student_id'] != null &&
                               p.identity.startsWith(s['student_id'] as String),
                           orElse: () => <String, dynamic>{},
                         );
@@ -1351,7 +1355,7 @@ class _FlyingEmojiState extends State<_FlyingEmoji>
     super.didChangeDependencies();
     _startX =
         MediaQuery.of(context).size.width / 2 +
-            (DateTime.now().millisecond % 100 - 50);
+        (DateTime.now().millisecond % 100 - 50);
   }
 
   @override

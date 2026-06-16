@@ -154,7 +154,7 @@ class VideoRoomController extends ChangeNotifier {
   int _reconnectAttempts = 0;
   static const _maxReconnectAttempts = 5;
 
-  String _selectedChannel = "room-cam-right";
+  String _selectedChannel = "teacher";
   String get selectedChannel => _selectedChannel;
 
   bool _isPiPExpanded = false;
@@ -230,7 +230,7 @@ class VideoRoomController extends ChangeNotifier {
       _seats.map((s) => Map<String, dynamic>.from(s)).toList();
 
   void checkAndFallbackChannel() {
-    if (_room == null || isTeacher) return;
+    if (_room == null || isTeacher || _selectedChannel == 'teacher') return;
 
     final allParticipants = ClassroomParticipantUtils.allFromRoom(_room);
     final channelCam = ClassroomParticipantUtils.findChannelParticipant(

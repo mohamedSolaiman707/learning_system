@@ -34,7 +34,12 @@ class ClassroomParticipantUtils {
     String channelId,
   ) {
     if (channelId == 'whiteboard') return null;
-    return participants.where((p) => p.identity.contains(channelId)).firstOrNull;
+    final normalizedChannel = channelId.replaceAll(RegExp(r'[-_]'), '').toLowerCase();
+    return participants.where((p) {
+      final normalizedIdentity = p.identity.replaceAll(RegExp(r'[-_]'), '').toLowerCase();
+      final normalizedName = (p.name ?? '').replaceAll(RegExp(r'[-_]'), '').toLowerCase();
+      return normalizedIdentity.contains(normalizedChannel) || normalizedName.contains(normalizedChannel);
+    }).firstOrNull;
   }
 
   static bool hasCameraVideo(Participant participant) {
@@ -90,14 +95,14 @@ class ClassroomParticipantUtils {
       main = screenSharer;
       isScreenShare = true;
     } 
-    // 2. المدرس هو الخيار المفضل دائماً (ليظهر للطالب فوراً)
+    // 2. إذا تم اختيار قناة كاميرا قاعة وكانت نشطة
+    else if (selectedChannel != 'teacher' && isRoomCamActive(channelCam)) {
+      main = channelCam;
+    }
+    // 3. المدرس كخيار أساسي أو إذا تم اختياره
     else if (teacher != null) {
       main = teacher;
     }
-    // 3. كاميرا القاعة المختارة (إذا كانت نشطة)
-    else if (isRoomCamActive(channelCam)) {
-      main = channelCam;
-    } 
     // 4. Fallback لأي مشترك آخر يبث فيديو
     else {
       main = participants
@@ -109,7 +114,7 @@ class ClassroomParticipantUtils {
 
     // Fallback النهائي جداً
     main ??= teacher ??
-        participants.where((p) => !p.identity.contains('room-cam-')).firstOrNull ??
+        participants.where((p) => !p.identity.contains('room-cam-') && !p.identity.contains('roomcam')).firstOrNull ??
         participants.first;
 
     final showFloating = shouldShowTeacherFloatingCard(
@@ -148,6 +153,7 @@ class ClassroomParticipantUtils {
 
   static bool isStudentParticipant(Participant p, {String? localIdentity}) {
     return !p.identity.contains('room-cam-') &&
+        !p.identity.contains('roomcam') &&
         !p.identity.contains('teacher_') &&
         p.identity != localIdentity;
   }

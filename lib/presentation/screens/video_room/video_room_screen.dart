@@ -639,6 +639,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
   Widget _buildChannelSidebar(VideoRoomController controller) {
     final channels = [
+      {'id': 'teacher', 'label': 'Teacher', 'desc': 'المعلم'},
       {'id': 'room-cam-right', 'label': 'Cam 1', 'desc': 'كاميرا القاعة 1'},
       {'id': 'room-cam-left', 'label': 'Cam 2', 'desc': 'كاميرا القاعة 2'},
       {'id': 'whiteboard', 'label': 'Whiteboard', 'desc': 'السبورة'},
@@ -678,8 +679,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       controller.toggleWhiteboard();
                     } else {
                       controller.selectChannel(ch['id']!);
-                      if (controller.isWhiteboardOpen)
+                      if (controller.isWhiteboardOpen) {
                         controller.toggleWhiteboard();
+                      }
                     }
                   },
                   child: AnimatedContainer(
@@ -705,7 +707,9 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                         Icon(
                           isWhiteboard
                               ? Icons.edit_note_rounded
-                              : Icons.video_camera_back_rounded,
+                              : (ch['id'] == 'teacher'
+                                  ? Icons.person_rounded
+                                  : Icons.video_camera_back_rounded),
                           color: isSelected ? Colors.blue : Colors.white54,
                           size: 24,
                         ),

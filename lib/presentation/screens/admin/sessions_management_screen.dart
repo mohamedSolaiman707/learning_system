@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/utils/ui_helpers.dart';
 
 class SessionsManagementScreen extends StatefulWidget {
   const SessionsManagementScreen({super.key});
@@ -195,7 +196,7 @@ class _SessionsManagementScreenState extends State<SessionsManagementScreen> {
                           if (mounted) {
                             Navigator.pop(context);
                             _fetchData();
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ بيانات الحصة بنجاح ✅', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
+                            UIHelpers.showSnackBar(context, 'تم حفظ بيانات الحصة بنجاح ✅');
                           }
                         },
                         child: Text(isEditing ? "تحديث الحصة" : "إنشاء الحصة الآن", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),

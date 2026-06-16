@@ -9,6 +9,7 @@ import '../../../../core/services/database_service.dart';
 import '../../../../core/services/cache_service.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/models/session_model.dart';
+import '../../../../core/utils/ui_helpers.dart';
 import '../../video_room/video_room_screen.dart';
 import '../../video_room/video_room_controller.dart';
 import '../../video_room/waiting_room_screen.dart';
@@ -100,9 +101,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       bool isKicked = await db.isStudentKicked(session.id, auth.user!.id);
       if (isKicked) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("عذراً، تم استبعادك من هذه الحصة 🚫"), backgroundColor: Colors.redAccent),
-        );
+        UIHelpers.showSnackBar(context, "عذراً، تم استبعادك من هذه الحصة 🚫", isError: true);
         setState(() => _isJoining = false);
         return;
       }
@@ -141,7 +140,7 @@ class _StudentScheduleTabState extends State<StudentScheduleTab> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل الانضمام للحصة، يرجى المحاولة لاحقاً")));
+        UIHelpers.showSnackBar(context, "فشل الانضمام للحصة، يرجى المحاولة لاحقاً", isError: true);
       }
     } finally {
       if (mounted) setState(() => _isJoining = false);

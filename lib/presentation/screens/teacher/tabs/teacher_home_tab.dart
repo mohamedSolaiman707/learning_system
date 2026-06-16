@@ -6,6 +6,7 @@ import '../../../../core/models/session_model.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/services/database_service.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../core/utils/ui_helpers.dart';
 import '../attendance/attendance_screen.dart';
 import '../reports/teacher_reports_screen.dart';
 import '../../video_room/video_room_screen.dart';
@@ -140,7 +141,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل بدء البث السريع")));
+      UIHelpers.showSnackBar(context, "فشل بدء البث السريع", isError: true);
     }
   }
 
@@ -244,7 +245,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                     if (context.mounted) {
                       Navigator.pop(context);
                       _loadData();
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم جدولة الحصة بنجاح ✅', style: TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.green));
+                      UIHelpers.showSnackBar(context, 'تم جدولة الحصة بنجاح ✅');
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF102A43), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
@@ -477,14 +478,7 @@ class _TeacherHomeTabState extends State<TeacherHomeTab> with SingleTickerProvid
                       if (_activeSession != null) {
                         final link = "https://learning-system-jet.vercel.app/join/${_activeSession!.classCode}";
                         Clipboard.setData(ClipboardData(text: link));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text("تم نسخ رابط الحصة الحقيقي ✅", style: TextStyle(fontFamily: 'Cairo')),
-                            backgroundColor: Colors.green,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        );
+                        UIHelpers.showSnackBar(context, "تم نسخ رابط الحصة الحقيقي ✅");
                         HapticFeedback.mediumImpact();
                       }
                     },

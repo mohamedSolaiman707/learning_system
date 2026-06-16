@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/routes/app_routes.dart';
+import '../../../core/utils/ui_helpers.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -28,26 +29,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await authProvider.uploadAvatar(file.bytes!, file.name);
         
         if (mounted) {
-          _showSnackBar("تم تحديث صورة الملف الشخصي بنجاح ✅", Colors.green);
+          UIHelpers.showSnackBar(context, "تم تحديث صورة الملف الشخصي بنجاح ✅");
         }
       }
     } catch (e) {
-      if (mounted) _showSnackBar("فشل رفع الصورة: $e", Colors.red);
+      if (mounted) UIHelpers.showSnackBar(context, "فشل رفع الصورة: $e", isError: true);
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
-  }
-
-  void _showSnackBar(String message, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        margin: const EdgeInsets.all(20),
-      ),
-    );
   }
 
   void _showEditDialog(String title, String field, String currentValue) {
@@ -134,10 +123,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 }
                 if (context.mounted) {
                   Navigator.pop(context);
-                  _showSnackBar(isPassword ? "تم تغيير كلمة المرور بنجاح 🔒" : "تم تحديث البيانات بنجاح ✅", Colors.green);
+                  UIHelpers.showSnackBar(context, isPassword ? "تم تغيير كلمة المرور بنجاح 🔒" : "تم تحديث البيانات بنجاح ✅");
                 }
               } catch (e) {
-                if (context.mounted) _showSnackBar("فشل التحديث: $e", Colors.red);
+                if (context.mounted) UIHelpers.showSnackBar(context, "فشل التحديث: $e", isError: true);
               }
             },
             style: ElevatedButton.styleFrom(

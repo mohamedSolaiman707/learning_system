@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/widgets/custom_text_field.dart';
+import '../../../core/utils/ui_helpers.dart';
 import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -120,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen>
     }
 
     if (!_isLogin && _isEmailAvailable == false) {
-      _showErrorSnackBar("هذا البريد مسجل بالفعل، يرجى تسجيل الدخول");
+      UIHelpers.showSnackBar(context, "هذا البريد مسجل بالفعل، يرجى تسجيل الدخول", isError: true);
       return;
     }
 
@@ -148,8 +149,10 @@ class _LoginScreenState extends State<LoginScreen>
         if (mounted) _navigateBasedOnRole(authProvider.role);
       }
     } catch (e) {
-      _showErrorSnackBar(
+      UIHelpers.showSnackBar(
+        context,
         _isLogin ? "البريد أو كلمة المرور غير صحيحة" : "فشل إنشاء الحساب",
+        isError: true,
       );
     }
   }
@@ -161,21 +164,6 @@ class _LoginScreenState extends State<LoginScreen>
     else if (role == 'admin')
       route = AppRoutes.adminHome;
     Navigator.pushReplacementNamed(context, route);
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      ),
-    );
   }
 
   void _toggleAuthMode() {
@@ -402,7 +390,7 @@ class _LoginScreenState extends State<LoginScreen>
     return InkWell(
       onTap: () {
         _triggerHaptic();
-        _showErrorSnackBar("تكامل Blackboard متاح لطلاب الجامعات المشتركة فقط");
+        UIHelpers.showSnackBar(context, "تكامل Blackboard متاح لطلاب الجامعات المشتركة فقط", isError: true);
       },
       borderRadius: BorderRadius.circular(20),
       child: Container(

@@ -9,6 +9,7 @@ import '../../../../core/utils/responsive.dart';
 import '../../../../core/services/database_service.dart';
 import '../../../../core/services/cache_service.dart';
 import '../../../../core/models/session_model.dart';
+import '../../../../core/utils/ui_helpers.dart';
 import '../widgets/next_class_card.dart';
 import '../../video_room/video_room_screen.dart';
 import '../../video_room/video_room_controller.dart';
@@ -238,7 +239,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                 const SizedBox(width: 12),
                 const Text(
                   "جدول الحصص القادمة",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                 ),
                 const Spacer(),
                 Container(
@@ -256,6 +257,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                       fontSize: 12,
                       color: Colors.blue,
                       fontWeight: FontWeight.bold,
+                      fontFamily: 'Cairo',
                     ),
                   ),
                 ),
@@ -268,7 +270,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                 child: Center(
                   child: Text(
                     "لا توجد حصص مجدولة حالياً 🎉",
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(color: Colors.grey, fontFamily: 'Cairo'),
                   ),
                 ),
               )
@@ -323,7 +325,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                         ),
                         title: Text(
                           _clean(session.subjectName),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
                         ),
                         subtitle: Text(
                           isNow || session.isActive
@@ -332,6 +334,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                           style: TextStyle(
                             color: isNow || session.isActive ? Colors.red : Colors.grey.shade600,
                             fontSize: 12,
+                            fontFamily: 'Cairo',
                           ),
                         ),
                         trailing: !isNow && !isToday && !session.isActive
@@ -340,6 +343,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                                 style: const TextStyle(
                                   fontSize: 10,
                                   color: Colors.blueGrey,
+                                  fontFamily: 'Cairo',
                                 ),
                               )
                             : null,
@@ -369,12 +373,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
       bool isKicked = await db.isStudentKicked(session.id, auth.user!.id);
       if (isKicked) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("عذراً، تم استبعادك من هذه الحصة 🚫"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+        UIHelpers.showSnackBar(context, "عذراً، تم استبعادك من هذه الحصة 🚫", isError: true);
         setState(() => _isJoining = false);
         return;
       }
@@ -415,9 +414,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
       );
     } catch (e) {
       if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("يرجى المحاولة مرة أخرى")));
+        UIHelpers.showSnackBar(context, "يرجى المحاولة مرة أخرى", isError: true);
     } finally {
       if (mounted) setState(() => _isJoining = false);
     }
@@ -546,7 +543,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
         child: const Center(
           child: Text(
             "لا توجد تسجيلات متاحة حالياً",
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(color: Colors.grey, fontFamily: 'Cairo'),
           ),
         ),
       );
@@ -603,6 +600,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                         style: const TextStyle(
                           fontSize: 11,
                           color: Colors.grey,
+                          fontFamily: 'Cairo',
                         ),
                       ),
                     ],
@@ -614,6 +612,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                       color: Color(0xFF102A43),
+                      fontFamily: 'Cairo',
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -624,6 +623,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                       fontSize: 12,
                       color: Colors.blueAccent,
                       fontWeight: FontWeight.w600,
+                      fontFamily: 'Cairo',
                     ),
                   ),
                 ],
@@ -647,6 +647,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
           color: Color(0xFF102A43),
           fontWeight: FontWeight.w800,
           fontSize: 18,
+          fontFamily: 'Cairo',
         ),
       ),
       actions: [
@@ -678,6 +679,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                 fontSize: 28,
                 fontWeight: FontWeight.w900,
                 color: Color(0xFF102A43),
+                fontFamily: 'Cairo',
               ),
             ),
             const SizedBox(width: 8),
@@ -686,7 +688,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
         ),
         const Text(
           "استمتع بيومك الدراسي وواصل التقدم في مهاراتك.",
-          style: TextStyle(fontSize: 14, color: Color(0xFF627D98)),
+          style: TextStyle(fontSize: 14, color: Color(0xFF627D98), fontFamily: 'Cairo'),
         ),
       ],
     );
@@ -778,6 +780,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF102A43),
+                    fontFamily: 'Cairo',
                   ),
                 ),
                 Text(
@@ -785,6 +788,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFF627D98),
+                    fontFamily: 'Cairo',
                   ),
                 ),
               ],
@@ -814,7 +818,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
         ),
-        child: const Center(child: Text("لا توجد حصص في جدولك اليوم")),
+        child: const Center(child: Text("لا توجد حصص في جدولك اليوم", style: TextStyle(fontFamily: 'Cairo'))),
       );
 
     return Container(
@@ -867,6 +871,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                         style: TextStyle(
                           fontSize: 12,
                           color: isNow ? Colors.blue : Colors.grey,
+                          fontFamily: 'Cairo',
                         ),
                       ),
                       Text(
@@ -874,6 +879,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
+                          fontFamily: 'Cairo',
                           decoration: isPast
                               ? TextDecoration.lineThrough
                               : null,
@@ -923,6 +929,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
+                          fontFamily: 'Cairo',
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -939,7 +946,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text("انضمام الآن"),
+                  child: const Text("انضمام الآن", style: TextStyle(fontFamily: 'Cairo')),
                 ),
               ],
             ),
@@ -959,6 +966,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
             fontSize: 18,
             fontWeight: FontWeight.bold,
             color: Color(0xFF102A43),
+            fontFamily: 'Cairo',
           ),
         ),
         if (isLive) ...[
@@ -973,7 +981,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
               ),
               child: const Text(
                 "مباشر",
-                style: TextStyle(color: Colors.white, fontSize: 10),
+                style: TextStyle(color: Colors.white, fontSize: 10, fontFamily: 'Cairo'),
               ),
             ),
           ),
@@ -1019,6 +1027,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
+                  fontFamily: 'Cairo',
                 ),
               ),
             ],
@@ -1026,7 +1035,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
           SizedBox(height: 12),
           Text(
             "تأكد من مراجعة تسجيلات المحاضرات السابقة في قسم التسجيلات.",
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+            style: TextStyle(color: Colors.white70, fontSize: 13, fontFamily: 'Cairo'),
           ),
         ],
       ),
@@ -1050,7 +1059,7 @@ class _StudentHomeTabState extends State<StudentHomeTab>
               SizedBox(height: 20),
               Text(
                 "جاري تحضير القاعة...",
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
               ),
             ],
           ),
@@ -1105,6 +1114,7 @@ class _RecIndicatorState extends State<_RecIndicator>
                 color: Colors.white,
                 fontSize: 9,
                 fontWeight: FontWeight.bold,
+                fontFamily: 'Cairo',
               ),
             ),
           ],

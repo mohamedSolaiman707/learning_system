@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/custom_text_field.dart';
+import '../../../core/utils/ui_helpers.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -52,13 +53,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
         if (response.session != null) {
           Navigator.pushReplacementNamed(context, AppRoutes.studentHome);
         } else {
-          _showSuccessDialog("تم إنشاء الحساب بنجاح! يرجى مراجعة بريدك الإلكتروني لتفعيل الحساب.");
+          UIHelpers.showCustomDialog(
+            context, 
+            title: "نجاح", 
+            message: "تم إنشاء الحساب بنجاح! يرجى مراجعة بريدك الإلكتروني لتفعيل الحساب.",
+            onConfirm: () => Navigator.pop(context),
+          );
         }
       }
     } on AuthApiException catch (e) {
       _handleAuthError(e);
     } catch (e) {
-      _showErrorSnackBar("حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى");
+      UIHelpers.showSnackBar(context, "حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى", isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -71,43 +77,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } else if (e.message.contains("Password should be")) {
       message = "كلمة المرور ضعيفة جداً";
     }
-    _showErrorSnackBar(message);
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  void _showSuccessDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green),
-            SizedBox(width: 10),
-            Text("نجاح"),
-          ],
-        ),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: const Text("فهمت"),
-          ),
-        ],
-      ),
-    );
+    UIHelpers.showSnackBar(context, message, isError: true);
   }
 
   @override
@@ -146,12 +116,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 40),
                 const Text(
                   "ابدأ رحلتك التعليمية",
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E)),
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E), fontFamily: 'Cairo'),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   "انضم لآلاف الطلاب والمعلمين في بيئة تفاعلية",
-                  style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 18, color: Colors.grey.shade600, fontFamily: 'Cairo'),
                 ),
               ],
             ),
@@ -191,8 +161,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
           const SizedBox(height: 32),
-          const Text("إنشاء حساب جديد", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const Text("سجل بياناتك للوصول إلى كافة الدروس والمصادر", style: TextStyle(color: Colors.grey)),
+          const Text("إنشاء حساب جديد", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
+          const Text("سجل بياناتك للوصول إلى كافة الدروس والمصادر", style: TextStyle(color: Colors.grey, fontFamily: 'Cairo')),
           const SizedBox(height: 32),
 
           CustomTextField(
@@ -213,16 +183,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             validator: (v) => (v == null || !v.contains('@')) ? "بريد إلكتروني غير صالح" : null,
           ),
           const SizedBox(height: 16),
-
-          // CustomTextField(
-          //   controller: _phoneController,
-          //   hintText: "رقم الهاتف",
-          //   prefixIcon: Icons.phone_outlined,
-          //   keyboardType: TextInputType.phone,
-          //   autofillHints: const [AutofillHints.telephoneNumber],
-          //   validator: (v) => (v == null || v.length < 8) ? "رقم هاتف غير صحيح" : null,
-          // ),
-          // const SizedBox(height: 16),
 
           CustomTextField(
             controller: _passwordController,
@@ -249,17 +209,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               child: _isLoading
                   ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text("إنشاء حساب", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  : const Text("إنشاء حساب", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
             ),
           ),
 
           const SizedBox(height: 24),
           OutlinedButton.icon(
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("سيتم تفعيل الدخول الموحد عبر Blackboard قريباً")));
+              UIHelpers.showSnackBar(context, "سيتم تفعيل الدخول الموحد عبر Blackboard قريباً");
             },
             icon: const Icon(Icons.account_balance_rounded, size: 20),
-            label: const Text("الدخول عبر حساب الجامعة"),
+            label: const Text("الدخول عبر حساب الجامعة", style: TextStyle(fontFamily: 'Cairo')),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(double.infinity, 55),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -270,10 +230,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text("لديك حساب بالفعل؟"),
+              const Text("لديك حساب بالفعل؟", style: TextStyle(fontFamily: 'Cairo')),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text("سجل دخولك"),
+                child: const Text("سجل دخولك", style: TextStyle(fontFamily: 'Cairo')),
               ),
             ],
           ),

@@ -135,7 +135,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     // Open picker if not shown, not already open, and controller finished initial loading
     if (!controller.seatPickerShown &&
         !_isSeatPickerOpen) {
-      
+
       setState(() => _isSeatPickerOpen = true);
       showDialog(
         context: context,
@@ -733,8 +733,8 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                           isWhiteboard
                               ? Icons.edit_note_rounded
                               : (ch['id'] == 'teacher'
-                                  ? Icons.person_rounded
-                                  : Icons.video_camera_back_rounded),
+                              ? Icons.person_rounded
+                              : Icons.video_camera_back_rounded),
                           color: isSelected ? Colors.blue : Colors.white54,
                           size: 24,
                         ),

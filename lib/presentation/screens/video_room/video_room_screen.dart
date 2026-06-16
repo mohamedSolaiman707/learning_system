@@ -682,6 +682,31 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       if (controller.isWhiteboardOpen) {
                         controller.toggleWhiteboard();
                       }
+                      if (ch['id'] != 'teacher') {
+                        final participants = ClassroomParticipantUtils.allFromRoom(controller.room);
+                        final cam = ClassroomParticipantUtils.findChannelParticipant(participants, ch['id']!);
+                        if (cam == null || !ClassroomParticipantUtils.isRoomCamActive(cam)) {
+                          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text(
+                                "عذراً، هذه الكاميرا غير متصلة حالياً 📷",
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              backgroundColor: Colors.orange,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          );
+                        }
+                      }
                     }
                   },
                   child: AnimatedContainer(

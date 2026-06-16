@@ -516,10 +516,11 @@ class _ReactionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      offset: const Offset(0, -80),
+      offset: const Offset(-80, -75),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      color: Colors.black.withOpacity(0.85),
-      elevation: 0,
+      color: const Color(0xFF1E1F24),
+      elevation: 6,
+      shadowColor: Colors.black.withOpacity(0.3),
       padding: EdgeInsets.zero,
       icon: Container(
         padding: const EdgeInsets.all(12),
@@ -538,36 +539,30 @@ class _ReactionButton extends StatelessWidget {
         PopupMenuItem<String>(
           enabled: false,
           padding: EdgeInsets.zero,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: ['👏', '👍', '❤️', '😂', '🎉'].map((emoji) {
-                    return InkWell(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        controller.sendReaction(emoji);
-                        Navigator.pop(context);
-                      },
-                      borderRadius: BorderRadius.circular(15),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(
-                          emoji,
-                          style: const TextStyle(fontSize: 24),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 5,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: ['👏', '👍', '❤️', '😂', '🎉'].map((emoji) {
+                return InkWell(
+                  onTap: () {
+                    HapticFeedback.mediumImpact();
+                    controller.sendReaction(emoji);
+                    Navigator.pop(context);
+                  },
+                  borderRadius: BorderRadius.circular(15),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Text(
+                      emoji,
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ),

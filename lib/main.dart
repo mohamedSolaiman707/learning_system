@@ -95,7 +95,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
     _capturedParams = _extractParams();
 
     final token = _capturedParams!['token'] ?? _capturedParams!['access_token'];
-    final sessionId = _capturedParams!['sessionId'] ?? _capturedParams!['session_id'] ?? _capturedParams!['lms_id'];
+    final sessionId = _capturedParams!['sessionId'] ??
+        _capturedParams!['session_id'] ?? _capturedParams!['lms_id'];
 
     // إذا كان الرابط يحتوي على توكن استعادة أو معاملات الدخول المباشر
     if (token != null ||
@@ -123,16 +124,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (fullUri.fragment.isNotEmpty) {
       String fragment = fullUri.fragment;
       if (fragment.contains('?')) {
-        fragment = fragment.split('?').last;
+        fragment = fragment
+            .split('?')
+            .last;
       }
       if (fragment.startsWith('/')) {
-         if (fragment.contains('?')) {
-           fragment = fragment.split('?').last;
-         } else {
-           fragment = "";
-         }
+        if (fragment.contains('?')) {
+          fragment = fragment
+              .split('?')
+              .last;
+        } else {
+          fragment = "";
+        }
       }
-      
+
       if (fragment.isNotEmpty) {
         params.addAll(Uri.splitQueryString(fragment));
       }
@@ -146,91 +151,103 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final params = _capturedParams ?? _extractParams();
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    try {
-      // 1. معالجة رابط إعادة تعيين كلمة المرور
-      if (params['type'] == 'recovery') {
+    // 1. Handle password recovery
+    if (params['type'] == 'recovery') {
+      _linkProcessed = true;
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(
+            context, AppRoutes.resetPassword, (route) => false);
+      }
+      return;
+    }
+
+    // 2. Handle token based auto login (LTI etc.)
+    final token = params['token'] ?? params['access_token'];
+    if (token != null) {
+      try {
+        if (mounted) setState(() => _isRedirecting = true);
+        await Supabase.instance.client.auth.setSession(token);
+        await Future.delayed(const Duration(milliseconds: 500));
+      } catch (e) {
+        debugPrint("AutoLogin Error: $e");
+      }
+    }
+
+    // 3. Handle external auth (Blackboard etc.)
+    final externalId = params['external_id'] ?? params['externalId'];
+    final role = params['role'];
+    final fullName = params['full_name'] ?? params['userName'] ??
+        params['username'];
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    if (currentUser != null && externalId != null) {
+      final email = params['email'] ?? currentUser.email ??
+          '${externalId}@blackboard.com';
+      await authProvider.handleExternalAuth(
+        externalId: externalId,
+        email: email,
+        fullName: fullName ?? 'مستخدم Blackboard',
+        role: role ?? 'student',
+      );
+    }
+
+    // 4. Handle direct session navigation (student view)
+    final sessionId = params['sessionId'] ?? params['session_id'] ??
+        params['lms_id'];
+    if (sessionId != null && currentUser != null) {
+      _linkProcessed = true;
+      if (mounted) setState(() => _isRedirecting = true);
+      final dbService = Provider.of<DatabaseService>(context, listen: false);
+      var sessionData = await dbService.getSessionById(sessionId);
+      sessionData ??= await dbService.getSessionByLmsId(sessionId);
+      if (sessionData != null && mounted) {
+        final isTeacherRole = (role == 'teacher' ||
+            authProvider.role == 'teacher');
+        final userId = currentUser.id;
+        if (!isTeacherRole) {
+          await dbService.enrollStudentBySessionId(userId, sessionData['id']);
+        }
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.videoRoom,
+              (route) => false,
+          arguments: {
+            'roomName': 'room_${sessionData['id']}',
+            'title': sessionData['subject_name'] ?? 'قاعة تعليمية',
+            'userName': authProvider.profile?['full_name'] ?? fullName ??
+                'User',
+            'userId': userId,
+            'isTeacher': isTeacherRole,
+            'sessionId': sessionData['id'],
+          },
+        );
+        return;
+      }
+    }
+
+    // 5. Handle room-publisher deep link (camera setup)
+    // The URL format is https://.../#/room-publisher?roomName=...&sessionId=...
+    // We check the path segment after the hash.
+    final uri = Uri.base;
+    if (uri.fragment.startsWith('/room-publisher')) {
+      final fragmentUri = Uri.parse(uri.fragment);
+      final roomName = fragmentUri.queryParameters['roomName'];
+      final sessionIdParam = fragmentUri.queryParameters['sessionId'];
+      if (roomName != null && sessionIdParam != null) {
         _linkProcessed = true;
         if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.resetPassword, (route) => false);
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            AppRoutes.roomPublisher,
+                (route) => false,
+            arguments: {'roomName': roomName, 'sessionId': sessionIdParam},
+          );
         }
         return;
       }
-
-      // 2. معالجة الدخول التلقائي (LTI أو غيره)
-      final token = params['token'] ?? params['access_token'];
-      if (token != null) {
-        try {
-          if (mounted) setState(() => _isRedirecting = true);
-          await Supabase.instance.client.auth.setSession(token);
-          // الانتظار قليلاً لضمان تحديث مستمع حالة تسجيل الدخول
-          await Future.delayed(const Duration(milliseconds: 500));
-        } catch (e) {
-          debugPrint("AutoLogin Error: $e");
-        }
-      }
-
-      // 3. معالجة تحديث الملف الشخصي في حالة الدخول القادم من Blackboard
-      final externalId = params['external_id'] ?? params['externalId'];
-      final role = params['role'];
-      final fullName = params['full_name'] ?? params['userName'] ?? params['username'];
-
-      final currentUser = Supabase.instance.client.auth.currentUser;
-      if (currentUser != null && externalId != null) {
-        final email = params['email'] ?? currentUser.email ?? '${externalId}@blackboard.com';
-        await authProvider.handleExternalAuth(
-          externalId: externalId,
-          email: email,
-          fullName: fullName ?? 'مستخدم Blackboard',
-          role: role ?? 'student',
-        );
-      }
-
-      // 4. معالجة الدخول المباشر للقاعات
-      final sessionId = params['sessionId'] ?? params['session_id'] ?? params['lms_id'];
-      if (sessionId != null && currentUser != null) {
-        _linkProcessed = true;
-        if (mounted) setState(() => _isRedirecting = true);
-
-        final dbService = Provider.of<DatabaseService>(context, listen: false);
-        
-        // محاولة جلب الجلسة أولاً بـ ID الجلسة المباشر، ثم بـ lmsId
-        var sessionData = await dbService.getSessionById(sessionId);
-        sessionData ??= await dbService.getSessionByLmsId(sessionId);
-
-        if (sessionData != null && mounted) {
-          final isTeacherRole = (role == 'teacher' || authProvider.role == 'teacher');
-          final userId = currentUser.id;
-
-          if (!isTeacherRole) {
-            await dbService.enrollStudentBySessionId(userId, sessionData['id']);
-          }
-
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            AppRoutes.videoRoom,
-            (route) => false,
-            arguments: {
-              'roomName': 'room_${sessionData['id']}',
-              'title': sessionData['subject_name'] ?? 'قاعة تعليمية',
-              'userName': authProvider.profile?['full_name'] ?? fullName ?? 'User',
-              'userId': userId,
-              'isTeacher': isTeacherRole,
-              'sessionId': sessionData['id'],
-            },
-          );
-          return;
-        }
-      }
-    } catch (e) {
-      debugPrint("Auth Redirection Flow Error: $e");
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isRedirecting = false;
-          _linkProcessed = true;
-        });
-      }
     }
+
+    // If none of the above matched, mark link as processed to avoid re‑checking.
+    _linkProcessed = true;
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -245,12 +262,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
             children: [
               const CircularProgressIndicator(color: Color(0xFF102A43)),
               const SizedBox(height: 32),
-              const Icon(Icons.security_rounded, size: 48, color: Colors.blueAccent),
+              const Icon(
+                  Icons.security_rounded, size: 48, color: Colors.blueAccent),
               const SizedBox(height: 16),
               const Text("جاري التحقق من الهوية...",
-                  style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
+                  style: TextStyle(fontFamily: 'Cairo',
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold)),
               const Text("سيتم توجيهك الآن تلقائياً",
-                  style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.grey)),
+                  style: TextStyle(
+                      fontFamily: 'Cairo', fontSize: 14, color: Colors.grey)),
             ],
           ),
         ),
@@ -266,4 +287,5 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (role == 'teacher') return const TeacherMainLayout();
     return const StudentMainLayout();
   }
+
 }

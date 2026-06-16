@@ -350,35 +350,57 @@ class VideoRoomController extends ChangeNotifier {
   /// Check if a channel is active.
   bool isChannelActive(String channelId) => _activeChannels.contains(channelId);
 
-  /// Update video quality: pinned/fullscreen → HIGH, all others → LOW.
+  /// Update video quality based on adaptive priority list and network conditions.
+  /// The priority order is screen-share > teacher > room cams.
+  /// Audio tracks are always kept at high quality.
   void _updateTrackQualities() {
     if (_room == null) return;
     final allParticipants = ClassroomParticipantUtils.allFromRoom(_room);
 
-    for (final channelId in _activeChannels) {
-      if (channelId == 'whiteboard') continue; // not a LiveKit track
+    // Build priority list based on active channels.
+    final List<String> priorityChannels = [];
+    if (isChannelActive('screen-share')) priorityChannels.add('screen-share');
+    if (isChannelActive('teacher')) priorityChannels.add('teacher');
+    for (final cam in roomCameraOrder) {
+      if (isChannelActive(cam)) priorityChannels.add(cam);
+    }
+
+    // Apply qualities based on position in priority list.
+    for (int i = 0; i < priorityChannels.length; i++) {
+      final channelId = priorityChannels[i];
+      if (channelId == 'whiteboard') continue; // Not a LiveKit track.
 
       Participant? participant;
       if (channelId == 'screen-share') {
         participant = ClassroomParticipantUtils.findScreenSharingParticipant(allParticipants);
+      } else if (channelId == 'teacher') {
+        participant = ClassroomParticipantUtils.findTeacher(allParticipants);
       } else {
-        participant = channelId == 'teacher'
-            ? ClassroomParticipantUtils.findTeacher(allParticipants)
-            : ClassroomParticipantUtils.findChannelParticipant(allParticipants, channelId);
+        participant = ClassroomParticipantUtils.findChannelParticipant(allParticipants, channelId);
       }
 
       if (participant == null || participant is! RemoteParticipant) continue;
 
-      final bool isPrimary = _pinnedChannel == channelId ||
-          (_pinnedChannel == null && _activeChannels.length == 1);
-
+      final bool isHigh = i == 0; // Highest priority gets HIGH, others LOW.
       for (final pub in participant.trackPublications.values) {
         if (pub.track is VideoTrack && pub is RemoteTrackPublication) {
-          pub.setVideoQuality(isPrimary ? VideoQuality.HIGH : VideoQuality.LOW);
+          pub.setVideoQuality(isHigh ? VideoQuality.HIGH : VideoQuality.LOW);
         }
+        // Helper to map participant to channel ID for quality handling.
+  String? _channelIdForParticipant(Participant participant) {
+    if (ClassroomParticipantUtils.isTeacher(participant)) return 'teacher';
+    if (ClassroomParticipantUtils.isScreenShare(participant)) return 'screen-share';
+    for (final cam in roomCameraOrder) {
+      final camParticipant = ClassroomParticipantUtils.findChannelParticipant(
+          ClassroomParticipantUtils.allFromRoom(_room), cam);
+      if (camParticipant?.identity == participant.identity) return cam;
+    }
+    return null;
+  }
       }
     }
   }
+
 
   Room? get room => _room;
   bool get isLoading => _isLoading;
@@ -1000,6 +1022,42 @@ class VideoRoomController extends ChangeNotifier {
 
   void _setupEventListeners() {
     _listener!
+      ..on<ParticipantConnectionQualityUpdatedEvent>((event) {
+        // Adaptive priority handling based on network quality.
+        // If a participant's connection quality degrades, we may remove lower-priority channels.
+        // Determine which channel this participant belongs to.
+        final participant = event.participant;
+        // Map participant identity to a channel ID.
+        String? channelId;
+        if (ClassroomParticipantUtils.isTeacher(participant)) {
+          channelId = 'teacher';
+        } else if (ClassroomParticipantUtils.isScreenShare(participant)) {
+          channelId = 'screen-share';
+        } else {
+          // Check room camera participants.
+          for (final cam in roomCameraOrder) {
+            final camParticipant = ClassroomParticipantUtils.findChannelParticipant(
+                ClassroomParticipantUtils.allFromRoom(_room), cam);
+            if (camParticipant?.identity == participant.identity) {
+              channelId = cam;
+              break;
+            }
+          }
+        }
+
+        if (channelId == null) return; // Unknown channel.
+        // Degrade handling: if quality is poor or worse, deactivate the channel unless it's the highest priority.
+        if (event.connectionQuality == ConnectionQuality.poor) {
+          // Ensure we never deactivate screen-share or teacher if they are the only active channel.
+          if (isChannelActive(channelId) && _activeChannels.length > 1) {
+            // Remove from active channels.
+            _activeChannels.remove(channelId);
+            if (_pinnedChannel == channelId) _pinnedChannel = null;
+            _notify(immediate: true);
+            _updateTrackQualities();
+          }
+        }
+      })
       ..on<DataReceivedEvent>((event) {
         try {
           final data = jsonDecode(utf8.decode(event.data));

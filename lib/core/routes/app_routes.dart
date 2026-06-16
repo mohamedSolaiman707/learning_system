@@ -32,6 +32,7 @@ class AppRoutes {
     studentHome: (context) => const StudentMainLayout(),
     teacherHome: (context) => const TeacherMainLayout(),
     adminHome: (context) => const AdminDashboard(),
+    // roomPublisher route handled via onGenerateRoute
   };
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
@@ -75,26 +76,19 @@ class AppRoutes {
       );
     }
 
-    if (routeName == wallDisplay) {
+    if (routeName == roomPublisher) {
       final args = settings.arguments as Map<String, dynamic>? ?? queryParams;
+      final String roomName = args['roomName'] ?? '';
+      final String sessionId = args['sessionId'] ?? '';
       return MaterialPageRoute(
-        builder: (context) => WallDisplayScreen(
-          sessionId: args['sessionId'] ?? '',
-          zone: args['zone'] ?? '',
-          roomName: args['roomName'] ?? '',
+        builder: (context) => RoomPublisherScreen(
+          roomName: roomName,
+          sessionId: sessionId,
         ),
       );
     }
 
-    if (routeName == roomPublisher) {
-      final args = settings.arguments as Map<String, dynamic>? ?? queryParams;
-      return MaterialPageRoute(
-        builder: (context) => RoomPublisherScreen(
-          roomName: args['roomName'] ?? '',
-          sessionId: args['sessionId'] ?? '',
-        ),
-      );
-    }
+
 
     return null;
   }

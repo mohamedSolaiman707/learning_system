@@ -29,6 +29,10 @@ class ClassroomParticipantUtils {
         .firstOrNull;
   }
 
+  static bool isTeacher(Participant participant) => participant.identity.startsWith('teacher_') || participant.identity.toLowerCase().contains('teacher');
+
+  static bool isScreenShare(Participant participant) => participant.isScreenShareEnabled();
+
   static Participant? findChannelParticipant(
     List<Participant> participants,
     String channelId,

@@ -8,8 +8,10 @@ import 'widgets/chat_panel.dart';
 import 'widgets/qa_panel.dart';
 import 'widgets/whiteboard_panel.dart';
 import 'widgets/participants_panel.dart';
+import 'widgets/dynamic_stage.dart';
 import 'utils/classroom_participant_utils.dart';
 import 'widgets/poll_panel.dart';
+import 'widgets/source_manager_sidebar.dart';
 import 'widgets/seat_picker_dialog.dart';
 import '../../../core/utils/responsive.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -353,11 +355,11 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         children: [
           Row(
             children: [
-              // 1. Sidebar Channels
-              Selector<VideoRoomController, (String, bool)>(
-                selector: (_, c) => (c.selectedChannel, c.isWhiteboardOpen),
-                builder: (context, data, child) =>
-                    _buildChannelSidebar(controller),
+              // 1. Source Manager Sidebar (Multi-Source)
+              Selector<VideoRoomController, String>(
+                selector: (_, c) => c.multiSourceKey,
+                builder: (context, _, __) =>
+                     SourceManagerSidebar(),
               ),
 
               Expanded(
@@ -404,21 +406,15 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                     Expanded(
                       child: Row(
                         children: [
-                          // 3. Main Stage (layer order: video → whiteboard → floating card)
+                          // 3. Dynamic Multi-Source Stage
                           Expanded(
                             child: Stack(
                               clipBehavior: Clip.hardEdge,
                               children: [
                                 Positioned.fill(
-                                  child: _StudentMainStage(
+                                  child: DynamicStage(
                                     controller: controller,
                                   ),
-                                ),
-                                Positioned.fill(
-                                  child: _StudentWhiteboardLayer(),
-                                ),
-                                _StudentTeacherFloatingCard(
-                                  controller: controller,
                                 ),
                                 ..._reactions,
                               ],
@@ -637,128 +633,7 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
-  Widget _buildChannelSidebar(VideoRoomController controller) {
-    final channels = [
-      {'id': 'teacher', 'label': 'Teacher', 'desc': 'المعلم'},
-      {'id': 'room-cam-right', 'label': 'Cam 1', 'desc': 'كاميرا القاعة 1'},
-      {'id': 'room-cam-left', 'label': 'Cam 2', 'desc': 'كاميرا القاعة 2'},
-      {'id': 'whiteboard', 'label': 'Whiteboard', 'desc': 'السبورة'},
-      {'id': 'room-cam-screen', 'label': 'Screen', 'desc': 'الشاشة الرئيسية'},
-    ];
-
-    return Container(
-      width: 110,
-      color: const Color(0xFF16171B),
-      child: Column(
-        children: [
-          const SizedBox(height: 20),
-          const Text(
-            "Channels",
-            style: TextStyle(
-              color: Colors.white54,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Cairo',
-            ),
-          ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: ListView.builder(
-              itemCount: channels.length,
-              itemBuilder: (context, index) {
-                final ch = channels[index];
-                final bool isWhiteboard = ch['id'] == 'whiteboard';
-                final isSelected = isWhiteboard
-                    ? controller.isWhiteboardOpen
-                    : (controller.selectedChannel == ch['id'] &&
-                    !controller.isWhiteboardOpen);
-
-                return InkWell(
-                  onTap: () {
-                    if (isWhiteboard) {
-                      controller.toggleWhiteboard();
-                    } else {
-                      controller.selectChannel(ch['id']!);
-                      if (controller.isWhiteboardOpen) {
-                        controller.toggleWhiteboard();
-                      }
-                      if (ch['id'] != 'teacher') {
-                        final participants = ClassroomParticipantUtils.allFromRoom(controller.room);
-                        final cam = ClassroomParticipantUtils.findChannelParticipant(participants, ch['id']!);
-                        if (cam == null || !ClassroomParticipantUtils.isRoomCamActive(cam)) {
-                          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text(
-                                "عذراً، هذه الكاميرا غير متصلة حالياً 📷",
-                                style: TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              backgroundColor: Colors.orange,
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                    }
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.symmetric(
-                      vertical: 8,
-                      horizontal: 10,
-                    ),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? Colors.blue.withOpacity(0.15)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(
-                        color: isSelected
-                            ? Colors.blue
-                            : Colors.white.withOpacity(0.05),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          isWhiteboard
-                              ? Icons.edit_note_rounded
-                              : (ch['id'] == 'teacher'
-                              ? Icons.person_rounded
-                              : Icons.video_camera_back_rounded),
-                          color: isSelected ? Colors.blue : Colors.white54,
-                          size: 24,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          ch['label']!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: isSelected ? Colors.blue : Colors.white54,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // _buildChannelSidebar replaced by _SourceManagerSidebar widget below
 
   Widget _buildTeacherLayout() {
     return Scaffold(
@@ -1017,125 +892,211 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 }
 
-/// Main video layer for students — hidden while the whiteboard is open.
-class _StudentMainStage extends StatelessWidget {
-  final VideoRoomController controller;
+/// ─── Source Manager Sidebar (Deprecated) ───
 
-  const _StudentMainStage({required this.controller});
+/// Individual source card in the sidebar with live preview
+class _SourceCard extends StatelessWidget {
+  final String channelId;
+  final String label;
+  final IconData icon;
+  final bool isActive;
+  final bool isPinned;
+  final bool isOnline;
+  final bool isWhiteboard;
+  final Participant? participant;
+  final VoidCallback onToggle;
+  final VoidCallback onPin;
 
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        controller,
-        if (controller.room != null) controller.room!,
-      ]),
-      builder: (context, _) {
-        if (controller.isWhiteboardOpen) {
-          return const ColoredBox(color: Color(0xFF0F1014));
-        }
-
-        final participants = ClassroomParticipantUtils.allFromRoom(
-          controller.room,
-        );
-        if (participants.isEmpty) {
-          return const _WaitingForTeacher();
-        }
-
-        final resolution = ClassroomParticipantUtils.resolveMainStage(
-          participants: participants,
-          selectedChannel: controller.selectedChannel,
-          isWhiteboardOpen: false,
-        );
-
-        if (resolution == null) return const _WaitingForTeacher();
-
-        return ParticipantTile(
-          key: ValueKey('student_main_${resolution.participant.identity}'),
-          participant: resolution.participant,
-          isMainStage: true,
-          forceShowScreen: resolution.isScreenShare,
-        );
-      },
-    );
-  }
-}
-
-/// Whiteboard sits above main stage; teacher floating card sits above this.
-class _StudentWhiteboardLayer extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Selector<VideoRoomController, bool>(
-      selector: (_, c) => c.isWhiteboardOpen,
-      builder: (_, isOpen, __) {
-        if (!isOpen) return const SizedBox.shrink();
-        return const Material(color: Colors.white, child: WhiteboardPanel());
-      },
-    );
-  }
-}
-
-class _StudentTeacherFloatingCard extends StatelessWidget {
-  final VideoRoomController controller;
-
-  const _StudentTeacherFloatingCard({required this.controller});
+  const _SourceCard({
+    required this.channelId,
+    required this.label,
+    required this.icon,
+    required this.isActive,
+    required this.isPinned,
+    required this.isOnline,
+    required this.isWhiteboard,
+    required this.participant,
+    required this.onToggle,
+    required this.onPin,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        controller,
-        if (controller.room != null) controller.room!,
-      ]),
-      builder: (context, _) {
-        final participants = ClassroomParticipantUtils.allFromRoom(
-          controller.room,
-        );
-        final teacher = ClassroomParticipantUtils.findTeacher(participants);
-        if (teacher == null) return const SizedBox.shrink();
+    final borderColor = isPinned
+        ? Colors.amber
+        : (isActive ? Colors.blue : Colors.white.withOpacity(0.06));
+    final bgColor = isPinned
+        ? Colors.amber.withOpacity(0.06)
+        : (isActive ? Colors.blue.withOpacity(0.06) : Colors.white.withOpacity(0.02));
 
-        final resolution = ClassroomParticipantUtils.resolveMainStage(
-          participants: participants,
-          selectedChannel: controller.selectedChannel,
-          isWhiteboardOpen: controller.isWhiteboardOpen,
-        );
-
-        if (resolution == null || !resolution.showTeacherFloatingCard) {
-          return const SizedBox.shrink();
-        }
-
-        return Positioned(
-          top: 16,
-          right: 16,
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(15),
-            child: Container(
-              width: 200,
-              height: 120,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(
-                  color: Colors.blue.withOpacity(0.5),
-                  width: 2,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: isPinned ? 1.5 : 1),
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: (isPinned ? Colors.amber : Colors.blue).withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: ParticipantTile(
-                  key: ValueKey('teacher_floating_${teacher.identity}'),
-                  participant: teacher,
-                  isMainStage: false,
-                  forceShowScreen: false,
-                ),
-              ),
+              ]
+            : null,
+      ),
+      child: Column(
+        children: [
+          // Preview area
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+            child: SizedBox(
+              height: 90,
+              width: double.infinity,
+              child: _buildPreview(),
             ),
           ),
-        );
-      },
+          // Controls bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              children: [
+                Icon(icon, color: isActive ? Colors.blue : Colors.white30, size: 14),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: isActive ? Colors.white : Colors.white38,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Cairo',
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // Eye toggle (add/remove from stage)
+                _MiniIconButton(
+                  icon: isActive ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                  color: isActive ? Colors.blue : Colors.white24,
+                  onTap: onToggle,
+                  tooltip: isActive ? 'إزالة من المسرح' : 'إضافة للمسرح',
+                ),
+                const SizedBox(width: 2),
+                // Pin toggle
+                _MiniIconButton(
+                  icon: Icons.push_pin_rounded,
+                  color: isPinned ? Colors.amber : Colors.white24,
+                  onTap: onPin,
+                  tooltip: isPinned ? 'إلغاء التثبيت' : 'تثبيت كمصدر رئيسي',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreview() {
+    // Whiteboard preview — static icon
+    if (isWhiteboard) {
+      return Container(
+        color: Colors.white.withOpacity(0.95),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.edit_note_rounded,
+                color: isActive ? Colors.blue : Colors.grey.shade400,
+                size: 28,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'السبورة التفاعلية',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 9,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Offline placeholder
+    if (!isOnline || participant == null) {
+      return Container(
+        color: const Color(0xFF1A1B1F),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.videocam_off_rounded,
+                color: Colors.white.withOpacity(0.1),
+                size: 24,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'غير متصل',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.15),
+                  fontSize: 9,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Live preview using ParticipantTile at LOW quality
+    return ParticipantTile(
+      key: ValueKey('sidebar_preview_${participant!.identity}'),
+      participant: participant!,
+      isMainStage: false,
+      forceShowScreen: false,
     );
   }
 }
+
+/// Tiny icon button used in source card controls
+class _MiniIconButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  const _MiniIconButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(icon, color: color, size: 14),
+        ),
+      ),
+    );
+  }
+}
+
 
 /// Bottom student strip — rebuilds only when seat layout or room roster changes.
 class _StudentBottomBar extends StatelessWidget {

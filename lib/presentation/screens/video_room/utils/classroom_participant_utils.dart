@@ -157,4 +157,30 @@ class ClassroomParticipantUtils {
         !p.identity.contains('teacher_') &&
         p.identity != localIdentity;
   }
+
+  /// Returns participants matching a set of active channels.
+  /// The returned map has channelId -> Participant? (null = offline/unavailable).
+  static Map<String, Participant?> resolveMultiSource({
+    required List<Participant> participants,
+    required Set<String> activeChannels,
+  }) {
+    final Map<String, Participant?> result = {};
+    for (final channelId in activeChannels) {
+      if (channelId == 'whiteboard') {
+        result[channelId] = null; // whiteboard is a local widget, not a participant
+        continue;
+      }
+      if (channelId == 'screen-share') {
+        result[channelId] = findScreenSharingParticipant(participants);
+        continue;
+      }
+      if (channelId == 'teacher') {
+        result[channelId] = findTeacher(participants);
+        continue;
+      }
+      // Room cameras
+      result[channelId] = findChannelParticipant(participants, channelId);
+    }
+    return result;
+  }
 }

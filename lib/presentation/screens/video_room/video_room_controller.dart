@@ -157,6 +157,18 @@ class VideoRoomController extends ChangeNotifier {
   String _selectedChannel = "teacher";
   String get selectedChannel => _selectedChannel;
 
+  // ─── Multi-Source Dynamic Stage (Student) ───
+  final Set<String> _activeChannels = {'teacher'};
+  Set<String> get activeChannels => Set.unmodifiable(_activeChannels);
+
+  String? _pinnedChannel;
+  String? get pinnedChannel => _pinnedChannel;
+  bool get hasPinnedChannel => _pinnedChannel != null;
+
+  /// Stable key for Selector memoization — only changes when active/pinned state changes.
+  String get multiSourceKey =>
+      '${_activeChannels.toList()..sort()}|$_pinnedChannel';
+
   bool _isPiPExpanded = false;
   bool get isPiPExpanded => _isPiPExpanded;
 
@@ -294,6 +306,77 @@ class VideoRoomController extends ChangeNotifier {
       _selectedChannel = trackName;
       // تم إزالة إغلاق السبورة من هنا
       notifyListeners();
+    }
+  }
+
+  // ─── Multi-Source Channel Management (Student) ───
+
+  /// Toggle a channel in/out of activeChannels. Keeps at least 'teacher'.
+  void toggleActiveChannel(String channelId) {
+    if (_activeChannels.contains(channelId)) {
+      if (_activeChannels.length <= 1) return; // keep at least one
+      _activeChannels.remove(channelId);
+      if (_pinnedChannel == channelId) _pinnedChannel = null;
+    } else {
+      _activeChannels.add(channelId);
+      // If whiteboard is toggled on via sidebar, also open it
+      if (channelId == 'whiteboard' && !_isWhiteboardOpen) {
+        _isWhiteboardOpen = true;
+      }
+    }
+    // If whiteboard removed from active, close it
+    if (!_activeChannels.contains('whiteboard') && _isWhiteboardOpen) {
+      _isWhiteboardOpen = false;
+    }
+    _updateTrackQualities();
+    _triggerHaptic();
+    _notify(immediate: true);
+  }
+
+  /// Pin a channel as primary focus. Passing null unpins.
+  void pinChannel(String? channelId) {
+    if (channelId != null && !_activeChannels.contains(channelId)) {
+      _activeChannels.add(channelId);
+      if (channelId == 'whiteboard' && !_isWhiteboardOpen) {
+        _isWhiteboardOpen = true;
+      }
+    }
+    _pinnedChannel = (_pinnedChannel == channelId) ? null : channelId;
+    _updateTrackQualities();
+    _triggerHaptic();
+    _notify(immediate: true);
+  }
+
+  /// Check if a channel is active.
+  bool isChannelActive(String channelId) => _activeChannels.contains(channelId);
+
+  /// Update video quality: pinned/fullscreen → HIGH, all others → LOW.
+  void _updateTrackQualities() {
+    if (_room == null) return;
+    final allParticipants = ClassroomParticipantUtils.allFromRoom(_room);
+
+    for (final channelId in _activeChannels) {
+      if (channelId == 'whiteboard') continue; // not a LiveKit track
+
+      Participant? participant;
+      if (channelId == 'screen-share') {
+        participant = ClassroomParticipantUtils.findScreenSharingParticipant(allParticipants);
+      } else {
+        participant = channelId == 'teacher'
+            ? ClassroomParticipantUtils.findTeacher(allParticipants)
+            : ClassroomParticipantUtils.findChannelParticipant(allParticipants, channelId);
+      }
+
+      if (participant == null || participant is! RemoteParticipant) continue;
+
+      final bool isPrimary = _pinnedChannel == channelId ||
+          (_pinnedChannel == null && _activeChannels.length == 1);
+
+      for (final pub in participant.trackPublications.values) {
+        if (pub.track is VideoTrack && pub is RemoteTrackPublication) {
+          pub.setVideoQuality(isPrimary ? VideoQuality.HIGH : VideoQuality.LOW);
+        }
+      }
     }
   }
 
@@ -973,12 +1056,30 @@ class VideoRoomController extends ChangeNotifier {
         }
         _notify();
       })
-      ..on<TrackSubscribedEvent>((_) {
+      ..on<TrackSubscribedEvent>((event) {
         checkAndFallbackChannel();
+        // Auto-detect screen share for students
+        if (!isTeacher) {
+          final pub = event.publication;
+          if (pub.isScreenShare) {
+            _activeChannels.add('screen-share');
+            _pinnedChannel = 'screen-share';
+            _updateTrackQualities();
+          }
+        }
         _notify(immediate: true);
       })
-      ..on<TrackUnsubscribedEvent>((_) {
+      ..on<TrackUnsubscribedEvent>((event) {
         checkAndFallbackChannel();
+        // Auto-remove screen share when it stops
+        if (!isTeacher) {
+          final pub = event.publication;
+          if (pub.isScreenShare) {
+            _activeChannels.remove('screen-share');
+            if (_pinnedChannel == 'screen-share') _pinnedChannel = null;
+            _updateTrackQualities();
+          }
+        }
         _notify(immediate: true);
       })
       ..on<TrackMutedEvent>((_) {

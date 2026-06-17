@@ -386,12 +386,20 @@ class DatabaseService {
     }
   }
 
+  Stream<List<Map<String, dynamic>>> watchStudentAttendance(String sessionId, String studentId) {
+    return _supabase
+        .from('attendance')
+        .stream(primaryKey: ['id'])
+        .eq('session_id', sessionId)
+        .eq('student_id', studentId);
+  }
+
   Future<void> markStudentAsKicked(String sessionId, String studentId) async {
     try {
       await _supabase.from('attendance').upsert({
         'session_id': sessionId,
         'student_id': studentId,
-        'status': 'absent',
+        'status': 'kicked',
         'left_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'session_id, student_id');
     } catch (e) {

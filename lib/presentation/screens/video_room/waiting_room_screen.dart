@@ -28,6 +28,7 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   Duration _timeLeft = Duration.zero;
   StreamSubscription? _statusSubscription;
   StreamSubscription? _roomSubscription;
+  StreamSubscription? _attendanceSubscription;
   final _supabase = Supabase.instance.client;
 
   @override
@@ -51,8 +52,17 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
       }
     });
 
-    // 2. الحل الجذري: مراقبة "القاعة" مباشرة (Real-time Room Monitor)
-    // إذا فتح المدرس القاعة، ندخل الطالب فوراً بغض النظر عن الـ Status
+    // 2. مراقبة حالة الطرد للطالب
+    _attendanceSubscription = db.watchStudentAttendance(widget.session.id, widget.userId).listen((data) {
+      if (data.isNotEmpty) {
+        final record = data.first;
+        if (record['status'] == 'kicked') {
+          _handleKicked();
+        }
+      }
+    });
+
+    // 3. مراقبة "القاعة" مباشرة (Real-time Room Monitor)
     _roomSubscription = _supabase
         .from('rooms')
         .stream(primaryKey: ['id'])
@@ -62,6 +72,18 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
             _navigateToRoom();
           }
         });
+  }
+
+  void _handleKicked() {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("🚫 تم استبعادك من هذه الحصة بواسطة المدرس.", style: TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      Navigator.pop(context);
+    }
   }
 
   void _handleSessionEnded() {
@@ -128,13 +150,12 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
     _timer.cancel();
     _statusSubscription?.cancel();
     _roomSubscription?.cancel();
+    _attendanceSubscription?.cancel();
     final db = Provider.of<DatabaseService>(context, listen: false);
     db.leaveWaitingRoom(widget.session.id, widget.userId);
     super.dispose();
   }
 
-  // ... (باقي الـ UI يظل كما هو لجمال التصميم)
-  
   Widget _buildTimeUnit(String value, String label) {
     return Column(
       mainAxisSize: MainAxisSize.min,

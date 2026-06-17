@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { roomName, userId, userName, isRoomCamera } = await req.json()
+    const { roomName, userId, userName, isRoomCamera, metadata } = await req.json()
 
     const apiKey = Deno.env.get('LIVEKIT_API_KEY')
     const apiSecret = Deno.env.get('LIVEKIT_API_SECRET')
@@ -25,6 +25,7 @@ serve(async (req) => {
     const at = new AccessToken(apiKey, apiSecret, {
       identity: identity,
       name: userName,
+      metadata: metadata,
     })
 
     if (isRoomCamera) {

@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../utils/classroom_participant_utils.dart';
 import '../video_room_controller.dart';
@@ -404,6 +406,10 @@ class ParticipantTile extends StatefulWidget {
   final bool? forceHandRaised;
   final bool? forceShowScreen;
   final String? displayName;
+
+  static final Map<String, String?> _avatarCache = {};
+  static final Set<String> _loadingIds = {};
+
   const ParticipantTile({
     super.key,
     required this.participant,
@@ -420,19 +426,104 @@ class ParticipantTile extends StatefulWidget {
 class _ParticipantTileState extends State<ParticipantTile> {
   bool _showVideo = false;
   Timer? _delayTimer;
+  String? _avatarUrl;
 
   @override
   void initState() {
     super.initState();
     _startDelay();
+    _resolveAvatar();
   }
 
   @override
   void didUpdateWidget(ParticipantTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.participant.identity != oldWidget.participant.identity) {
+    if (widget.participant.identity != oldWidget.participant.identity ||
+        widget.participant.metadata != oldWidget.participant.metadata) {
       _startDelay();
+      _resolveAvatar();
     }
+  }
+
+  String _extractUserId(String identity) {
+    if (identity.startsWith('teacher_')) {
+      return identity.substring('teacher_'.length);
+    }
+    if (identity.contains('_')) {
+      return identity.split('_').first;
+    }
+    return identity;
+  }
+
+  String? _getAvatarFromMetadata(String? metadata) {
+    if (metadata == null || metadata.isEmpty) return null;
+    if (metadata.startsWith('http://') || metadata.startsWith('https://')) {
+      return metadata;
+    }
+    try {
+      final decoded = jsonDecode(metadata);
+      if (decoded is Map && decoded.containsKey('avatar_url')) {
+        return decoded['avatar_url'] as String?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  void _resolveAvatar() {
+    // 1. Try to get from metadata first (sync/reactive)
+    final metaAvatar = _getAvatarFromMetadata(widget.participant.metadata);
+    if (metaAvatar != null && metaAvatar.isNotEmpty) {
+      setState(() {
+        _avatarUrl = metaAvatar;
+      });
+      return;
+    }
+
+    // 2. Fallback to cache/DB query
+    final identity = widget.participant.identity;
+    if (identity.contains('room-cam-') || identity.startsWith('roomcam_') || identity.startsWith('wall_')) {
+      setState(() {
+        _avatarUrl = null;
+      });
+      return;
+    }
+
+    final targetUserId = _extractUserId(identity);
+
+    if (ParticipantTile._avatarCache.containsKey(targetUserId)) {
+      setState(() {
+        _avatarUrl = ParticipantTile._avatarCache[targetUserId];
+      });
+      return;
+    }
+
+    if (ParticipantTile._loadingIds.contains(targetUserId)) {
+      return;
+    }
+
+    ParticipantTile._loadingIds.add(targetUserId);
+
+    Supabase.instance.client
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', targetUserId)
+        .maybeSingle()
+        .then((res) {
+          String? url;
+          if (res != null) {
+            url = res['avatar_url'] as String?;
+          }
+          ParticipantTile._avatarCache[targetUserId] = url;
+          ParticipantTile._loadingIds.remove(targetUserId);
+          if (mounted) {
+            setState(() {
+              _avatarUrl = url;
+            });
+          }
+        }).catchError((e) {
+          ParticipantTile._loadingIds.remove(targetUserId);
+          debugPrint("Error loading avatar: $e");
+        });
   }
 
   void _startDelay() {
@@ -562,7 +653,13 @@ class _ParticipantTileState extends State<ParticipantTile> {
                         : VideoViewMirrorMode.off,
                     key: ValueKey(activeVideoTrack.sid),
                   )
-                      : _buildAvatar(nameToShow, widget.isMainStage),
+                      : (() {
+                          final metaAvatar = _getAvatarFromMetadata(widget.participant.metadata);
+                          final String? finalAvatar = (metaAvatar != null && metaAvatar.isNotEmpty)
+                              ? metaAvatar
+                              : _avatarUrl;
+                          return _buildAvatar(nameToShow, widget.isMainStage, finalAvatar);
+                        })(),
                 ),
               ),
               if (isSpotlighted)
@@ -633,7 +730,7 @@ class _ParticipantTileState extends State<ParticipantTile> {
       },
     );
   }
-  Widget _buildAvatar(String name, bool isMain) {
+  Widget _buildAvatar(String name, bool isMain, String? avatarUrl) {
     final initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?';
     return Container(
       color: const Color(0xFF0F1014),
@@ -641,14 +738,24 @@ class _ParticipantTileState extends State<ParticipantTile> {
         child: CircleAvatar(
           radius: isMain ? 50 : 25,
           backgroundColor: Colors.blueAccent.withOpacity(0.1),
-          child: Text(
-            initial,
-            style: TextStyle(
-              color: Colors.blueAccent,
-              fontSize: isMain ? 36 : 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
+              ? NetworkImage(avatarUrl)
+              : null,
+          onBackgroundImageError: (avatarUrl != null && avatarUrl.isNotEmpty)
+              ? (exception, stackTrace) {
+                  debugPrint("Error loading avatar image: $exception");
+                }
+              : null,
+          child: (avatarUrl != null && avatarUrl.isNotEmpty)
+              ? null
+              : Text(
+                  initial,
+                  style: TextStyle(
+                    color: Colors.blueAccent,
+                    fontSize: isMain ? 36 : 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
         ),
       ),
     );

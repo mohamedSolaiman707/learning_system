@@ -11,6 +11,7 @@ class LiveKitService {
     required String roomName,
     required String userId,
     required String userName,
+    String? metadata,
   }) async {
     try {
       if (supabaseUrl.isEmpty) return null;
@@ -25,6 +26,7 @@ class LiveKitService {
           'roomName': roomName,
           'userId': userId,
           'userName': userName,
+          if (metadata != null) 'metadata': metadata,
         }),
       );
 

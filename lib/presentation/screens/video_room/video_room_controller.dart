@@ -1102,10 +1102,23 @@ class VideoRoomController extends ChangeNotifier {
           ? "teacher_$userId"
           : "${userId}_$suffix";
 
+      String? userAvatarUrl;
+      try {
+        final profileRes = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', userId)
+            .maybeSingle();
+        userAvatarUrl = profileRes?['avatar_url'] as String?;
+      } catch (e) {
+        debugPrint("Error fetching user avatar_url for metadata: $e");
+      }
+
       final token = await LiveKitService().getRoomToken(
         roomName: targetRoomName,
         userId: effectiveUserId,
         userName: userName,
+        metadata: userAvatarUrl,
       );
       if (token == null) throw Exception("Failed to get token");
 

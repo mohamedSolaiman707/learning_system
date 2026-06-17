@@ -150,6 +150,32 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
     super.dispose();
   }
 
+  int _getCrossAxisCount(double width) {
+    if (_seatsPerScreen > 8) {
+      if (width >= 1200) return 4;
+      if (width >= 800) return 3;
+      return 2;
+    } else {
+      if (width >= 900) return 2;
+      return 1;
+    }
+  }
+
+  double _getChildAspectRatio(double width, double height) {
+    // نحسب النسبة بشكل ديناميكي بناءً على المساحة المتاحة
+    final crossAxisCount = _getCrossAxisCount(width);
+    final rows = (_seatsPerScreen / crossAxisCount).ceil();
+    final spacing = 12.0;
+    final padding = 24.0;
+    final availableWidth = width - padding - (spacing * (crossAxisCount - 1));
+    final tileWidth = availableWidth / crossAxisCount;
+    final headerHeight = height * 0.1;
+    final availableHeight = height - headerHeight - padding - (spacing * (rows - 1));
+    final tileHeight = availableHeight / rows;
+    if (tileHeight <= 0 || tileWidth <= 0) return 1.5;
+    return (tileWidth / tileHeight).clamp(0.8, 2.5);
+  }
+
   @override
   Widget build(BuildContext context) {
     // تصفية المقاعد الخاصة بهذه المنطقة فقط
@@ -184,63 +210,77 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
               style: TextStyle(color: Colors.white, fontFamily: 'Cairo'),
             ),
           )
-              : Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: GridView.builder(
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                    SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: _seatsPerScreen <= 8 ? 2 : 4,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 1.5,
+              : LayoutBuilder(
+            builder: (context, constraints) {
+              final w = constraints.maxWidth;
+              final h = constraints.maxHeight;
+              final crossAxisCount = _getCrossAxisCount(w);
+              final aspectRatio = _getChildAspectRatio(w, h);
+              return Column(
+                children: [
+                  _buildHeader(w),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.all(w * 0.01),
+                      child: GridView.builder(
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                        SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          crossAxisSpacing: w * 0.01,
+                          mainAxisSpacing: w * 0.01,
+                          childAspectRatio: aspectRatio,
+                        ),
+                        itemCount: _seatsPerScreen,
+                        itemBuilder: (context, index) {
+                          final seat = index < zoneSeats.length
+                              ? zoneSeats[index]
+                              : null;
+
+                          final String? studentId = seat?['student_id'];
+                          RemoteParticipant? participant;
+                          if (studentId != null && studentId.isNotEmpty) {
+                            participant = _room!.remoteParticipants.values
+                                .where((p) {
+                              final cleanId = p.identity
+                                  .split('_')
+                                  .first;
+                              return p.identity.contains(studentId) ||
+                                  cleanId == studentId;
+                            })
+                                .firstOrNull;
+                          }
+
+                          return AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 800),
+                            switchInCurve: Curves.easeOutBack,
+                            child: _buildSeatTile(seat, participant, w),
+                          );
+                        },
+                      ),
                     ),
-                    itemCount: _seatsPerScreen,
-                    itemBuilder: (context, index) {
-                      final seat = index < zoneSeats.length
-                          ? zoneSeats[index]
-                          : null;
-
-                      final String? studentId = seat?['student_id'];
-                      RemoteParticipant? participant;
-                      if (studentId != null && studentId.isNotEmpty) {
-                        participant = _room!.remoteParticipants.values
-                            .where((p) {
-                          final cleanId = p.identity
-                              .split('_')
-                              .first;
-                          return p.identity.contains(studentId) ||
-                              cleanId == studentId;
-                        })
-                            .firstOrNull;
-                      }
-
-                      return AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 800),
-                        switchInCurve: Curves.easeOutBack,
-                        child: _buildSeatTile(seat, participant),
-                      );
-                    },
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(double screenWidth) {
+    final isSmall = screenWidth < 600;
+    final hPad = isSmall ? 12.0 : 30.0;
+    final vPad = isSmall ? 8.0 : 15.0;
+    final iconSize = isSmall ? 18.0 : 28.0;
+    final subtitleSize = isSmall ? 8.0 : 10.0;
+    final titleSize = isSmall ? 14.0 : 20.0;
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 30),
+          padding: EdgeInsets.symmetric(vertical: vPad, horizontal: hPad),
           decoration: BoxDecoration(
             color: Colors.black.withOpacity(0.7),
             border: Border(
@@ -249,8 +289,8 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.monitor_rounded, color: Colors.blue, size: 28),
-              const SizedBox(width: 20),
+              Icon(Icons.monitor_rounded, color: Colors.blue, size: iconSize),
+              SizedBox(width: isSmall ? 8 : 20),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -258,24 +298,24 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
                     "شاشة عرض القاعة الذكية",
                     style: TextStyle(
                       color: Colors.blue.withOpacity(0.7),
-                      fontSize: 10,
+                      fontSize: subtitleSize,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'Cairo',
                     ),
                   ),
                   Text(
                     _getZoneArabicName(widget.zone),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w900,
-                      fontSize: 20,
+                      fontSize: titleSize,
                       fontFamily: 'Cairo',
                     ),
                   ),
                 ],
               ),
               const Spacer(),
-              _buildLiveBadge(),
+              _buildLiveBadge(isSmall),
             ],
           ),
         ),
@@ -283,24 +323,27 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
     );
   }
 
-  Widget _buildLiveBadge() {
+  Widget _buildLiveBadge(bool isSmall) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmall ? 6 : 12,
+        vertical: isSmall ? 3 : 6,
+      ),
       decoration: BoxDecoration(
         color: Colors.red.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.red.withOpacity(0.3)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          _PulseIcon(),
-          SizedBox(width: 8),
+          const _PulseIcon(),
+          SizedBox(width: isSmall ? 4 : 8),
           Text(
             "LIVE",
             style: TextStyle(
               color: Colors.red,
               fontWeight: FontWeight.w900,
-              fontSize: 12,
+              fontSize: isSmall ? 9 : 12,
             ),
           ),
         ],
@@ -308,16 +351,24 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
     );
   }
 
-  Widget _buildSeatTile(Map<String, dynamic>? seat, RemoteParticipant? p) {
+  Widget _buildSeatTile(Map<String, dynamic>? seat, RemoteParticipant? p, double screenWidth) {
     final bool isOccupied =
         seat != null && seat['student_id'] != null && (seat['student_id'] as String).isNotEmpty;
     final bool isOnline = p != null;
     final bool isSpeaking = p?.isSpeaking ?? false;
     final int? seatNum = seat?['seat_number'];
 
+    final isSmall = screenWidth < 600;
+    final labelFontSize = isSmall ? 8.0 : 10.0;
+    final labelPadH = isSmall ? 6.0 : 10.0;
+    final labelPadV = isSmall ? 2.0 : 4.0;
+    final labelTop = isSmall ? 6.0 : 12.0;
+    final labelLeft = isSmall ? 6.0 : 12.0;
+    final borderRadius = isSmall ? 14.0 : 24.0;
+
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
           color: isSpeaking
               ? Colors.greenAccent
@@ -339,24 +390,24 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
               forceShowScreen: false,
             )
           else if (isOccupied)
-            _buildOfflineState(seat!['student_name'] ?? "طالب")
+            _buildOfflineState(seat!['student_name'] ?? "طالب", isSmall)
           else
-            _buildEmptyState(seatNum),
+            _buildEmptyState(seatNum, isSmall),
 
           Positioned(
-            top: 12,
-            left: 12,
+            top: labelTop,
+            left: labelLeft,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: EdgeInsets.symmetric(horizontal: labelPadH, vertical: labelPadV),
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 seatNum != null ? "مقعد $seatNum" : "--",
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white70,
-                  fontSize: 10,
+                  fontSize: labelFontSize,
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Cairo',
                 ),
@@ -364,23 +415,23 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
             ),
           ),
           if (isSpeaking)
-            Positioned(top: 12, right: 12, child: _SpeakingIndicator()),
+            Positioned(top: labelTop, right: labelLeft, child: _SpeakingIndicator()),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState(int? num) {
+  Widget _buildEmptyState(int? num, bool isSmall) {
     return Center(
       child: Opacity(
         opacity: 0.1,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.person_outline_rounded, color: Colors.white, size: 40),
+            Icon(Icons.person_outline_rounded, color: Colors.white, size: isSmall ? 24 : 40),
             Text(
               "شاغر",
-              style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 12),
+              style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: isSmall ? 9 : 12),
             ),
           ],
         ),
@@ -388,21 +439,27 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
     );
   }
 
-  Widget _buildOfflineState(String name) {
+  Widget _buildOfflineState(String name, bool isSmall) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            name,
-            style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            "غير متصل",
-            style: TextStyle(color: Colors.white24, fontSize: 10, fontFamily: 'Cairo'),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(4.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              name,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+              style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: isSmall ? 10 : 15, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: isSmall ? 2 : 5),
+            Text(
+              "غير متصل",
+              style: TextStyle(color: Colors.white24, fontSize: isSmall ? 8 : 10, fontFamily: 'Cairo'),
+            ),
+          ],
+        ),
       ),
     );
   }

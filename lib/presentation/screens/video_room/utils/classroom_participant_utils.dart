@@ -18,7 +18,8 @@ class ClassroomParticipantUtils {
 
   static List<Participant> allFromRoom(Room? room) => [
     if (room?.localParticipant != null) room!.localParticipant!,
-    ...room?.remoteParticipants.values ?? [],
+    ...?room?.remoteParticipants.values
+        .where((p) => !p.identity.startsWith('wall_')),
   ];
 
   static Participant? findTeacher(List<Participant> participants) {

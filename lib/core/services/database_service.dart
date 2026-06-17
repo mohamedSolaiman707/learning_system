@@ -935,9 +935,6 @@ class DatabaseService {
         );
 
         seatsToUpsert.add({
-          if (existingSeat != null)
-            'id':
-            existingSeat['id'], // استخدام نفس المعرف الفريد لتفادي التكرار
           'session_id': sessionId,
           'seat_number': i,
           'zone': 'screen_$screen',

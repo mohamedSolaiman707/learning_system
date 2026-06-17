@@ -616,93 +616,92 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 
   Widget _buildTeacherLayout() {
+    final controller = context.read<VideoRoomController>();
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
       body: ShowCaseWidget(
-        builder: (context) => Stack(
+        builder: (context) => Column(
           children: [
-            const Positioned.fill(child: ParticipantGrid()),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: _buildTopHeader(
-                context,
-                context.read<VideoRoomController>(),
-              ),
-            ),
-            Positioned.fill(
-              child: Selector<VideoRoomController, bool>(
-                selector: (_, c) => c.isWhiteboardOpen,
-                builder: (_, isOpen, __) => isOpen
-                    ? const Material(
-                        color: Colors.white,
-                        child: WhiteboardPanel(),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ),
-            ..._reactions,
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: ControlsBar(),
-              ),
-            ),
-            if (Responsive.isDesktop(context))
-              Selector<
-                VideoRoomController,
-                ({
-                  bool isChatOpen,
-                  bool isQAOpen,
-                  bool isParticipantsOpen,
-                  bool isPollsOpen,
-                })
-              >(
-                selector: (_, c) => (
-                  isChatOpen: c.isChatOpen,
-                  isQAOpen: c.isQAOpen,
-                  isParticipantsOpen: c.isParticipantsOpen,
-                  isPollsOpen: c.isPollsOpen,
-                ),
-                builder: (context, data, _) {
-                  final isOpen =
-                      data.isChatOpen ||
-                      data.isQAOpen ||
-                      data.isParticipantsOpen ||
-                      data.isPollsOpen;
-                  return Align(
-                    alignment: Alignment.centerRight,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width: isOpen ? 420 : 0,
-                      padding: isOpen
-                          ? const EdgeInsets.all(16)
-                          : EdgeInsets.zero,
-                      child: isOpen
-                          ? Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(24),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(24),
-                                child: _buildTeacherSidebar(data),
-                              ),
+            _buildTopHeader(context, controller),
+            Expanded(
+              child: Stack(
+                children: [
+                  const Positioned.fill(child: ParticipantGrid()),
+                  Positioned.fill(
+                    child: Selector<VideoRoomController, bool>(
+                      selector: (_, c) => c.isWhiteboardOpen,
+                      builder: (_, isOpen, __) => isOpen
+                          ? const Material(
+                              color: Colors.white,
+                              child: WhiteboardPanel(),
                             )
-                          : const SizedBox(),
+                          : const SizedBox.shrink(),
                     ),
-                  );
-                },
+                  ),
+                  ..._reactions,
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: ControlsBar(),
+                    ),
+                  ),
+                  if (Responsive.isDesktop(context))
+                    Selector<
+                      VideoRoomController,
+                      ({
+                        bool isChatOpen,
+                        bool isQAOpen,
+                        bool isParticipantsOpen,
+                        bool isPollsOpen,
+                      })
+                    >(
+                      selector: (_, c) => (
+                        isChatOpen: c.isChatOpen,
+                        isQAOpen: c.isQAOpen,
+                        isParticipantsOpen: c.isParticipantsOpen,
+                        isPollsOpen: c.isPollsOpen,
+                      ),
+                      builder: (context, data, _) {
+                        final isOpen =
+                            data.isChatOpen ||
+                            data.isQAOpen ||
+                            data.isParticipantsOpen ||
+                            data.isPollsOpen;
+                        return Align(
+                          alignment: Alignment.centerRight,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            width: isOpen ? 420 : 0,
+                            padding: isOpen
+                                ? const EdgeInsets.all(16)
+                                : EdgeInsets.zero,
+                            child: isOpen
+                                ? Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(24),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          blurRadius: 20,
+                                          offset: const Offset(0, 10),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(24),
+                                      child: _buildTeacherSidebar(data),
+                                    ),
+                                  )
+                                : const SizedBox(),
+                          ),
+                        );
+                      },
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),

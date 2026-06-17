@@ -74,11 +74,7 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
       );
 
       if (token != null) {
-        _room = Room(
-          roomOptions: const RoomOptions(
-            autoSubscribe: true,
-          ),
-        );
+        _room = Room();
         _listener = _room!.createListener();
         _setupRoomListeners();
         await _room!.connect(_livekitUrl, token);

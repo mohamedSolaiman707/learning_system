@@ -869,6 +869,111 @@ class VideoRoomController extends ChangeNotifier {
     }
   }
 
+  /// يوزع الطلاب المتصلين غير الموزعين على المقاعد الفارغة تلقائياً
+  Future<void> autoAssignSeats() async {
+    if (sessionId == null || !isTeacher || _room == null) return;
+
+    // جلب الطلاب المتصلين (مش معلمين ومش wall displays)
+    final connectedStudents = _room!.remoteParticipants.values
+        .where((p) =>
+            !p.identity.startsWith('wall_') &&
+            !p.identity.toLowerCase().contains('teacher') &&
+            !p.identity.contains('room-cam-'))
+        .toList();
+
+    // الطلاب اللي مش في مقعد لحد دلوقتي
+    final assignedIds = _seats
+        .where((s) => s['student_id'] != null && (s['student_id'] as String).isNotEmpty)
+        .map((s) => s['student_id'] as String)
+        .toSet();
+
+    final unassigned = connectedStudents
+        .where((p) => !assignedIds.any((id) => p.identity.contains(id)))
+        .toList();
+
+    if (unassigned.isEmpty) {
+      onNotification?.call('كل الطلاب المتصلين موزعون بالفعل', Colors.blue);
+      return;
+    }
+
+    // المقاعد الفارغة مرتبة بالترتيب
+    final emptySeats = _seats
+        .where((s) => s['student_id'] == null || (s['student_id'] as String).isEmpty)
+        .toList()
+      ..sort((a, b) => (a['seat_number'] as int).compareTo(b['seat_number'] as int));
+
+    if (emptySeats.isEmpty) {
+      onNotification?.call('لا توجد مقاعد فارغة متاحة', Colors.orange);
+      return;
+    }
+
+    _isProcessing = true;
+    _notify(immediate: true);
+
+    try {
+      final count = unassigned.length < emptySeats.length ? unassigned.length : emptySeats.length;
+      for (int i = 0; i < count; i++) {
+        final student = unassigned[i];
+        final seat = emptySeats[i];
+        final seatNum = seat['seat_number'] as int;
+        final studentId = student.identity.split('_').first;
+        final studentName = student.name ?? student.identity;
+
+        await DatabaseService().assignSeat(
+          sessionId: sessionId!,
+          seatNumber: seatNum,
+          studentId: studentId,
+          studentName: studentName,
+        );
+      }
+      await loadAndExpandSeats();
+      onNotification?.call('تم توزيع $count طالب بنجاح ✅', Colors.green);
+    } catch (e) {
+      debugPrint('autoAssignSeats error: $e');
+      onNotification?.call('فشل التوزيع التلقائي', Colors.red);
+    } finally {
+      _isProcessing = false;
+      _notify(immediate: true);
+    }
+  }
+
+  /// تعيين طالب (من قائمة المشاركين) لمقعد معين مباشرة
+  Future<void> assignStudentToSeat({
+    required int seatNumber,
+    required String studentId,
+    required String studentName,
+  }) async {
+    if (sessionId == null || !isTeacher) return;
+
+    final optimistic = _cloneSeats();
+    // أزل الطالب من مقعده القديم لو موجود
+    for (final s in optimistic) {
+      if (s['student_id'] == studentId) {
+        s['student_id'] = null;
+        s['student_name'] = null;
+      }
+    }
+    final idx = optimistic.indexWhere((s) => s['seat_number'] == seatNumber);
+    if (idx == -1) return;
+    optimistic[idx]['student_id'] = studentId;
+    optimistic[idx]['student_name'] = studentName;
+    _seats = optimistic;
+    _notify(immediate: true);
+
+    try {
+      // أزل الطالب من مقعده القديم في الـ DB
+      await DatabaseService().assignSeat(
+        sessionId: sessionId!,
+        seatNumber: seatNumber,
+        studentId: studentId,
+        studentName: studentName,
+      );
+    } catch (e) {
+      debugPrint('assignStudentToSeat error: $e');
+      await loadAndExpandSeats();
+    }
+  }
+
   Future<void> _loadChatHistory() async {
     try {
       final data = await supabase

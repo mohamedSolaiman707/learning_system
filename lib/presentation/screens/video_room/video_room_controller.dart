@@ -144,17 +144,10 @@ class VideoRoomController extends ChangeNotifier {
 
   /// Initializes dynamic screen channels after session config is loaded.
   void _initializeScreenChannels() {
-    // Ensure teacher and room cam channels are always present.
+    // Ensure only teacher is present in active channels by default to avoid stage clutter.
     _activeChannels.clear();
     _activeChannels.add('teacher');
-    // Add room camera channels.
-    for (final cam in roomCameraOrder) {
-      _activeChannels.add(cam);
-    }
-    // Add screen zones as channels.
-    for (final zone in screenZones) {
-      _activeChannels.add(zone);
-    }
+    
     // Reset selected channel if it no longer exists.
     if (! _activeChannels.contains(_selectedChannel)) {
       _selectedChannel = 'teacher';

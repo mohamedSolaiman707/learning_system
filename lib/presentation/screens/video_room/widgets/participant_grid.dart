@@ -85,7 +85,10 @@ class ParticipantGrid extends StatelessWidget {
     final mainParticipant = resolution?.participant;
     if (mainParticipant == null) return _buildWaitingState();
     final otherParticipants = allParticipants
-        .where((p) => p.identity != mainParticipant.identity)
+        .where((p) =>
+            p.identity != mainParticipant.identity &&
+            !p.identity.contains('room-cam-') &&
+            !p.identity.contains('roomcam'))
         .toList();
     return Container(
       color: const Color(0xFF0F1014),

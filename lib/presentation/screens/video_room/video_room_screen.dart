@@ -15,6 +15,7 @@ import 'widgets/source_manager_sidebar.dart';
 import 'widgets/seat_picker_dialog.dart';
 import '../../../core/utils/responsive.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'dart:ui';
 
 class VideoRoomScreen extends StatefulWidget {
   final String title;
@@ -134,7 +135,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     if (!mounted || widget.isTeacher) return;
     final controller = context.read<VideoRoomController>();
 
-    // Open picker if not shown, not already open, and controller finished initial loading
     if (!controller.seatPickerShown && !_isSeatPickerOpen) {
       setState(() => _isSeatPickerOpen = true);
       showDialog(
@@ -353,7 +353,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
         children: [
           Row(
             children: [
-              // 1. Source Manager Sidebar (Multi-Source)
               Selector<VideoRoomController, String>(
                 selector: (_, c) => c.multiSourceKey,
                 builder: (context, _, __) => SourceManagerSidebar(),
@@ -362,7 +361,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
               Expanded(
                 child: Column(
                   children: [
-                    // 2. Top Header
                     Selector<
                       VideoRoomController,
                       ({
@@ -403,7 +401,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                     Expanded(
                       child: Row(
                         children: [
-                          // 3. Dynamic Multi-Source Stage
                           Expanded(
                             child: Stack(
                               clipBehavior: Clip.hardEdge,
@@ -416,7 +413,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                             ),
                           ),
 
-                          // 4. Right Panel
                           Selector<
                             VideoRoomController,
                             ({bool isChatOpen, bool isQAOpen, bool isPollsOpen})
@@ -465,7 +461,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
                       ),
                     ),
 
-                    // 5. Bottom Bar
                     _StudentBottomBar(controller: controller),
                   ],
                 ),
@@ -620,8 +615,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
     );
   }
 
-  // _buildChannelSidebar replaced by _SourceManagerSidebar widget below
-
   Widget _buildTeacherLayout() {
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
@@ -728,71 +721,85 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   Widget _buildErrorState(VideoRoomController controller, bool isDesktop) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F1014),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(30.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withOpacity(0.1),
-                  shape: BoxShape.circle,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            colors: [Colors.redAccent.withOpacity(0.05), Colors.transparent],
+            radius: 1.5,
+          ),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(30.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+                  ),
+                  child: const Icon(
+                    Icons.cloud_off_rounded,
+                    color: Colors.redAccent,
+                    size: 80,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.wifi_off_rounded,
-                  color: Colors.redAccent,
-                  size: 60,
+                const SizedBox(height: 32),
+                Text(
+                  controller.errorMessage ?? "عذراً، تعذر الاتصال بالقاعة",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 30),
-              Text(
-                controller.errorMessage ?? "حدث خطأ غير متوقع",
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontFamily: 'Cairo',
-                  fontWeight: FontWeight.w600,
+                const SizedBox(height: 12),
+                Text(
+                  "تأكد من اتصالك بالإنترنت وحاول مرة أخرى",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.4),
+                    fontSize: 14,
+                    fontFamily: 'Cairo',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 40),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 280),
-                child: SizedBox(
-                  width: double.infinity,
+                const SizedBox(height: 48),
+                SizedBox(
+                  width: 220,
                   height: 55,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF102A43),
+                      backgroundColor: Colors.redAccent,
                       foregroundColor: Colors.white,
-                      elevation: 8,
-                      shadowColor: const Color(0xFF102A43).withOpacity(0.4),
+                      elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                     onPressed: () => controller.init(),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.refresh_rounded, size: 20),
-                        SizedBox(width: 12),
+                        Icon(Icons.refresh_rounded),
+                        SizedBox(width: 10),
                         Text(
                           "إعادة المحاولة",
                           style: TextStyle(
                             fontFamily: 'Cairo',
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -800,24 +807,55 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
   }
 
   Widget _buildLoadingState() {
-    return const Scaffold(
-      backgroundColor: Color(0xFF0F1014),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: Colors.blue),
-            const SizedBox(height: 24),
-            const Text(
-              "جاري دخول القاعة التعليمية...",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontFamily: 'Cairo',
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F1014),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  colors: [Colors.blue.withOpacity(0.08), Colors.transparent],
+                  radius: 1.2,
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: CircularProgressIndicator(
+                    color: Colors.blue,
+                    strokeWidth: 3,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  "جاري الدخول إلى المحاضرة...",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "نجهز لك مقعدك الآن، لحظات من فضلك",
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 14,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -881,7 +919,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
 
 /// ─── Source Manager Sidebar (Deprecated) ───
 
-/// Individual source card in the sidebar with live preview
 class _SourceCard extends StatelessWidget {
   final String channelId;
   final String label;
@@ -940,7 +977,6 @@ class _SourceCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Preview area
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
             child: SizedBox(
@@ -949,7 +985,6 @@ class _SourceCard extends StatelessWidget {
               child: _buildPreview(),
             ),
           ),
-          // Controls bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Row(
@@ -972,7 +1007,6 @@ class _SourceCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                // Eye toggle (add/remove from stage)
                 _MiniIconButton(
                   icon: isActive
                       ? Icons.visibility_rounded
@@ -982,7 +1016,6 @@ class _SourceCard extends StatelessWidget {
                   tooltip: isActive ? 'إزالة من المسرح' : 'إضافة للمسرح',
                 ),
                 const SizedBox(width: 2),
-                // Pin toggle
                 _MiniIconButton(
                   icon: Icons.push_pin_rounded,
                   color: isPinned ? Colors.amber : Colors.white24,
@@ -998,7 +1031,6 @@ class _SourceCard extends StatelessWidget {
   }
 
   Widget _buildPreview() {
-    // Whiteboard preview — static icon
     if (isWhiteboard) {
       return Container(
         color: Colors.white.withOpacity(0.95),
@@ -1026,7 +1058,6 @@ class _SourceCard extends StatelessWidget {
       );
     }
 
-    // Offline placeholder
     if (!isOnline || participant == null) {
       return Container(
         color: const Color(0xFF1A1B1F),
@@ -1054,7 +1085,6 @@ class _SourceCard extends StatelessWidget {
       );
     }
 
-    // Live preview using ParticipantTile at LOW quality
     return ParticipantTile(
       key: ValueKey('sidebar_preview_${participant!.identity}'),
       participant: participant!,
@@ -1064,7 +1094,6 @@ class _SourceCard extends StatelessWidget {
   }
 }
 
-/// Tiny icon button used in source card controls
 class _MiniIconButton extends StatelessWidget {
   final IconData icon;
   final Color color;
@@ -1094,7 +1123,6 @@ class _MiniIconButton extends StatelessWidget {
   }
 }
 
-/// Bottom student strip — rebuilds only when seat layout or room roster changes.
 class _StudentBottomBar extends StatelessWidget {
   final VideoRoomController controller;
 
@@ -1231,31 +1259,6 @@ class _StudentBottomBar extends StatelessWidget {
           },
         );
       },
-    );
-  }
-}
-
-class _WaitingForTeacher extends StatelessWidget {
-  const _WaitingForTeacher();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(color: Colors.blue, strokeWidth: 2),
-          SizedBox(height: 16),
-          Text(
-            'في انتظار المدرس...',
-            style: TextStyle(
-              color: Colors.white54,
-              fontFamily: 'Cairo',
-              fontSize: 16,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

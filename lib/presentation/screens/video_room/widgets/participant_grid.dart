@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../utils/classroom_participant_utils.dart';
 import '../video_room_controller.dart';
+
 int _gridCrossAxisCount(BuildContext context) {
   final width = MediaQuery.of(context).size.width;
   if (width >= 1100) return 4;
@@ -38,7 +39,7 @@ class ParticipantGrid extends StatelessWidget {
                   room,
                 );
                 final screenSharer =
-                ClassroomParticipantUtils.findScreenSharingParticipant(
+                    ClassroomParticipantUtils.findScreenSharingParticipant(
                   participants,
                 );
                 if (!controller.isTeacher) {
@@ -72,24 +73,26 @@ class ParticipantGrid extends StatelessWidget {
   }
 
   Widget _buildProfessionalTeacherLayout(
-      BuildContext context,
-      VideoRoomController controller,
-      List<Participant> allParticipants,
-      Participant? screenSharingParticipant,
-      ) {
-    final isDesktop = Responsive.isDesktop(context);
+    BuildContext context,
+    VideoRoomController controller,
+    List<Participant> allParticipants,
+    Participant? screenSharingParticipant,
+  ) {
     final resolution = ClassroomParticipantUtils.resolveMainStage(
       participants: allParticipants,
       selectedChannel: controller.selectedChannel,
     );
     final mainParticipant = resolution?.participant;
     if (mainParticipant == null) return _buildWaitingState();
-    final otherParticipants = allParticipants
-        .where((p) =>
-            p.identity != mainParticipant.identity &&
-            !p.identity.contains('room-cam-') &&
-            !p.identity.contains('roomcam'))
-        .toList();
+    final otherParticipants =
+        allParticipants
+            .where(
+              (p) =>
+                  p.identity != mainParticipant.identity &&
+                  !p.identity.contains('room-cam-') &&
+                  !p.identity.contains('roomcam'),
+            )
+            .toList();
     return Container(
       color: const Color(0xFF0F1014),
       padding: const EdgeInsets.all(12),
@@ -106,24 +109,26 @@ class ParticipantGrid extends StatelessWidget {
           ),
           if (otherParticipants.isNotEmpty)
             Container(
-              width: Responsive.isDesktop(context)
-                  ? 260
-                  : Responsive.isTablet(context)
+              width:
+                  Responsive.isDesktop(context)
+                      ? 260
+                      : Responsive.isTablet(context)
                       ? 180
                       : 120,
               margin: const EdgeInsets.only(left: 12),
               child: ListView.builder(
                 itemCount: otherParticipants.length,
-                itemBuilder: (context, index) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: AspectRatio(
-                    aspectRatio: 1.5,
-                    child: ParticipantTile(
-                      participant: otherParticipants[index],
-                      isMainStage: false,
+                itemBuilder:
+                    (context, index) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: AspectRatio(
+                        aspectRatio: 1.5,
+                        child: ParticipantTile(
+                          participant: otherParticipants[index],
+                          isMainStage: false,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
               ),
             ),
         ],
@@ -148,17 +153,17 @@ class ParticipantGrid extends StatelessWidget {
   }
 
   Widget _buildStudentLayout(
-      BuildContext context,
-      List<Participant> allParticipants,
-      Participant? screenSharingParticipant,
-      String selectedChannel,
-      ) {
+    BuildContext context,
+    List<Participant> allParticipants,
+    Participant? screenSharingParticipant,
+    String selectedChannel,
+  ) {
     if (screenSharingParticipant != null) {
       final channelParticipant =
-      ClassroomParticipantUtils.findChannelParticipant(
-        allParticipants,
-        selectedChannel,
-      );
+          ClassroomParticipantUtils.findChannelParticipant(
+            allParticipants,
+            selectedChannel,
+          );
       return _buildHybridStudentLayout(
         context,
         screenSharingParticipant,
@@ -183,12 +188,11 @@ class ParticipantGrid extends StatelessWidget {
   }
 
   Widget _buildTeacherVideoWall(
-      BuildContext context,
-      VideoRoomController controller,
-      List<Participant> allParticipants,
-      Participant? screenSharingParticipant,
-      ) {
-    final isDesktop = Responsive.isDesktop(context);
+    BuildContext context,
+    VideoRoomController controller,
+    List<Participant> allParticipants,
+    Participant? screenSharingParticipant,
+  ) {
     return Selector<VideoRoomController, String>(
       selector: (_, c) => c.seatsLayoutKey,
       builder: (context, _, __) {
@@ -197,7 +201,12 @@ class ParticipantGrid extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              color: Colors.black45,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.4),
+                border: const Border(
+                  bottom: BorderSide(color: Colors.white10, width: 0.5),
+                ),
+              ),
               child: Row(
                 children: [
                   const Icon(
@@ -224,8 +233,12 @@ class ParticipantGrid extends StatelessWidget {
                       style: TextStyle(fontFamily: 'Cairo', fontSize: 11),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.withOpacity(0.2),
+                      backgroundColor: Colors.red.withOpacity(0.1),
                       foregroundColor: Colors.redAccent,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
                 ],
@@ -242,19 +255,27 @@ class ParticipantGrid extends StatelessWidget {
                         margin: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.blue.withOpacity(0.1),
+                              blurRadius: 30,
+                              spreadRadius: -10,
+                            ),
+                          ],
                           border: Border.all(
                             color: Colors.blue.withOpacity(0.3),
                           ),
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-                          child: screenSharingParticipant != null
-                              ? ParticipantTile(
-                            participant: screenSharingParticipant,
-                            isMainStage: true,
-                            forceShowScreen: true,
-                          )
-                              : const SizedBox.shrink(),
+                          child:
+                              screenSharingParticipant != null
+                                  ? ParticipantTile(
+                                    participant: screenSharingParticipant,
+                                    isMainStage: true,
+                                    forceShowScreen: true,
+                                  )
+                                  : const SizedBox.shrink(),
                         ),
                       ),
                     ),
@@ -264,8 +285,8 @@ class ParticipantGrid extends StatelessWidget {
                       padding: const EdgeInsets.all(12),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: _gridCrossAxisCount(context),
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
                         childAspectRatio: 1.5,
                       ),
                       itemCount: seats.length,
@@ -274,9 +295,12 @@ class ParticipantGrid extends StatelessWidget {
                         final String? studentId = seat['student_id'] as String?;
                         Participant? participant;
                         if (studentId != null) {
-                          participant = allParticipants
-                              .where((p) => p.identity.startsWith(studentId))
-                              .firstOrNull;
+                          participant =
+                              allParticipants
+                                  .where(
+                                    (p) => p.identity.startsWith(studentId),
+                                  )
+                                  .firstOrNull;
                         }
                         if (participant != null) {
                           return ParticipantTile(
@@ -286,7 +310,7 @@ class ParticipantGrid extends StatelessWidget {
                             participant: participant,
                             isMainStage: false,
                             displayName:
-                            seat['student_name'] as String? ??
+                                seat['student_name'] as String? ??
                                 participant.name,
                           );
                         }
@@ -309,32 +333,52 @@ class ParticipantGrid extends StatelessWidget {
   Widget _buildEmptySeat(int number, String? assignedName) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1B1F),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        color: const Color(0xFF1A1B22),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.03),
+            Colors.transparent,
+          ],
+        ),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Stack(
         children: [
-          Icon(
-            Icons.person_outline_rounded,
-            color: Colors.white.withOpacity(0.05),
-            size: 24,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            assignedName ?? 'مقعد فارغ',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.2),
-              fontSize: 10,
-              fontFamily: 'Cairo',
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.person_add_alt_1_rounded,
+                  color: Colors.white.withOpacity(0.05),
+                  size: 32,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  assignedName ?? 'مقعد متاح',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.2),
+                    fontSize: 10,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+              ],
             ),
           ),
-          Text(
-            '$number',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.05),
-              fontSize: 8,
+          Positioned(
+            top: 10,
+            right: 12,
+            child: Text(
+              '$number',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.12),
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                fontFamily: 'Cairo',
+              ),
             ),
           ),
         ],
@@ -343,12 +387,10 @@ class ParticipantGrid extends StatelessWidget {
   }
 
   Widget _buildHybridStudentLayout(
-      BuildContext context,
-      Participant screenPart,
-      Participant? camPart,
-      ) {
-    final bool isDesktop = Responsive.isDesktop(context);
-    final bool isTablet = Responsive.isTablet(context);
+    BuildContext context,
+    Participant screenPart,
+    Participant? camPart,
+  ) {
     final controller = context.read<VideoRoomController>();
     return Stack(
       children: [
@@ -367,14 +409,16 @@ class ParticipantGrid extends StatelessWidget {
             child: GestureDetector(
               onTap: () => controller.cycleRoomCamera(),
               child: Container(
-                width: Responsive.isDesktop(context)
-                    ? 260
-                    : Responsive.isTablet(context)
+                width:
+                    Responsive.isDesktop(context)
+                        ? 260
+                        : Responsive.isTablet(context)
                         ? 200
                         : 130,
-                height: Responsive.isDesktop(context)
-                    ? 150
-                    : Responsive.isTablet(context)
+                height:
+                    Responsive.isDesktop(context)
+                        ? 150
+                        : Responsive.isTablet(context)
                         ? 115
                         : 75,
                 decoration: BoxDecoration(
@@ -473,7 +517,6 @@ class _ParticipantTileState extends State<ParticipantTile> {
   }
 
   void _resolveAvatar() {
-    // 1. Try to get from metadata first (sync/reactive)
     final metaAvatar = _getAvatarFromMetadata(widget.participant.metadata);
     if (metaAvatar != null && metaAvatar.isNotEmpty) {
       setState(() {
@@ -482,9 +525,10 @@ class _ParticipantTileState extends State<ParticipantTile> {
       return;
     }
 
-    // 2. Fallback to cache/DB query
     final identity = widget.participant.identity;
-    if (identity.contains('room-cam-') || identity.startsWith('roomcam_') || identity.startsWith('wall_')) {
+    if (identity.contains('room-cam-') ||
+        identity.startsWith('roomcam_') ||
+        identity.startsWith('wall_')) {
       setState(() {
         _avatarUrl = null;
       });
@@ -523,7 +567,8 @@ class _ParticipantTileState extends State<ParticipantTile> {
               _avatarUrl = url;
             });
           }
-        }).catchError((e) {
+        })
+        .catchError((e) {
           ParticipantTile._loadingIds.remove(targetUserId);
           debugPrint("Error loading avatar: $e");
         });
@@ -553,24 +598,26 @@ class _ParticipantTileState extends State<ParticipantTile> {
     if (widget.forceHandRaised == null) {
       try {
         isHandRaised = context.select<VideoRoomController, bool>(
-              (c) => c.remoteHandStates[widget.participant.identity] ?? false,
+          (c) => c.remoteHandStates[widget.participant.identity] ?? false,
         );
       } catch (_) {}
     }
     bool isSpotlighted = false;
     try {
       isSpotlighted = context.select<VideoRoomController, bool>(
-            (c) => c.spotlightUserId == widget.participant.identity,
+        (c) => c.spotlightUserId == widget.participant.identity,
       );
     } catch (_) {}
     return ListenableBuilder(
       listenable: widget.participant,
       builder: (context, _) {
         final bool isMe = widget.participant is LocalParticipant;
-        final bool isTeacher = widget.participant.identity.toLowerCase().contains(
-          'teacher',
+        final bool isTeacher = widget.participant.identity
+            .toLowerCase()
+            .contains('teacher');
+        final bool isRoomCam = widget.participant.identity.contains(
+          'room-cam-',
         );
-        final bool isRoomCam = widget.participant.identity.contains('room-cam-');
         final bool isSpeaking = widget.participant.isSpeaking;
         String nameToShow = widget.displayName ?? widget.participant.name ?? '';
         if (nameToShow.isEmpty) {
@@ -583,63 +630,72 @@ class _ParticipantTileState extends State<ParticipantTile> {
         VideoTrack? activeVideoTrack;
         var isScreen = false;
         if (widget.forceShowScreen == true) {
-          final pub = widget.participant.videoTrackPublications
-              .where((p) => p.isScreenShare)
-              .firstOrNull;
+          final pub =
+              widget.participant.videoTrackPublications
+                  .where((p) => p.isScreenShare)
+                  .firstOrNull;
           if (pub != null && (isMe || pub.subscribed)) {
             activeVideoTrack = pub.track as VideoTrack?;
           }
           isScreen = true;
         } else if (widget.forceShowScreen == false) {
-          final pub = widget.participant.videoTrackPublications
-              .where((p) => !p.isScreenShare)
-              .firstOrNull;
+          final pub =
+              widget.participant.videoTrackPublications
+                  .where((p) => !p.isScreenShare)
+                  .firstOrNull;
           if (pub != null && (isMe || pub.subscribed)) {
             activeVideoTrack = pub.track as VideoTrack?;
           }
         } else {
-          final screenPub = widget.participant.videoTrackPublications
-              .where((p) => p.isScreenShare)
-              .firstOrNull;
+          final screenPub =
+              widget.participant.videoTrackPublications
+                  .where((p) => p.isScreenShare)
+                  .firstOrNull;
           if (screenPub != null &&
               (isMe || screenPub.subscribed) &&
               screenPub.track != null) {
             activeVideoTrack = screenPub.track as VideoTrack?;
             isScreen = true;
           } else {
-            final camPub = widget.participant.videoTrackPublications
-                .where((p) => !p.isScreenShare)
-                .firstOrNull;
+            final camPub =
+                widget.participant.videoTrackPublications
+                    .where((p) => !p.isScreenShare)
+                    .firstOrNull;
             if (camPub != null &&
                 (isMe || camPub.subscribed) &&
                 camPub.track != null) {
               activeVideoTrack = camPub.track as VideoTrack?;
             }
           }
-        } // Never render a blank video surface — avatar is always the safe fallback.
+        }
         final bool hasVideo =
             _showVideo &&
-                activeVideoTrack != null &&
-                (isScreen
-                    ? ClassroomParticipantUtils.hasScreenShareVideo(widget.participant)
-                    : ClassroomParticipantUtils.hasCameraVideo(widget.participant));
+            activeVideoTrack != null &&
+            (isScreen
+                ? ClassroomParticipantUtils.hasScreenShareVideo(
+                  widget.participant,
+                )
+                : ClassroomParticipantUtils.hasCameraVideo(
+                  widget.participant,
+                ));
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           decoration: BoxDecoration(
-            borderRadius: widget.isMainStage
-                ? BorderRadius.zero
-                : BorderRadius.circular(12),
-            color: const Color(0xFF0F1014),
-            border: widget.isMainStage
-                ? null
-                : Border.all(
-              color: isSpotlighted
-                  ? Colors.amber
-                  : (isSpeaking
-                  ? Colors.greenAccent
-                  : Colors.white.withOpacity(0.05)),
-              width: (isSpotlighted || isSpeaking) ? 3 : 1,
-            ),
+            borderRadius:
+                widget.isMainStage ? BorderRadius.zero : BorderRadius.circular(16),
+            color: const Color(0xFF131418),
+            border:
+                widget.isMainStage
+                    ? null
+                    : Border.all(
+                      color:
+                          isSpotlighted
+                              ? Colors.amber
+                              : (isSpeaking
+                                  ? Colors.greenAccent
+                                  : Colors.white.withOpacity(0.1)),
+                      width: (isSpotlighted || isSpeaking) ? 3 : 1.5,
+                    ),
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
@@ -647,22 +703,31 @@ class _ParticipantTileState extends State<ParticipantTile> {
               Positioned.fill(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  child: hasVideo
-                      ? VideoTrackRenderer(
-                    activeVideoTrack!,
-                    fit: VideoViewFit.contain,
-                    mirrorMode: isMe
-                        ? VideoViewMirrorMode.mirror
-                        : VideoViewMirrorMode.off,
-                    key: ValueKey(activeVideoTrack.sid),
-                  )
-                      : (() {
-                          final metaAvatar = _getAvatarFromMetadata(widget.participant.metadata);
-                          final String? finalAvatar = (metaAvatar != null && metaAvatar.isNotEmpty)
-                              ? metaAvatar
-                              : _avatarUrl;
-                          return _buildAvatar(nameToShow, widget.isMainStage, finalAvatar);
-                        })(),
+                  child:
+                      hasVideo
+                          ? VideoTrackRenderer(
+                            activeVideoTrack!,
+                            fit: VideoViewFit.contain,
+                            mirrorMode:
+                                isMe
+                                    ? VideoViewMirrorMode.mirror
+                                    : VideoViewMirrorMode.off,
+                            key: ValueKey(activeVideoTrack.sid),
+                          )
+                          : (() {
+                            final metaAvatar = _getAvatarFromMetadata(
+                              widget.participant.metadata,
+                            );
+                            final String? finalAvatar =
+                                (metaAvatar != null && metaAvatar.isNotEmpty)
+                                    ? metaAvatar
+                                    : _avatarUrl;
+                            return _buildAvatar(
+                              nameToShow,
+                              widget.isMainStage,
+                              finalAvatar,
+                            );
+                          })(),
                 ),
               ),
               if (isSpotlighted)
@@ -733,36 +798,61 @@ class _ParticipantTileState extends State<ParticipantTile> {
       },
     );
   }
+
   Widget _buildAvatar(String name, bool isMain, String? avatarUrl) {
     final initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?';
     return Container(
-      color: const Color(0xFF0F1014),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F1014),
+        gradient: RadialGradient(
+          colors: [
+            Colors.blueAccent.withOpacity(0.05),
+            Colors.transparent,
+          ],
+        ),
+      ),
       child: Center(
-        child: CircleAvatar(
-          radius: isMain ? 50 : 25,
-          backgroundColor: Colors.blueAccent.withOpacity(0.1),
-          backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
-              ? NetworkImage(avatarUrl)
-              : null,
-          onBackgroundImageError: (avatarUrl != null && avatarUrl.isNotEmpty)
-              ? (exception, stackTrace) {
-                  debugPrint("Error loading avatar image: $exception");
-                }
-              : null,
-          child: (avatarUrl != null && avatarUrl.isNotEmpty)
-              ? null
-              : Text(
-                  initial,
-                  style: TextStyle(
-                    color: Colors.blueAccent,
-                    fontSize: isMain ? 36 : 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blueAccent.withOpacity(0.1),
+                blurRadius: 20,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: CircleAvatar(
+            radius: isMain ? 55 : 30,
+            backgroundColor: const Color(0xFF1A1B1F),
+            backgroundImage:
+                (avatarUrl != null && avatarUrl.isNotEmpty)
+                    ? NetworkImage(avatarUrl)
+                    : null,
+            onBackgroundImageError:
+                (avatarUrl != null && avatarUrl.isNotEmpty)
+                    ? (exception, stackTrace) {
+                      debugPrint("Error loading avatar image: $exception");
+                    }
+                    : null,
+            child:
+                (avatarUrl != null && avatarUrl.isNotEmpty)
+                    ? null
+                    : Text(
+                      initial,
+                      style: TextStyle(
+                        color: Colors.blueAccent,
+                        fontSize: isMain ? 42 : 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+          ),
         ),
       ),
     );
   }
+
   Widget _buildNameLabel(String name, bool isMe, bool isMicOn, bool isScreen) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
@@ -799,6 +889,7 @@ class _ParticipantTileState extends State<ParticipantTile> {
       ),
     );
   }
+
   Widget _buildBadge(String label, Color color, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -824,6 +915,7 @@ class _ParticipantTileState extends State<ParticipantTile> {
       ),
     );
   }
+
   Widget _buildCircleIcon(IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(6),

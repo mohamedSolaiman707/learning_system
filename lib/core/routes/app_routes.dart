@@ -76,6 +76,20 @@ class AppRoutes {
       );
     }
 
+    if (routeName == wallDisplay) {
+      final args = settings.arguments as Map<String, dynamic>? ?? queryParams;
+      final String sessionId = args['sessionId'] ?? '';
+      final String zone = args['zone'] ?? '';
+      final String roomName = args['roomName'] ?? '';
+      return MaterialPageRoute(
+        builder: (context) => WallDisplayScreen(
+          sessionId: sessionId,
+          zone: zone,
+          roomName: roomName,
+        ),
+      );
+    }
+
     if (routeName == roomPublisher) {
       final args = settings.arguments as Map<String, dynamic>? ?? queryParams;
       final String roomName = args['roomName'] ?? '';
@@ -87,8 +101,6 @@ class AppRoutes {
         ),
       );
     }
-
-
 
     return null;
   }

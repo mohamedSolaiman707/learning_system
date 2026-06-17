@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:provider/provider.dart';
 import '../video_room_controller.dart';
-import '../utils/classroom_participant_utils.dart';
-import 'participant_grid.dart';
+import '../../../../core/routes/app_routes.dart';
+
 
 class SourceManagerSidebar extends StatelessWidget {
   const SourceManagerSidebar({super.key});
@@ -12,19 +12,24 @@ class SourceManagerSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.read<VideoRoomController>();
 
-    final List<Map<String, dynamic>> channels = [
+    final List<Map<String, dynamic>> baseChannels = [
       {'id': 'teacher', 'label': 'المعلم', 'icon': Icons.school_rounded},
       {'id': 'room-cam-right', 'label': 'كاميرا 1', 'icon': Icons.videocam_rounded},
       {'id': 'room-cam-left', 'label': 'كاميرا 2', 'icon': Icons.videocam_rounded},
       {'id': 'room-cam-screen', 'label': 'الشاشة', 'icon': Icons.monitor_rounded},
       {'id': 'whiteboard', 'label': 'السبورة', 'icon': Icons.edit_note_rounded},
-      // Dynamically added screen zones
-      ...controller.screenZones.map((zone) => {
-            'id': zone,
-            'label': 'شاشة ${zone.split("_")[1]}',
-            'icon': Icons.tv_rounded,
-          }).toList(),
+      // Link for room publisher (computer in the classroom)
+      {'id': 'room-publisher', 'label': 'كمبيوتر القاعة', 'icon': Icons.computer_rounded},
     ];
+    // Add screen zones only for teacher
+    final List<Map<String, dynamic>> screenChannels = controller.isTeacher
+        ? controller.screenZones.map((zone) => {
+              'id': zone,
+              'label': 'شاشة ${zone.split('_')[1]}',
+              'icon': Icons.tv_rounded,
+            }).toList()
+        : [];
+    final List<Map<String, dynamic>> channels = [...baseChannels, ...screenChannels];
 
     return Container(
       width: 210,
@@ -73,15 +78,50 @@ class SourceManagerSidebar extends StatelessWidget {
                                   ? ClassroomParticipantUtils.findTeacher(participants)
                                   : ClassroomParticipantUtils.findChannelParticipant(participants, channelId));
 
-                          return _SourceCard(
-                            channelId: channelId,
-                            label: ch['label'] as String,
-                            icon: ch['icon'] as IconData,
-                            participant: participant,
-                            isActive: controller.isChannelActive(channelId),
-                            isPinned: controller.pinnedChannel == channelId,
-                            controller: controller,
-                          );
+                          if (controller.isTeacher && (channelId.startsWith('screen_') || channelId == 'room-publisher')) {
+                              // Open in new tab / route for teacher
+                              return InkWell(
+                                onTap: () {
+                                  if (channelId == 'room-publisher') {
+                                    Navigator.of(context).pushNamed(
+                                      AppRoutes.roomPublisher,
+                                      arguments: {
+                                        'roomName': controller.roomName,
+                                        'sessionId': controller.sessionId ?? '',
+                                      },
+                                    );
+                                  } else {
+                                    Navigator.of(context).pushNamed(
+                                      AppRoutes.wallDisplay,
+                                      arguments: {
+                                        'sessionId': controller.sessionId ?? '',
+                                        'zone': channelId,
+                                        'roomName': controller.roomName,
+                                      },
+                                    );
+                                  }
+                                },
+                                child: _SourceCard(
+                                  channelId: channelId,
+                                  label: ch['label'] as String,
+                                  icon: ch['icon'] as IconData,
+                                  participant: participant,
+                                  isActive: controller.isChannelActive(channelId),
+                                  isPinned: controller.pinnedChannel == channelId,
+                                  controller: controller,
+                                ),
+                              );
+                            } else {
+                              return _SourceCard(
+                                channelId: channelId,
+                                label: ch['label'] as String,
+                                icon: ch['icon'] as IconData,
+                                participant: participant,
+                                isActive: controller.isChannelActive(channelId),
+                                isPinned: controller.pinnedChannel == channelId,
+                                controller: controller,
+                              );
+                            }
                         }),
                       ],
                     );

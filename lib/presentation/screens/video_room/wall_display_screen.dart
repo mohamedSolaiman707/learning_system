@@ -10,7 +10,7 @@ import 'widgets/participant_grid.dart';
 
 class WallDisplayScreen extends StatefulWidget {
   final String sessionId;
-  final String zone;
+  final String zone; // e.g., 'screen_1', 'screen_2'
   final String roomName;
 
   const WallDisplayScreen({
@@ -30,6 +30,7 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
   List<Map<String, dynamic>> _allSeats = [];
   bool _isLoading = true;
   StreamSubscription? _seatsSubscription;
+  int _seatsPerScreen = 8;
 
   final Map<String, bool> _handStates = {};
   String? _spotlightUserId;
@@ -47,17 +48,29 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
     final db = DatabaseService();
 
     try {
+      // تحميل إعدادات الجلسة لمعرفة عدد المقاعد لكل شاشة
+      final config = await db.getSessionScreenConfig(widget.sessionId);
+      if (mounted) {
+        setState(() {
+          _seatsPerScreen = config['seats_per_screen'] ?? 8;
+        });
+      }
+
       final seats = await db.getSeats(widget.sessionId);
-      _allSeats = seats;
+      if (mounted) {
+        setState(() {
+          _allSeats = seats;
+        });
+      }
     } catch (e) {
-      debugPrint("Error loading initial seats: $e");
+      debugPrint("Error loading initial config/seats: $e");
     }
 
     try {
       final token = await LiveKitService().getRoomToken(
         roomName: widget.roomName,
         userId: "wall_${widget.zone}_${DateTime.now().millisecondsSinceEpoch}",
-        userName: "شاشة_${_getZoneArabicName(widget.zone)}",
+        userName: _getZoneArabicName(widget.zone),
       );
 
       if (token != null) {
@@ -96,8 +109,9 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
         }
       })
       ..on<ParticipantDisconnectedEvent>((event) {
-        if (mounted)
+        if (mounted) {
           setState(() => _handStates.remove(event.participant.identity));
+        }
       })
       ..on<RoomEvent>((_) {
         if (mounted) setState(() {});
@@ -107,8 +121,9 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
   void _handleIncomingData(Map<String, dynamic> data, RemoteParticipant? p) {
     switch (data['type']) {
       case 'hand_raise':
-        if (p != null && mounted)
+        if (p != null && mounted) {
           setState(() => _handStates[p.identity] = data['value']);
+        }
         break;
       case 'spotlight':
         if (mounted) setState(() => _spotlightUserId = data['value']);
@@ -117,9 +132,13 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
   }
 
   String _getZoneArabicName(String zone) {
-    if (zone == 'right') return 'اليمين';
-    if (zone == 'center') return 'الوسط';
-    return 'اليسار';
+    if (zone.startsWith('screen_')) {
+      final num = zone.split('_').last;
+      return 'شاشة $num';
+    }
+    if (zone == 'right') return 'شاشة 1';
+    if (zone == 'center') return 'شاشة 2';
+    return 'شاشة 3';
   }
 
   @override
@@ -133,10 +152,7 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Get seats per screen dynamically
-    final rightSeatsCount = _allSeats.where((s) => s['zone'] == 'right').length;
-    final seatsPerScreen = rightSeatsCount > 0 ? rightSeatsCount : 8;
-
+    // تصفية المقاعد الخاصة بهذه المنطقة فقط
     final zoneSeats = _allSeats.where((s) => s['zone'] == widget.zone).toList()
       ..sort((a, b) =>
           (a['seat_number'] as int).compareTo(b['seat_number'] as int));
@@ -178,12 +194,12 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
                     physics: const NeverScrollableScrollPhysics(),
                     gridDelegate:
                     SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: seatsPerScreen <= 8 ? 2 : 3,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      childAspectRatio: 16 / 9,
+                      crossAxisCount: _seatsPerScreen <= 8 ? 2 : 4,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 1.5,
                     ),
-                    itemCount: seatsPerScreen,
+                    itemCount: _seatsPerScreen,
                     itemBuilder: (context, index) {
                       final seat = index < zoneSeats.length
                           ? zoneSeats[index]
@@ -206,15 +222,6 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
                       return AnimatedSwitcher(
                         duration: const Duration(milliseconds: 800),
                         switchInCurve: Curves.easeOutBack,
-                        switchOutCurve: Curves.easeIn,
-                        transitionBuilder: (child, anim) =>
-                            FadeTransition(
-                              opacity: anim,
-                              child: ScaleTransition(
-                                scale: anim,
-                                child: child,
-                              ),
-                            ),
                         child: _buildSeatTile(seat, participant),
                       );
                     },
@@ -233,7 +240,7 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 30),
+          padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 30),
           decoration: BoxDecoration(
             color: Colors.black.withOpacity(0.7),
             border: Border(
@@ -242,31 +249,26 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
           ),
           child: Row(
             children: [
-              const Icon(
-                Icons.dashboard_customize_rounded,
-                color: Colors.blue,
-                size: 28,
-              ),
+              const Icon(Icons.monitor_rounded, color: Colors.blue, size: 28),
               const SizedBox(width: 20),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "نظام العرض الجداري الذكي",
+                    "شاشة عرض القاعة الذكية",
                     style: TextStyle(
                       color: Colors.blue.withOpacity(0.7),
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
                       fontFamily: 'Cairo',
                     ),
                   ),
                   Text(
-                    "منطقة ${_getZoneArabicName(widget.zone)}",
+                    _getZoneArabicName(widget.zone),
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w900,
-                      fontSize: 22,
+                      fontSize: 20,
                       fontFamily: 'Cairo',
                     ),
                   ),
@@ -283,23 +285,22 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
 
   Widget _buildLiveBadge() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.red.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.red.withOpacity(0.3)),
       ),
       child: const Row(
         children: [
           _PulseIcon(),
-          SizedBox(width: 10),
+          SizedBox(width: 8),
           Text(
-            "LIVE FEED",
+            "LIVE",
             style: TextStyle(
               color: Colors.red,
               fontWeight: FontWeight.w900,
               fontSize: 12,
-              letterSpacing: 1.5,
             ),
           ),
         ],
@@ -315,9 +316,8 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
     final int? seatNum = seat?['seat_number'];
 
     return Container(
-      key: ValueKey("seat_${seatNum ?? 'empty'}_${seat?['student_id'] ?? 'none'}_$isOnline"),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: isSpeaking
               ? Colors.greenAccent
@@ -326,22 +326,7 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
               : Colors.white.withOpacity(0.05)),
           width: isSpeaking ? 3 : 1,
         ),
-        boxShadow: [
-          if (isSpeaking)
-            BoxShadow(
-              color: Colors.greenAccent.withOpacity(0.2),
-              blurRadius: 20,
-              spreadRadius: 2,
-            ),
-          BoxShadow(
-            color: Colors.black.withOpacity(0.4),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-        color: isOccupied
-            ? const Color(0xFF1E1F23)
-            : Colors.white.withOpacity(0.02),
+        color: isOccupied ? const Color(0xFF1E1F23) : Colors.white.withOpacity(0.02),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
@@ -358,32 +343,28 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
           else
             _buildEmptyState(seatNum),
 
-          // Seat Label
-          if (seatNum != null)
-            Positioned(
-              top: 15,
-              left: 15,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
-                ),
-                child: Text(
-                  "مقعد $seatNum",
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    fontFamily: 'Cairo',
-                  ),
+          Positioned(
+            top: 12,
+            left: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                seatNum != null ? "مقعد $seatNum" : "--",
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Cairo',
                 ),
               ),
             ),
-
+          ),
           if (isSpeaking)
-            Positioned(top: 15, right: 15, child: _SpeakingIndicator()),
+            Positioned(top: 12, right: 12, child: _SpeakingIndicator()),
         ],
       ),
     );
@@ -392,24 +373,14 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
   Widget _buildEmptyState(int? num) {
     return Center(
       child: Opacity(
-        opacity: 0.15,
+        opacity: 0.1,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.airline_seat_recline_normal_rounded,
-              color: Colors.white,
-              size: 50,
-            ),
-            const SizedBox(height: 10),
+            const Icon(Icons.person_outline_rounded, color: Colors.white, size: 40),
             Text(
-              num != null ? "مقعد شاغر" : "مقعد فارغ",
-              style: const TextStyle(
-                color: Colors.white,
-                fontFamily: 'Cairo',
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-              ),
+              "شاغر",
+              style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 12),
             ),
           ],
         ),
@@ -422,33 +393,14 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(
-            width: 30,
-            height: 30,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.5,
-              color: Colors.blue,
-            ),
-          ),
-          const SizedBox(height: 20),
           Text(
             name,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontFamily: 'Cairo',
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 5),
           Text(
-            "في انتظار الاتصال...",
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.3),
-              fontSize: 11,
-              fontFamily: 'Cairo',
-            ),
+            "غير متصل",
+            style: TextStyle(color: Colors.white24, fontSize: 10, fontFamily: 'Cairo'),
           ),
         ],
       ),
@@ -456,7 +408,6 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
   }
 }
 
-// UI Enhancement Components
 class _PulseIcon extends StatefulWidget {
   const _PulseIcon();
   @override
@@ -485,7 +436,7 @@ class _PulseIconState extends State<_PulseIcon>
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _controller,
-      child: const Icon(Icons.fiber_manual_record, color: Colors.red, size: 12),
+      child: const Icon(Icons.fiber_manual_record, color: Colors.red, size: 10),
     );
   }
 }
@@ -494,12 +445,9 @@ class _SpeakingIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: const BoxDecoration(
-        color: Colors.greenAccent,
-        shape: BoxShape.circle,
-      ),
-      child: const Icon(Icons.mic_rounded, color: Colors.black, size: 14),
+      padding: const EdgeInsets.all(6),
+      decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
+      child: const Icon(Icons.mic_rounded, color: Colors.black, size: 12),
     );
   }
 }

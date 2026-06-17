@@ -32,7 +32,7 @@ class AuthProvider extends ChangeNotifier {
     _user = _supabase.auth.currentUser;
     if (_user != null) {
       _initializeProfileFromMetadata();
-      await _loadProfile();
+      await refreshProfile();
       await _checkTourStatus();
     }
 
@@ -42,7 +42,7 @@ class AuthProvider extends ChangeNotifier {
         if (newUser.id != _user?.id) {
           _user = newUser;
           _initializeProfileFromMetadata();
-          await _loadProfile();
+          await refreshProfile();
           await _checkTourStatus();
         }
       } else {
@@ -91,7 +91,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _loadProfile() async {
+  Future<void> refreshProfile() async {
     if (_user == null) return;
     try {
       final data = await _supabase
@@ -114,7 +114,7 @@ class AuthProvider extends ChangeNotifier {
     if (_user == null) return;
     try {
       await _supabase.from('profiles').update(data).eq('id', _user!.id);
-      await _loadProfile();
+      await refreshProfile();
     } catch (e) {
       rethrow;
     }
@@ -262,7 +262,7 @@ class AuthProvider extends ChangeNotifier {
       if (response.user != null) {
         _user = response.user;
         _initializeProfileFromMetadata();
-        await _loadProfile();
+        await refreshProfile();
         await _checkTourStatus();
         return true;
       }

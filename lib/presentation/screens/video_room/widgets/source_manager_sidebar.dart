@@ -13,7 +13,7 @@ class SourceManagerSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.read<VideoRoomController>();
 
-    final List<Map<String, dynamic>> baseChannels = [
+    final List<Map<String, dynamic>> sourceChannels = [
       {'id': 'teacher', 'label': 'المعلم', 'icon': Icons.school_rounded},
       {
         'id': 'room-cam-right',
@@ -31,28 +31,6 @@ class SourceManagerSidebar extends StatelessWidget {
         'icon': Icons.monitor_rounded,
       },
       {'id': 'whiteboard', 'label': 'السبورة', 'icon': Icons.edit_note_rounded},
-      // Link for room publisher (computer in the classroom)
-      {
-        'id': 'room-publisher',
-        'label': 'كمبيوتر القاعة',
-        'icon': Icons.computer_rounded,
-      },
-    ];
-    // Add screen zones only for teacher
-    final List<Map<String, dynamic>> screenChannels = controller.isTeacher
-        ? controller.screenZones
-              .map(
-                (zone) => {
-                  'id': zone,
-                  'label': 'شاشة ${zone.split('_')[1]}',
-                  'icon': Icons.tv_rounded,
-                },
-              )
-              .toList()
-        : [];
-    final List<Map<String, dynamic>> channels = [
-      ...baseChannels,
-      ...screenChannels,
     ];
 
     return Container(
@@ -61,16 +39,8 @@ class SourceManagerSidebar extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 20),
-          const Text(
-            "مصادر البث",
-            style: TextStyle(
-              color: Colors.white54,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Cairo',
-            ),
-          ),
-          const SizedBox(height: 20),
+          _buildSidebarHeader("مصادر البث"),
+          const SizedBox(height: 10),
           Expanded(
             child: Selector<VideoRoomController, String>(
               selector: (_, c) => c.multiSourceKey,
@@ -87,7 +57,7 @@ class SourceManagerSidebar extends StatelessWidget {
                         );
 
                     return ListView(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       children: [
                         if (screenSharer != null)
                           _SourceCard(
@@ -102,7 +72,7 @@ class SourceManagerSidebar extends StatelessWidget {
                                 controller.pinnedChannel == 'screen-share',
                             controller: controller,
                           ),
-                        ...channels.map((ch) {
+                        ...sourceChannels.map((ch) {
                           final channelId = ch['id'] as String;
                           final participant = channelId == 'whiteboard'
                               ? null
@@ -115,58 +85,114 @@ class SourceManagerSidebar extends StatelessWidget {
                                         channelId,
                                       ));
 
-                          if (controller.isTeacher &&
-                              (channelId.startsWith('screen_') ||
-                                  channelId == 'room-publisher')) {
-                            // Open in new tab / route for teacher
-                            return InkWell(
-                              onTap: () {
-                                if (channelId == 'room-publisher') {
-                                  Navigator.of(context).pushNamed(
-                                    AppRoutes.roomPublisher,
-                                    arguments: {
-                                      'roomName': controller.roomName,
-                                      'sessionId': controller.sessionId ?? '',
-                                    },
-                                  );
-                                } else {
-                                  Navigator.of(context).pushNamed(
+                          return _SourceCard(
+                            channelId: channelId,
+                            label: ch['label'] as String,
+                            icon: ch['icon'] as IconData,
+                            participant: participant,
+                            isActive: controller.isChannelActive(channelId),
+                            isPinned: controller.pinnedChannel == channelId,
+                            controller: controller,
+                          );
+                        }),
+
+                        // Teacher Tools Section (The ones from your image)
+                        if (controller.isTeacher) ...[
+                          const SizedBox(height: 24),
+                          const Divider(color: Colors.white10),
+                          const SizedBox(height: 12),
+                          _buildSidebarHeader("أدوات القاعة"),
+                          const SizedBox(height: 12),
+                          
+                          // Room Publisher Tool
+                          _ToolCard(
+                            label: "كمبيوتر القاعة",
+                            desc: "افتح الرابط لبدء بث الكاميرات",
+                            icon: Icons.computer_rounded,
+                            color: Colors.green,
+                            onTap: () => Navigator.of(context).pushNamed(
+                              AppRoutes.roomPublisher,
+                              arguments: {
+                                'roomName': controller.roomName,
+                                'sessionId': controller.sessionId ?? '',
+                              },
+                            ),
+                          ),
+                          
+                          // Wall Display Tool
+                          _ToolCard(
+                            label: "شاشات عرض القاعة",
+                            desc: "رؤية وجوه الطلاب في القاعة",
+                            icon: Icons.tv_rounded,
+                            color: Colors.blue,
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: controller.screenZones.map((zone) => 
+                                InkWell(
+                                  onTap: () => Navigator.of(context).pushNamed(
                                     AppRoutes.wallDisplay,
                                     arguments: {
                                       'sessionId': controller.sessionId ?? '',
-                                      'zone': channelId,
+                                      'zone': zone,
                                       'roomName': controller.roomName,
                                     },
-                                  );
-                                }
-                              },
-                              child: _SourceCard(
-                                channelId: channelId,
-                                label: ch['label'] as String,
-                                icon: ch['icon'] as IconData,
-                                participant: participant,
-                                isActive: controller.isChannelActive(channelId),
-                                isPinned: controller.pinnedChannel == channelId,
-                                controller: controller,
-                              ),
-                            );
-                          } else {
-                            return _SourceCard(
-                              channelId: channelId,
-                              label: ch['label'] as String,
-                              icon: ch['icon'] as IconData,
-                              participant: participant,
-                              isActive: controller.isChannelActive(channelId),
-                              isPinned: controller.pinnedChannel == channelId,
-                              controller: controller,
-                            );
-                          }
-                        }),
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                                    ),
+                                    child: Text(
+                                      "شاشة ${zone.split('_')[1]}",
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'Cairo'
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              ).toList(),
+                            ),
+                          ),
+                        ],
                       ],
                     );
                   },
                 );
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 14,
+            decoration: BoxDecoration(
+              color: Colors.blue,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'Cairo',
             ),
           ),
         ],
@@ -217,7 +243,6 @@ class _SourceCard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Preview Area
           AspectRatio(
             aspectRatio: 16 / 9,
             child: Stack(
@@ -251,7 +276,6 @@ class _SourceCard extends StatelessWidget {
                     ),
                   ),
 
-                // Status Overlay
                 if (isOffline)
                   Positioned.fill(
                     child: Container(
@@ -271,8 +295,6 @@ class _SourceCard extends StatelessWidget {
               ],
             ),
           ),
-
-          // Controls
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Row(
@@ -317,6 +339,91 @@ class _SourceCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ToolCard extends StatelessWidget {
+  final String label;
+  final String desc;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onTap;
+  final Widget? child;
+
+  const _ToolCard({
+    required this.label,
+    required this.desc,
+    required this.icon,
+    required this.color,
+    this.onTap,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: color.withOpacity(0.1)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(15),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(icon, color: color, size: 16),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Cairo',
+                        ),
+                      ),
+                    ),
+                    if (onTap != null)
+                      const Icon(Icons.open_in_new_rounded, color: Colors.white24, size: 14),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  desc,
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontSize: 8,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                if (child != null) ...[
+                  const SizedBox(height: 12),
+                  child!,
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

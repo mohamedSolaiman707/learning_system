@@ -87,21 +87,16 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   bool _isRedirecting = false;
   bool _linkProcessed = false;
-  Map<String, String>? _capturedParams;
 
   @override
   void initState() {
     super.initState();
-    _capturedParams = _extractParams();
+    
+    final params = _extractParams();
+    final token = params['token'] ?? params['access_token'];
+    final sessionId = params['sessionId'] ?? params['session_id'] ?? params['lms_id'];
 
-    final token = _capturedParams!['token'] ?? _capturedParams!['access_token'];
-    final sessionId = _capturedParams!['sessionId'] ??
-        _capturedParams!['session_id'] ?? _capturedParams!['lms_id'];
-
-    // إذا كان الرابط يحتوي على توكن استعادة أو معاملات الدخول المباشر
-    if (token != null ||
-        sessionId != null ||
-        _capturedParams!['type'] == 'recovery') {
+    if (token != null || sessionId != null || params['type'] == 'recovery') {
       _isRedirecting = true;
     }
 
@@ -122,24 +117,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     if (fullUri.fragment.isNotEmpty) {
-      String fragment = fullUri.fragment;
-      if (fragment.contains('?')) {
-        fragment = fragment
-            .split('?')
-            .last;
+      final fragment = fullUri.fragment;
+      String pathPart = fragment;
+      String queryPart = '';
+      
+      int queryIndex = fragment.indexOf('?');
+      if (queryIndex != -1) {
+        pathPart = fragment.substring(0, queryIndex);
+        queryPart = fragment.substring(queryIndex + 1);
       }
-      if (fragment.startsWith('/')) {
-        if (fragment.contains('?')) {
-          fragment = fragment
-              .split('?')
-              .last;
-        } else {
-          fragment = "";
-        }
-      }
-
-      if (fragment.isNotEmpty) {
-        params.addAll(Uri.splitQueryString(fragment));
+      
+      params['__internal_path'] = pathPart;
+      
+      if (queryPart.isNotEmpty) {
+        params.addAll(Uri.splitQueryString(queryPart));
+      } else if (pathPart.contains('=') && !pathPart.startsWith('/')) {
+        params.addAll(Uri.splitQueryString(pathPart));
       }
     }
     return params;
@@ -148,106 +141,111 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _handleIncomingLink() async {
     if (_linkProcessed) return;
 
-    final params = _capturedParams ?? _extractParams();
+    final params = _extractParams();
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    // 1. Handle password recovery
-    if (params['type'] == 'recovery') {
-      _linkProcessed = true;
-      if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(
-            context, AppRoutes.resetPassword, (route) => false);
-      }
-      return;
-    }
-
-    // 2. Handle token based auto login (LTI etc.)
-    final token = params['token'] ?? params['access_token'];
-    if (token != null) {
-      try {
-        if (mounted) setState(() => _isRedirecting = true);
-        await Supabase.instance.client.auth.setSession(token);
-        await Future.delayed(const Duration(milliseconds: 500));
-      } catch (e) {
-        debugPrint("AutoLogin Error: $e");
-      }
-    }
-
-    // 3. Handle external auth (Blackboard etc.)
-    final externalId = params['external_id'] ?? params['externalId'];
-    final role = params['role'];
-    final fullName = params['full_name'] ?? params['userName'] ??
-        params['username'];
-    final currentUser = Supabase.instance.client.auth.currentUser;
-    if (currentUser != null && externalId != null) {
-      final email = params['email'] ?? currentUser.email ??
-          '${externalId}@blackboard.com';
-      await authProvider.handleExternalAuth(
-        externalId: externalId,
-        email: email,
-        fullName: fullName ?? 'مستخدم Blackboard',
-        role: role ?? 'student',
-      );
-    }
-
-    // 4. Handle direct session navigation (student view)
-    final sessionId = params['sessionId'] ?? params['session_id'] ??
-        params['lms_id'];
-    if (sessionId != null && currentUser != null) {
-      _linkProcessed = true;
-      if (mounted) setState(() => _isRedirecting = true);
-      final dbService = Provider.of<DatabaseService>(context, listen: false);
-      var sessionData = await dbService.getSessionById(sessionId);
-      sessionData ??= await dbService.getSessionByLmsId(sessionId);
-      if (sessionData != null && mounted) {
-        final isTeacherRole = (role == 'teacher' ||
-            authProvider.role == 'teacher');
-        final userId = currentUser.id;
-        if (!isTeacherRole) {
-          await dbService.enrollStudentBySessionId(userId, sessionData['id']);
-        }
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.videoRoom,
-              (route) => false,
-          arguments: {
-            'roomName': 'room_${sessionData['id']}',
-            'title': sessionData['subject_name'] ?? 'قاعة تعليمية',
-            'userName': authProvider.profile?['full_name'] ?? fullName ??
-                'User',
-            'userId': userId,
-            'isTeacher': isTeacherRole,
-            'sessionId': sessionData['id'],
-          },
-        );
-        return;
-      }
-    }
-
-    // 5. Handle room-publisher deep link (camera setup)
-    // The URL format is https://.../#/room-publisher?roomName=...&sessionId=...
-    // We check the path segment after the hash.
-    final uri = Uri.base;
-    if (uri.fragment.startsWith('/room-publisher')) {
-      final fragmentUri = Uri.parse(uri.fragment);
-      final roomName = fragmentUri.queryParameters['roomName'];
-      final sessionIdParam = fragmentUri.queryParameters['sessionId'];
-      if (roomName != null && sessionIdParam != null) {
+    try {
+      if (params['type'] == 'recovery') {
         _linkProcessed = true;
         if (mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            AppRoutes.roomPublisher,
-                (route) => false,
-            arguments: {'roomName': roomName, 'sessionId': sessionIdParam},
-          );
+          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.resetPassword, (route) => false);
         }
         return;
       }
+
+      final token = params['token'] ?? params['access_token'];
+      if (token != null) {
+        try {
+          if (mounted) setState(() => _isRedirecting = true);
+          await Supabase.instance.client.auth.setSession(token);
+          await Future.delayed(const Duration(milliseconds: 500));
+        } catch (e) {
+          debugPrint("AutoLogin Error: $e");
+        }
+      }
+
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      if (currentUser == null) {
+         if (mounted) setState(() => _isRedirecting = false);
+         return;
+      }
+
+      // إجبار النظام على تحميل البروفايل بالكامل للتأكد من رتبة المستخدم (مدرس أم طالب)
+      if (authProvider.profile == null || authProvider.role.isEmpty) {
+        await authProvider.refreshProfile();
+      }
+
+      // اكتشاف المسارات الخاصة بالأدوات من الرابط الكامل والـ Fragment
+      final String fullUrl = Uri.base.toString().toLowerCase();
+      final String internalPath = (params['__internal_path'] ?? '').toLowerCase();
+      
+      final bool isPublisherRoute = fullUrl.contains('room-publisher') || internalPath.contains('room-publisher');
+      final bool isWallRoute = fullUrl.contains('wall-display') || internalPath.contains('wall-display');
+      
+      final String sessionId = params['sessionId'] ?? params['session_id'] ?? params['lms_id'] ?? "";
+
+      if (sessionId.isNotEmpty) {
+        _linkProcessed = true;
+        if (mounted) setState(() => _isRedirecting = true);
+
+        final dbService = Provider.of<DatabaseService>(context, listen: false);
+        var sessionData = await dbService.getSessionById(sessionId);
+        sessionData ??= await dbService.getSessionByLmsId(sessionId);
+
+        if (sessionData != null && mounted) {
+          // 1. التوجيه لمسارات الأدوات (Publisher / Wall) - أولوية مطلقة
+          if (isPublisherRoute || isWallRoute) {
+            final targetRoute = isPublisherRoute ? AppRoutes.roomPublisher : AppRoutes.wallDisplay;
+            
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              targetRoute,
+              (route) => false,
+              arguments: {
+                ...params,
+                'sessionId': sessionData['id'],
+                'roomName': params['roomName'] ?? 'room_${sessionData['id']}',
+                'zone': params['zone'] ?? 'screen_1',
+              },
+            );
+            return;
+          }
+
+          // 2. التوجيه الافتراضي للقاعة التعليمية
+          final String userRole = authProvider.role.toLowerCase();
+          final bool isTeacherRole = (params['role'] == 'teacher' || userRole == 'teacher' || authProvider.profile?['role'] == 'teacher');
+          final String userName = authProvider.profile?['full_name'] ?? params['userName'] ?? params['username'] ?? 'مستخدم';
+
+          if (!isTeacherRole) {
+            // تسجيل حضور الطالب في قاعدة البيانات
+            await dbService.enrollStudentBySessionId(currentUser.id, sessionData['id']);
+          }
+
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            AppRoutes.videoRoom,
+            (route) => false,
+            arguments: {
+              'roomName': params['roomName'] ?? 'room_${sessionData['id']}',
+              'title': params['title'] ?? sessionData['subject_name'] ?? 'قاعة تعليمية',
+              'userName': userName,
+              'userId': currentUser.id,
+              'isTeacher': isTeacherRole,
+              'sessionId': sessionData['id'],
+            },
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint("Auth Redirection Error: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRedirecting = false;
+          _linkProcessed = true;
+        });
+      }
     }
-
-    // If none of the above matched, mark link as processed to avoid re‑checking.
-    _linkProcessed = true;
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -262,16 +260,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
             children: [
               const CircularProgressIndicator(color: Color(0xFF102A43)),
               const SizedBox(height: 32),
-              const Icon(
-                  Icons.security_rounded, size: 48, color: Colors.blueAccent),
+              const Icon(Icons.security_rounded, size: 48, color: Colors.blueAccent),
               const SizedBox(height: 16),
               const Text("جاري التحقق من الهوية...",
-                  style: TextStyle(fontFamily: 'Cairo',
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold)),
+                  style: TextStyle(fontFamily: 'Cairo', fontSize: 18, fontWeight: FontWeight.bold)),
               const Text("سيتم توجيهك الآن تلقائياً",
-                  style: TextStyle(
-                      fontFamily: 'Cairo', fontSize: 14, color: Colors.grey)),
+                  style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.grey)),
             ],
           ),
         ),
@@ -287,5 +281,4 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (role == 'teacher') return const TeacherMainLayout();
     return const StudentMainLayout();
   }
-
 }

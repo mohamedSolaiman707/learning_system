@@ -6,6 +6,12 @@ import 'package:provider/provider.dart';
 import '../../../../core/utils/responsive.dart';
 import '../utils/classroom_participant_utils.dart';
 import '../video_room_controller.dart';
+int _gridCrossAxisCount(BuildContext context) {
+  final width = MediaQuery.of(context).size.width;
+  if (width >= 1100) return 4;
+  if (width >= 850) return 3;
+  return 2;
+}
 
 class ParticipantGrid extends StatelessWidget {
   const ParticipantGrid({super.key});
@@ -95,7 +101,11 @@ class ParticipantGrid extends StatelessWidget {
           ),
           if (otherParticipants.isNotEmpty)
             Container(
-              width: isDesktop ? 260 : 120,
+              width: Responsive.isDesktop(context)
+                  ? 260
+                  : Responsive.isTablet(context)
+                      ? 180
+                      : 120,
               margin: const EdgeInsets.only(left: 12),
               child: ListView.builder(
                 itemCount: otherParticipants.length,
@@ -248,7 +258,7 @@ class ParticipantGrid extends StatelessWidget {
                     child: GridView.builder(
                       padding: const EdgeInsets.all(12),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: isDesktop ? 4 : 2,
+                        crossAxisCount: _gridCrossAxisCount(context),
                         crossAxisSpacing: 10,
                         mainAxisSpacing: 10,
                         childAspectRatio: 1.5,
@@ -333,6 +343,7 @@ class ParticipantGrid extends StatelessWidget {
       Participant? camPart,
       ) {
     final bool isDesktop = Responsive.isDesktop(context);
+    final bool isTablet = Responsive.isTablet(context);
     final controller = context.read<VideoRoomController>();
     return Stack(
       children: [
@@ -351,8 +362,16 @@ class ParticipantGrid extends StatelessWidget {
             child: GestureDetector(
               onTap: () => controller.cycleRoomCamera(),
               child: Container(
-                width: isDesktop ? 260 : 130,
-                height: isDesktop ? 150 : 75,
+                width: Responsive.isDesktop(context)
+                    ? 260
+                    : Responsive.isTablet(context)
+                        ? 200
+                        : 130,
+                height: Responsive.isDesktop(context)
+                    ? 150
+                    : Responsive.isTablet(context)
+                        ? 115
+                        : 75,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(15),
                   border: Border.all(

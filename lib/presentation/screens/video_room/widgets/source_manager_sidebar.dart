@@ -12,12 +12,18 @@ class SourceManagerSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.read<VideoRoomController>();
 
-    final channels = [
+    final List<Map<String, dynamic>> channels = [
       {'id': 'teacher', 'label': 'المعلم', 'icon': Icons.school_rounded},
       {'id': 'room-cam-right', 'label': 'كاميرا 1', 'icon': Icons.videocam_rounded},
       {'id': 'room-cam-left', 'label': 'كاميرا 2', 'icon': Icons.videocam_rounded},
       {'id': 'room-cam-screen', 'label': 'الشاشة', 'icon': Icons.monitor_rounded},
       {'id': 'whiteboard', 'label': 'السبورة', 'icon': Icons.edit_note_rounded},
+      // Dynamically added screen zones
+      ...controller.screenZones.map((zone) => {
+            'id': zone,
+            'label': 'شاشة ${zone.split("_")[1]}',
+            'icon': Icons.tv_rounded,
+          }).toList(),
     ];
 
     return Container(

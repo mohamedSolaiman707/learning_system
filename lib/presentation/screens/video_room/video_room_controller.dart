@@ -122,19 +122,54 @@ class VideoRoomController extends ChangeNotifier {
   String get seatsLayoutKey =>
       _seats.map((s) => '${s['id']}:${s['student_id']}').join('|');
 
+  // Dynamic screen handling
   int _screenCount = 3;
   int _seatsPerScreen = 8;
+  /// Returns the current number of screen zones (dynamic).
   int get screenCount => _screenCount;
   int get seatsPerScreen => _seatsPerScreen;
 
-  List<String> get screenZones {
-    return List.generate(_screenCount, (i) => 'screen_${i + 1}');
+  /// Generates screen zone identifiers like 'screen_1', 'screen_2', ... based on _screenCount.
+  List<String> get screenZones =>
+      List.generate(_screenCount, (i) => 'screen_${i + 1}');
+
+  /// Returns seats for a given zone (screen).
+  List<Map<String, dynamic>> seatsForZone(String zone) {
+    return _seats
+        .where((s) => s['zone'] == zone)
+        .toList()
+      ..sort((a, b) => (a['seat_number'] as int)
+          .compareTo(b['seat_number'] as int));
   }
 
-  List<Map<String, dynamic>> seatsForZone(String zone) {
-    return _seats.where((s) => s['zone'] == zone).toList()..sort(
-          (a, b) => (a['seat_number'] as int).compareTo(b['seat_number'] as int),
-    );
+  /// Initializes dynamic screen channels after session config is loaded.
+  void _initializeScreenChannels() {
+    // Ensure teacher and room cam channels are always present.
+    _activeChannels.clear();
+    _activeChannels.add('teacher');
+    // Add room camera channels.
+    for (final cam in roomCameraOrder) {
+      _activeChannels.add(cam);
+    }
+    // Add screen zones as channels.
+    for (final zone in screenZones) {
+      _activeChannels.add(zone);
+    }
+    // Reset selected channel if it no longer exists.
+    if (! _activeChannels.contains(_selectedChannel)) {
+      _selectedChannel = 'teacher';
+    }
+    _notify(immediate: true);
+  }
+
+  /// Call this after loading session screen config (e.g., after loadAndExpandSeats).
+  Future<void> applySessionScreenConfig() async {
+    if (sessionId == null) return;
+    final config = await DatabaseService()
+        .getSessionScreenConfig(sessionId!);
+    _screenCount = config['screen_count'] ?? 3;
+    _seatsPerScreen = config['seats_per_screen'] ?? 8;
+    _initializeScreenChannels();
   }
 
   final Map<String, bool> _remoteHandStates = {};
@@ -683,6 +718,8 @@ class VideoRoomController extends ChangeNotifier {
           .getSessionScreenConfig(sessionId!);
       _screenCount = config['screen_count'];
       _seatsPerScreen = config['seats_per_screen'];
+      // Reinitialize active channels based on new screen configuration.
+      _initializeScreenChannels();
 
       // Get current seats
       final existing = await DatabaseService()

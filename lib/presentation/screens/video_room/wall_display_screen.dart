@@ -74,7 +74,11 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
       );
 
       if (token != null) {
-        _room = Room();
+        _room = Room(
+          roomOptions: const RoomOptions(
+            autoSubscribe: true,
+          ),
+        );
         _listener = _room!.createListener();
         _setupRoomListeners();
         await _room!.connect(_livekitUrl, token);
@@ -108,10 +112,22 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
           debugPrint("Error handling data: $e");
         }
       })
+      ..on<ParticipantConnectedEvent>((event) {
+        if (mounted) setState(() {});
+      })
       ..on<ParticipantDisconnectedEvent>((event) {
         if (mounted) {
           setState(() => _handStates.remove(event.participant.identity));
         }
+      })
+      ..on<TrackPublishedEvent>((event) {
+        if (mounted) setState(() {});
+      })
+      ..on<TrackSubscribedEvent>((event) {
+        if (mounted) setState(() {});
+      })
+      ..on<TrackUnsubscribedEvent>((event) {
+        if (mounted) setState(() {});
       })
       ..on<RoomEvent>((_) {
         if (mounted) setState(() {});

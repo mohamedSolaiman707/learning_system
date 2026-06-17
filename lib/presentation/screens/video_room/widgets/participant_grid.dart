@@ -463,9 +463,12 @@ class _ParticipantTileState extends State<ParticipantTile> {
         );
       } catch (_) {}
     }
-    final isSpotlighted = context.select<VideoRoomController, bool>(
-          (c) => c.spotlightUserId == widget.participant.identity,
-    );
+    bool isSpotlighted = false;
+    try {
+      isSpotlighted = context.select<VideoRoomController, bool>(
+            (c) => c.spotlightUserId == widget.participant.identity,
+      );
+    } catch (_) {}
     return ListenableBuilder(
       listenable: widget.participant,
       builder: (context, _) {

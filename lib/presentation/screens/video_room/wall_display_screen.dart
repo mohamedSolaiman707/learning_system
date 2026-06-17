@@ -150,30 +150,17 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
     super.dispose();
   }
 
-  int _getCrossAxisCount(double width) {
-    if (_seatsPerScreen > 8) {
-      if (width >= 1200) return 4;
-      if (width >= 800) return 3;
-      return 2;
-    } else {
-      if (width >= 900) return 2;
-      return 1;
-    }
-  }
-
-  double _getChildAspectRatio(double width, double height) {
-    // نحسب النسبة بشكل ديناميكي بناءً على المساحة المتاحة
-    final crossAxisCount = _getCrossAxisCount(width);
-    final rows = (_seatsPerScreen / crossAxisCount).ceil();
-    final spacing = 12.0;
-    final padding = 24.0;
-    final availableWidth = width - padding - (spacing * (crossAxisCount - 1));
-    final tileWidth = availableWidth / crossAxisCount;
-    final headerHeight = height * 0.1;
-    final availableHeight = height - headerHeight - padding - (spacing * (rows - 1));
-    final tileHeight = availableHeight / rows;
-    if (tileHeight <= 0 || tileWidth <= 0) return 1.5;
-    return (tileWidth / tileHeight).clamp(0.8, 2.5);
+  /// يحدد عدد الأعمدة بناءً على عدد المقاعد الكلي لضمان أفضل تقسيم
+  int _getCrossAxisCount(int total) {
+    if (total <= 1) return 1;
+    if (total <= 2) return 2;
+    if (total <= 4) return 2;
+    if (total <= 6) return 3;
+    if (total <= 8) return 4; // 4 أعمدة × 2 صفوف
+    if (total <= 9) return 3;
+    if (total <= 12) return 4;
+    if (total <= 16) return 4;
+    return 4;
   }
 
   @override
@@ -214,47 +201,66 @@ class _WallDisplayScreenState extends State<WallDisplayScreen> {
             builder: (context, constraints) {
               final w = constraints.maxWidth;
               final h = constraints.maxHeight;
-              final crossAxisCount = _getCrossAxisCount(w);
-              final aspectRatio = _getChildAspectRatio(w, h);
+              final cols = _getCrossAxisCount(_seatsPerScreen);
+              final rows = (_seatsPerScreen / cols).ceil();
+              const gap = 8.0;
+              const pad = 8.0;
+
               return Column(
                 children: [
                   _buildHeader(w),
                   Expanded(
                     child: Padding(
-                      padding: EdgeInsets.all(w * 0.01),
-                      child: GridView.builder(
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate:
-                        SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: crossAxisCount,
-                          crossAxisSpacing: w * 0.01,
-                          mainAxisSpacing: w * 0.01,
-                          childAspectRatio: aspectRatio,
-                        ),
-                        itemCount: _seatsPerScreen,
-                        itemBuilder: (context, index) {
-                          final seat = index < zoneSeats.length
-                              ? zoneSeats[index]
-                              : null;
+                      padding: const EdgeInsets.all(pad),
+                      child: LayoutBuilder(
+                        builder: (ctx, innerConstraints) {
+                          final availW = innerConstraints.maxWidth;
+                          final availH = innerConstraints.maxHeight;
+                          // نحسب حجم كل مقعد بدقة لضمان ملء الشاشة كاملاً
+                          final tileW = (availW - gap * (cols - 1)) / cols;
+                          final tileH = (availH - gap * (rows - 1)) / rows;
 
-                          final String? studentId = seat?['student_id'];
-                          RemoteParticipant? participant;
-                          if (studentId != null && studentId.isNotEmpty) {
-                            participant = _room!.remoteParticipants.values
-                                .where((p) {
-                              final cleanId = p.identity
-                                  .split('_')
-                                  .first;
-                              return p.identity.contains(studentId) ||
-                                  cleanId == studentId;
-                            })
-                                .firstOrNull;
-                          }
-
-                          return AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 800),
-                            switchInCurve: Curves.easeOutBack,
-                            child: _buildSeatTile(seat, participant, w),
+                          return Column(
+                            mainAxisSize: MainAxisSize.max,
+                            children: List.generate(rows, (rowIndex) {
+                              return Padding(
+                                padding: EdgeInsets.only(bottom: rowIndex < rows - 1 ? gap : 0),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.max,
+                                  children: List.generate(cols, (colIndex) {
+                                    final index = rowIndex * cols + colIndex;
+                                    if (index >= _seatsPerScreen) {
+                                      // خلية فارغة لملء الصف الأخير
+                                      return SizedBox(width: tileW + (colIndex < cols - 1 ? gap : 0), height: tileH);
+                                    }
+                                    final seat = index < zoneSeats.length ? zoneSeats[index] : null;
+                                    final String? studentId = seat?['student_id'];
+                                    RemoteParticipant? participant;
+                                    if (studentId != null && studentId.isNotEmpty) {
+                                      participant = _room!.remoteParticipants.values.where((p) {
+                                        final cleanId = p.identity.split('_').first;
+                                        return p.identity.contains(studentId) || cleanId == studentId;
+                                      }).firstOrNull;
+                                    }
+                                    return Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          width: tileW,
+                                          height: tileH,
+                                          child: AnimatedSwitcher(
+                                            duration: const Duration(milliseconds: 800),
+                                            switchInCurve: Curves.easeOutBack,
+                                            child: _buildSeatTile(seat, participant, w),
+                                          ),
+                                        ),
+                                        if (colIndex < cols - 1) SizedBox(width: gap),
+                                      ],
+                                    );
+                                  }),
+                                ),
+                              );
+                            }),
                           );
                         },
                       ),

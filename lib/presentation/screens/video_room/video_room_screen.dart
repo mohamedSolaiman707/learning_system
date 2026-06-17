@@ -603,14 +603,6 @@ class _VideoRoomScreenState extends State<VideoRoomScreen> {
             children: [
               if (widget.isTeacher) ...[
                 IconButton(
-                  onPressed: () {},
-                  icon: const Icon(
-                    Icons.person_pin_rounded,
-                    color: Colors.white54,
-                  ),
-                  tooltip: "الملف الشخصي",
-                ),
-                IconButton(
                   onPressed: _showSettingsDialog,
                   icon: const Icon(Icons.settings, color: Colors.white54),
                   tooltip: "الإعدادات",

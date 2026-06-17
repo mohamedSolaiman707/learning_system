@@ -95,7 +95,7 @@ class ParticipantGrid extends StatelessWidget {
             .toList();
     return Container(
       color: const Color(0xFF0F1014),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: Row(
         children: [
           Expanded(

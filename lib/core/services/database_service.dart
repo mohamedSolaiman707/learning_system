@@ -9,12 +9,32 @@ class DatabaseService {
   Future<Map<String, int>> getAdminStats() async {
     try {
       final now = DateTime.now();
-      final startOfToday = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+      final startOfToday = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).toUtc().toIso8601String();
 
-      final studentRes = await _supabase.from('profiles').select().eq('role', 'student').count(CountOption.exact);
-      final teacherRes = await _supabase.from('profiles').select().eq('role', 'teacher').count(CountOption.exact);
-      final roomRes = await _supabase.from('rooms').select().eq('is_active', true).count(CountOption.exact);
-      final sessionRes = await _supabase.from('sessions').select().gte('start_time', startOfToday).count(CountOption.exact);
+      final studentRes = await _supabase
+          .from('profiles')
+          .select()
+          .eq('role', 'student')
+          .count(CountOption.exact);
+      final teacherRes = await _supabase
+          .from('profiles')
+          .select()
+          .eq('role', 'teacher')
+          .count(CountOption.exact);
+      final roomRes = await _supabase
+          .from('rooms')
+          .select()
+          .eq('is_active', true)
+          .count(CountOption.exact);
+      final sessionRes = await _supabase
+          .from('sessions')
+          .select()
+          .gte('start_time', startOfToday)
+          .count(CountOption.exact);
 
       return {
         'totalStudents': studentRes.count,
@@ -30,7 +50,10 @@ class DatabaseService {
   // --- User Management ---
   Future<List<Map<String, dynamic>>> getAllUsers() async {
     try {
-      final response = await _supabase.from('profiles').select().order('created_at', ascending: false);
+      final response = await _supabase
+          .from('profiles')
+          .select()
+          .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       rethrow;
@@ -39,16 +62,26 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getTeachersOnly() async {
     try {
-      final response = await _supabase.from('profiles').select().eq('role', 'teacher').order('full_name');
+      final response = await _supabase
+          .from('profiles')
+          .select()
+          .eq('role', 'teacher')
+          .order('full_name');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       rethrow;
     }
   }
 
-  Future<Map<String, dynamic>?> getProfileByExternalId(String externalId) async {
+  Future<Map<String, dynamic>?> getProfileByExternalId(
+      String externalId,
+      ) async {
     try {
-      return await _supabase.from('profiles').select().eq('external_id', externalId).maybeSingle();
+      return await _supabase
+          .from('profiles')
+          .select()
+          .eq('external_id', externalId)
+          .maybeSingle();
     } catch (e) {
       return null;
     }
@@ -81,14 +114,19 @@ class DatabaseService {
   // --- Session Management ---
   Future<List<Map<String, dynamic>>> getAllSessions() async {
     try {
-      final response = await _supabase.from('sessions').select('*, profiles!teacher_id(full_name), rooms(is_active)').order('start_time', ascending: false);
+      final response = await _supabase
+          .from('sessions')
+          .select('*, profiles!teacher_id(full_name), rooms(is_active)')
+          .order('start_time', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       rethrow;
     }
   }
 
-  Future<List<Map<String, dynamic>>> getTeacherSessionsAll(String teacherId) async {
+  Future<List<Map<String, dynamic>>> getTeacherSessionsAll(
+      String teacherId,
+      ) async {
     try {
       final response = await _supabase
           .from('sessions')
@@ -103,7 +141,13 @@ class DatabaseService {
 
   Future<Map<String, dynamic>?> getSessionById(String sessionId) async {
     try {
-      return await _supabase.from('sessions').select('*, profiles!teacher_id(full_name), rooms(is_active, room_name)').eq('id', sessionId).maybeSingle();
+      return await _supabase
+          .from('sessions')
+          .select(
+        '*, profiles!teacher_id(full_name), rooms(is_active, room_name)',
+      )
+          .eq('id', sessionId)
+          .maybeSingle();
     } catch (e) {
       return null;
     }
@@ -111,7 +155,13 @@ class DatabaseService {
 
   Future<Map<String, dynamic>?> getSessionByLmsId(String lmsId) async {
     try {
-      return await _supabase.from('sessions').select('*, profiles!teacher_id(full_name), rooms(is_active, room_name)').eq('lms_id', lmsId).maybeSingle();
+      return await _supabase
+          .from('sessions')
+          .select(
+        '*, profiles!teacher_id(full_name), rooms(is_active, room_name)',
+      )
+          .eq('lms_id', lmsId)
+          .maybeSingle();
     } catch (e) {
       return null;
     }
@@ -122,7 +172,9 @@ class DatabaseService {
       final now = DateTime.now().toUtc().toIso8601String();
       final response = await _supabase
           .from('sessions')
-          .select('*, profiles!teacher_id(full_name), rooms!inner(is_active, room_name)')
+          .select(
+        '*, profiles!teacher_id(full_name), rooms!inner(is_active, room_name)',
+      )
           .eq('rooms.is_active', true)
           .neq('status', 'archived')
           .neq('status', 'ended')
@@ -134,22 +186,40 @@ class DatabaseService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getStudentSchedule(String studentId) async {
+  Future<List<Map<String, dynamic>>> getStudentSchedule(
+      String studentId,
+      ) async {
     try {
-      final response = await _supabase.from('enrollments').select('*, sessions(*, profiles!teacher_id(full_name), rooms(is_active))').eq('student_id', studentId);
+      final response = await _supabase
+          .from('enrollments')
+          .select(
+        '*, sessions(*, profiles!teacher_id(full_name), rooms(is_active))',
+      )
+          .eq('student_id', studentId);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       rethrow;
     }
   }
 
-  Future<List<Map<String, dynamic>>> getTeacherSessions(String teacherId) async {
+  Future<List<Map<String, dynamic>>> getTeacherSessions(
+      String teacherId,
+      ) async {
     try {
       final now = DateTime.now();
-      final startBoundary = DateTime(now.year, now.month, now.day).subtract(const Duration(hours: 12)).toUtc().toIso8601String();
-      final endBoundary = DateTime(now.year, now.month, now.day).add(const Duration(hours: 36)).toUtc().toIso8601String();
+      final startBoundary = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(const Duration(hours: 12)).toUtc().toIso8601String();
+      final endBoundary = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).add(const Duration(hours: 36)).toUtc().toIso8601String();
 
-      final response = await _supabase.from('sessions')
+      final response = await _supabase
+          .from('sessions')
           .select('*, profiles!teacher_id(full_name), rooms(is_active)')
           .eq('teacher_id', teacherId)
           .neq('status', 'archived')
@@ -169,12 +239,15 @@ class DatabaseService {
           .select('student_id, sessions!inner(teacher_id)')
           .eq('sessions.teacher_id', teacherId);
 
-      final uniqueStudents = (response as List).map((e) => e['student_id']).toSet().length;
+      final uniqueStudents = (response as List)
+          .map((e) => e['student_id'])
+          .toSet()
+          .length;
 
       return {
         'totalStudents': uniqueStudents,
         'rating': '5.0',
-        'todaySessionsCount': await _getTodaySessionsCount(teacherId)
+        'todaySessionsCount': await _getTodaySessionsCount(teacherId),
       };
     } catch (e) {
       debugPrint("Error getting teacher stats: $e");
@@ -232,10 +305,22 @@ class DatabaseService {
 
   Future<int> _getTodaySessionsCount(String teacherId) async {
     final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
-    final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59).toUtc().toIso8601String();
+    final startOfToday = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).toUtc().toIso8601String();
+    final endOfToday = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      23,
+      59,
+      59,
+    ).toUtc().toIso8601String();
 
-    final res = await _supabase.from('sessions')
+    final res = await _supabase
+        .from('sessions')
         .select()
         .eq('teacher_id', teacherId)
         .gte('start_time', startOfToday)
@@ -245,7 +330,9 @@ class DatabaseService {
   }
 
   // --- Recordings Management ---
-  Future<List<Map<String, dynamic>>> getSessionRecordings(String sessionId) async {
+  Future<List<Map<String, dynamic>>> getSessionRecordings(
+      String sessionId,
+      ) async {
     try {
       final response = await _supabase
           .from('recordings')
@@ -270,7 +357,9 @@ class DatabaseService {
 
   // --- Attendance, Q&A, and others ---
 
-  Future<List<Map<String, dynamic>>> getAttendanceReportData(String sessionId) async {
+  Future<List<Map<String, dynamic>>> getAttendanceReportData(
+      String sessionId,
+      ) async {
     try {
       return await _supabase
           .from('attendance')
@@ -281,14 +370,29 @@ class DatabaseService {
     }
   }
 
-  Future<void> toggleRoomStatus(String sessionId, bool isActive, {String? roomName}) async {
+  Future<void> toggleRoomStatus(
+      String sessionId,
+      bool isActive, {
+        String? roomName,
+      }) async {
     try {
-      final existing = await _supabase.from('rooms').select('id').eq('session_id', sessionId).maybeSingle();
+      final existing = await _supabase
+          .from('rooms')
+          .select('id')
+          .eq('session_id', sessionId)
+          .maybeSingle();
 
       if (existing == null) {
-        await _supabase.from('rooms').insert({'session_id': sessionId, 'room_name': roomName ?? "room_$sessionId", 'is_active': isActive});
+        await _supabase.from('rooms').insert({
+          'session_id': sessionId,
+          'room_name': roomName ?? "room_$sessionId",
+          'is_active': isActive,
+        });
       } else {
-        await _supabase.from('rooms').update({'is_active': isActive}).eq('id', existing['id']);
+        await _supabase
+            .from('rooms')
+            .update({'is_active': isActive})
+            .eq('id', existing['id']);
       }
 
       await updateSessionStatus(sessionId, isActive ? 'active' : 'ended');
@@ -299,18 +403,33 @@ class DatabaseService {
 
   Future<void> updateSessionStatus(String sessionId, String status) async {
     try {
-      await _supabase.from('sessions').update({'status': status}).eq('id', sessionId);
+      await _supabase
+          .from('sessions')
+          .update({'status': status})
+          .eq('id', sessionId);
     } catch (e) {
       debugPrint("Error updating session status: $e");
     }
   }
 
-  Future<Map<String, dynamic>> saveSession(Map<String, dynamic> data, {String? id}) async {
+  Future<Map<String, dynamic>> saveSession(
+      Map<String, dynamic> data, {
+        String? id,
+      }) async {
     if (id == null) {
-      final res = await _supabase.from('sessions').insert(data).select().single();
+      final res = await _supabase
+          .from('sessions')
+          .insert(data)
+          .select()
+          .single();
       return Map<String, dynamic>.from(res);
     } else {
-      final res = await _supabase.from('sessions').update(data).eq('id', id).select().single();
+      final res = await _supabase
+          .from('sessions')
+          .update(data)
+          .eq('id', id)
+          .select()
+          .single();
       return Map<String, dynamic>.from(res);
     }
   }
@@ -325,7 +444,10 @@ class DatabaseService {
 
   Future<void> enrollStudentByCode(String studentId, String classCode) async {
     try {
-      final res = await _supabase.from('sessions').select('id').eq('class_code', classCode.trim().toUpperCase());
+      final res = await _supabase
+          .from('sessions')
+          .select('id')
+          .eq('class_code', classCode.trim().toUpperCase());
       if (res.isEmpty) throw Exception("كود الحصة غير صحيح");
       final sessionId = res[0]['id'];
       await enrollStudentBySessionId(studentId, sessionId);
@@ -335,30 +457,47 @@ class DatabaseService {
   }
 
   Stream<int> watchWaitingCount(String sessionId) {
-    return _supabase.from('session_waiting_participants').stream(primaryKey: ['id']).eq('session_id', sessionId).map((data) => data.length);
+    return _supabase
+        .from('session_waiting_participants')
+        .stream(primaryKey: ['id'])
+        .eq('session_id', sessionId)
+        .map((data) => data.length);
   }
-
 
   Future<void> leaveWaitingRoom(String sessionId, String studentId) async {
     try {
-      await _supabase.from('session_waiting_participants').delete().eq('session_id', sessionId).eq('student_id', studentId);
+      await _supabase
+          .from('session_waiting_participants')
+          .delete()
+          .eq('session_id', sessionId)
+          .eq('student_id', studentId);
     } catch (e) {
       debugPrint("Error leaving waiting room: $e");
     }
   }
+
   Future<void> joinWaitingRoom(String sessionId, String studentId) async {
     try {
-      await _supabase.from('session_waiting_participants').upsert({'session_id': sessionId, 'student_id': studentId});
+      await _supabase.from('session_waiting_participants').upsert({
+        'session_id': sessionId,
+        'student_id': studentId,
+      });
     } catch (e) {
       debugPrint("Error joining waiting room: $e");
     }
   }
 
   Stream<List<Map<String, dynamic>>> watchSessionStatus(String sessionId) {
-    return _supabase.from('sessions').stream(primaryKey: ['id']).eq('id', sessionId);
+    return _supabase
+        .from('sessions')
+        .stream(primaryKey: ['id'])
+        .eq('id', sessionId);
   }
 
-  Future<void> enrollStudentBySessionId(String studentId, String sessionId) async {
+  Future<void> enrollStudentBySessionId(
+      String studentId,
+      String sessionId,
+      ) async {
     try {
       await _supabase.from('enrollments').upsert({
         'student_id': studentId,
@@ -386,12 +525,15 @@ class DatabaseService {
     }
   }
 
-  Stream<List<Map<String, dynamic>>> watchStudentAttendance(String sessionId, String studentId) {
+  Stream<List<Map<String, dynamic>>> watchStudentAttendance(
+      String sessionId,
+      String studentId,
+      ) {
     return _supabase
         .from('attendance')
         .stream(primaryKey: ['id'])
         .eq('session_id', sessionId)
-        .eq('student_id', studentId);
+        .map((data) => data.where((row) => row['student_id'] == studentId).toList());
   }
 
   Future<void> markStudentAsKicked(String sessionId, String studentId) async {
@@ -413,14 +555,16 @@ class DatabaseService {
       String studentName,
       ) async {
     try {
-      final result = await _supabase.rpc('log_student_entry', params: {
-        'p_student_id': studentId,
-        'p_student_name': studentName,
-        'p_session_id': sessionId,
-      });
+      final result = await _supabase.rpc(
+        'log_student_entry',
+        params: {
+          'p_student_id': studentId,
+          'p_student_name': studentName,
+          'p_session_id': sessionId,
+        },
+      );
 
-      if (result['success'] == false &&
-          result['reason'] == 'kicked') {
+      if (result['success'] == false && result['reason'] == 'kicked') {
         debugPrint("Student $studentId is kicked");
       }
     } catch (e) {
@@ -430,7 +574,8 @@ class DatabaseService {
 
   Future<void> logStudentExit(String sessionId, String studentId) async {
     try {
-      final record = await _supabase.from('attendance')
+      final record = await _supabase
+          .from('attendance')
           .select('id, status, joined_at, left_at, total_duration_minutes')
           .eq('session_id', sessionId)
           .eq('student_id', studentId)
@@ -440,16 +585,22 @@ class DatabaseService {
         if (record['status'] == 'kicked') return;
         if (record['left_at'] != null) return;
 
-        final joinTime = record['joined_at'] != null ? DateTime.parse(record['joined_at']) : DateTime.now().toUtc();
+        final joinTime = record['joined_at'] != null
+            ? DateTime.parse(record['joined_at'])
+            : DateTime.now().toUtc();
         final exitTime = DateTime.now().toUtc();
         final sessionDuration = exitTime.difference(joinTime).inMinutes;
-        final totalDuration = (record['total_duration_minutes'] ?? 0) + sessionDuration;
+        final totalDuration =
+            (record['total_duration_minutes'] ?? 0) + sessionDuration;
 
-        await _supabase.from('attendance').update({
+        await _supabase
+            .from('attendance')
+            .update({
           'left_at': exitTime.toUtc().toIso8601String(),
           'total_duration_minutes': totalDuration,
-          'status': 'present'
-        }).eq('id', record['id']);
+          'status': 'present',
+        })
+            .eq('id', record['id']);
       }
     } catch (e) {
       debugPrint("Error logging exit: $e");
@@ -459,7 +610,8 @@ class DatabaseService {
   Future<void> finalizeSessionAttendance(String sessionId) async {
     try {
       final now = DateTime.now().toUtc();
-      final activeRecords = await _supabase.from('attendance')
+      final activeRecords = await _supabase
+          .from('attendance')
           .select('id, student_id, joined_at, total_duration_minutes')
           .eq('session_id', sessionId)
           .filter('left_at', 'is', null);
@@ -469,13 +621,17 @@ class DatabaseService {
         if (joinTimeStr != null) {
           final joinTime = DateTime.parse(joinTimeStr);
           final sessionDuration = now.difference(joinTime).inMinutes;
-          final totalDuration = (record['total_duration_minutes'] ?? 0) + sessionDuration;
+          final totalDuration =
+              (record['total_duration_minutes'] ?? 0) + sessionDuration;
 
-          await _supabase.from('attendance').update({
+          await _supabase
+              .from('attendance')
+              .update({
             'left_at': now.toUtc().toIso8601String(),
             'total_duration_minutes': totalDuration,
-            'status': 'present'
-          }).eq('id', record['id']);
+            'status': 'present',
+          })
+              .eq('id', record['id']);
         }
       }
     } catch (e) {
@@ -483,21 +639,25 @@ class DatabaseService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getSessionAttendance(String sessionId) async {
+  Future<List<Map<String, dynamic>>> getSessionAttendance(
+      String sessionId,
+      ) async {
     try {
       final attendanceResponse = await _supabase
           .from('attendance')
           .select('*, profiles:student_id(full_name)')
           .eq('session_id', sessionId);
 
-      final List<Map<String, dynamic>> attendanceData = List<Map<String, dynamic>>.from(attendanceResponse);
+      final List<Map<String, dynamic>> attendanceData =
+      List<Map<String, dynamic>>.from(attendanceResponse);
 
       final enrollmentsResponse = await _supabase
           .from('enrollments')
           .select('student_id, profiles:student_id(full_name)')
           .eq('session_id', sessionId);
 
-      final List<Map<String, dynamic>> enrollmentsData = List<Map<String, dynamic>>.from(enrollmentsResponse);
+      final List<Map<String, dynamic>> enrollmentsData =
+      List<Map<String, dynamic>>.from(enrollmentsResponse);
 
       final List<Map<String, dynamic>> report = [];
       final Set<String> processedIds = {};
@@ -506,7 +666,9 @@ class DatabaseService {
         final studentId = record['student_id'];
         processedIds.add(studentId);
         report.add({
-          'name': record['profiles'] != null ? record['profiles']['full_name'] : 'طالب غير مسجل',
+          'name': record['profiles'] != null
+              ? record['profiles']['full_name']
+              : 'طالب غير مسجل',
           'present': record['status'] != 'absent',
           'joined_at': _formatTime(record['joined_at']),
           'left_at': _formatTime(record['left_at']),
@@ -518,7 +680,9 @@ class DatabaseService {
         final studentId = enrollment['student_id'];
         if (!processedIds.contains(studentId)) {
           report.add({
-            'name': enrollment['profiles'] != null ? enrollment['profiles']['full_name'] : 'طالب غائب',
+            'name': enrollment['profiles'] != null
+                ? enrollment['profiles']['full_name']
+                : 'طالب غائب',
             'present': false,
             'joined_at': 'لم يحضر',
             'left_at': '---',
@@ -541,10 +705,14 @@ class DatabaseService {
       final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
       final period = dt.hour >= 12 ? 'م' : 'ص';
       return "${hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} $period";
-    } catch (_) { return dateStr; }
+    } catch (_) {
+      return dateStr;
+    }
   }
 
-  Future<List<Map<String, dynamic>>> getSessionEnrollments(String sessionId) async {
+  Future<List<Map<String, dynamic>>> getSessionEnrollments(
+      String sessionId,
+      ) async {
     try {
       return await _supabase
           .from('enrollments')
@@ -566,7 +734,10 @@ class DatabaseService {
 
   Future<void> answerQuestion(String questionId, String answer) async {
     try {
-      await _supabase.from('questions').update({'answer': answer, 'is_answered': true}).eq('id', questionId);
+      await _supabase
+          .from('questions')
+          .update({'answer': answer, 'is_answered': true})
+          .eq('id', questionId);
     } catch (e) {
       rethrow;
     }
@@ -574,7 +745,10 @@ class DatabaseService {
 
   Future<void> togglePinQuestion(String questionId, bool isPinned) async {
     try {
-      await _supabase.from('questions').update({'is_pinned': isPinned}).eq('id', questionId);
+      await _supabase
+          .from('questions')
+          .update({'is_pinned': isPinned})
+          .eq('id', questionId);
     } catch (e) {
       rethrow;
     }
@@ -589,13 +763,22 @@ class DatabaseService {
   }
 
   Stream<List<Map<String, dynamic>>> watchQuestions(String sessionId) {
-    return _supabase.from('questions').stream(primaryKey: ['id']).eq('session_id', sessionId).order('is_pinned', ascending: false).order('created_at', ascending: false);
+    return _supabase
+        .from('questions')
+        .stream(primaryKey: ['id'])
+        .eq('session_id', sessionId)
+        .order('is_pinned', ascending: false)
+        .order('created_at', ascending: false);
   }
 
   // --- Quiz Features ---
   Future<Map<String, dynamic>> createQuiz(Map<String, dynamic> quizData) async {
     try {
-      final res = await _supabase.from('quizzes').insert(quizData).select().single();
+      final res = await _supabase
+          .from('quizzes')
+          .insert(quizData)
+          .select()
+          .single();
       return Map<String, dynamic>.from(res);
     } catch (e) {
       rethrow;
@@ -604,17 +787,24 @@ class DatabaseService {
 
   Future<void> submitQuizAnswer(Map<String, dynamic> resultData) async {
     try {
-      await _supabase.from('quiz_results').upsert(resultData, onConflict: 'quiz_id, student_id');
+      await _supabase
+          .from('quiz_results')
+          .upsert(resultData, onConflict: 'quiz_id, student_id');
     } catch (e) {
       rethrow;
     }
   }
 
   Stream<List<Map<String, dynamic>>> watchQuizResults(String quizId) {
-    return _supabase.from('quiz_results').stream(primaryKey: ['id']).eq('quiz_id', quizId);
+    return _supabase
+        .from('quiz_results')
+        .stream(primaryKey: ['id'])
+        .eq('quiz_id', quizId);
   }
 
-  Future<List<Map<String, dynamic>>> getSessionQuizResults(String sessionId) async {
+  Future<List<Map<String, dynamic>>> getSessionQuizResults(
+      String sessionId,
+      ) async {
     try {
       return await _supabase
           .from('quiz_results')
@@ -648,12 +838,15 @@ class DatabaseService {
     required String studentName,
   }) async {
     try {
-      final response = await _supabase.rpc('claim_seat', params: {
-        'p_session_id': sessionId,
-        'p_seat_number': seatNumber,
-        'p_student_id': studentId,
-        'p_student_name': studentName,
-      });
+      final response = await _supabase.rpc(
+        'claim_seat',
+        params: {
+          'p_session_id': sessionId,
+          'p_seat_number': seatNumber,
+          'p_student_id': studentId,
+          'p_student_name': studentName,
+        },
+      );
       return Map<String, dynamic>.from(response);
     } catch (e) {
       return {'success': false, 'error': e.toString()};
@@ -670,8 +863,12 @@ class DatabaseService {
       await _supabase
           .from('seats')
           .update({
-        'student_id': (studentId == null || studentId.isEmpty) ? null : studentId,
-        'student_name': (studentName == null || studentName.isEmpty) ? null : studentName,
+        'student_id': (studentId == null || studentId.isEmpty)
+            ? null
+            : studentId,
+        'student_name': (studentName == null || studentName.isEmpty)
+            ? null
+            : studentName,
       })
           .eq('session_id', sessionId)
           .eq('seat_number', seatNumber);
@@ -686,11 +883,14 @@ class DatabaseService {
     required int toSeat,
   }) async {
     try {
-      await _supabase.rpc('swap_student_seats', params: {
-        'p_session_id': sessionId,
-        'p_from_seat': fromSeat,
-        'p_to_seat': toSeat,
-      });
+      await _supabase.rpc(
+        'swap_student_seats',
+        params: {
+          'p_session_id': sessionId,
+          'p_from_seat': fromSeat,
+          'p_to_seat': toSeat,
+        },
+      );
     } catch (e) {
       debugPrint("moveStudentSeat error: $e");
       rethrow;
@@ -727,15 +927,17 @@ class DatabaseService {
       final List<Map<String, dynamic>> seatsToUpsert = [];
       for (int i = 1; i <= totalSeatsNeeded; i++) {
         final int screen = ((i - 1) ~/ seatsPerScreen) + 1;
-        
+
         // البحث عن بيانات المقعد الحالي للاحتفاظ ببيانات الطالب
         final existingSeat = existingSeats.firstWhere(
-          (s) => s['seat_number'] == i,
+              (s) => s['seat_number'] == i,
           orElse: () => null,
         );
 
         seatsToUpsert.add({
-          if (existingSeat != null) 'id': existingSeat['id'], // استخدام نفس المعرف الفريد لتفادي التكرار
+          if (existingSeat != null)
+            'id':
+            existingSeat['id'], // استخدام نفس المعرف الفريد لتفادي التكرار
           'session_id': sessionId,
           'seat_number': i,
           'zone': 'screen_$screen',
@@ -745,10 +947,9 @@ class DatabaseService {
       }
 
       if (seatsToUpsert.isNotEmpty) {
-        await _supabase.from('seats').upsert(
-          seatsToUpsert,
-          onConflict: 'session_id, seat_number',
-        );
+        await _supabase
+            .from('seats')
+            .upsert(seatsToUpsert, onConflict: 'session_id, seat_number');
       }
     } catch (e) {
       debugPrint("Error initializing seats: $e");
@@ -756,8 +957,7 @@ class DatabaseService {
     }
   }
 
-  Future<Map<String, dynamic>> getSessionScreenConfig(
-      String sessionId) async {
+  Future<Map<String, dynamic>> getSessionScreenConfig(String sessionId) async {
     if (sessionId.isEmpty) return {'screen_count': 3, 'seats_per_screen': 8};
     try {
       final res = await _supabase
@@ -780,10 +980,13 @@ class DatabaseService {
         required int seatsPerScreen,
       }) async {
     try {
-      await _supabase.from('sessions').update({
+      await _supabase
+          .from('sessions')
+          .update({
         'screen_count': screenCount,
         'seats_per_screen': seatsPerScreen,
-      }).eq('id', sessionId);
+      })
+          .eq('id', sessionId);
     } catch (e) {
       debugPrint("Error updating screen config: $e");
       rethrow;

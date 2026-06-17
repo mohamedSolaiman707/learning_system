@@ -17,15 +17,15 @@ class ClassroomParticipantUtils {
   ClassroomParticipantUtils._();
 
   static List<Participant> allFromRoom(Room? room) => [
-        if (room?.localParticipant != null) room!.localParticipant!,
-        ...room?.remoteParticipants.values ?? [],
-      ];
+    if (room?.localParticipant != null) room!.localParticipant!,
+    ...room?.remoteParticipants.values ?? [],
+  ];
 
   static Participant? findTeacher(List<Participant> participants) {
     return participants
         .where((p) =>
-            p.identity.startsWith('teacher_') ||
-            p.identity.toLowerCase().contains('teacher'))
+    p.identity.startsWith('teacher_') ||
+        p.identity.toLowerCase().contains('teacher'))
         .firstOrNull;
   }
 
@@ -34,9 +34,9 @@ class ClassroomParticipantUtils {
   static bool isScreenShare(Participant participant) => participant.isScreenShareEnabled();
 
   static Participant? findChannelParticipant(
-    List<Participant> participants,
-    String channelId,
-  ) {
+      List<Participant> participants,
+      String channelId,
+      ) {
     if (channelId == 'whiteboard') return null;
     final normalizedChannel = channelId.replaceAll(RegExp(r'[-_]'), '').toLowerCase();
     return participants.where((p) {
@@ -49,23 +49,23 @@ class ClassroomParticipantUtils {
   static bool hasCameraVideo(Participant participant) {
     // We check if camera is enabled. In LiveKit, if it's enabled, a track should be available or upcoming.
     if (!participant.isCameraEnabled()) return false;
-    
+
     // Check publications more carefully
     return participant.videoTrackPublications.any((pub) =>
-        !pub.isScreenShare &&
+    !pub.isScreenShare &&
         (participant is LocalParticipant || pub.subscribed || pub.track != null));
   }
 
   static bool hasScreenShareVideo(Participant participant) {
     if (!participant.isScreenShareEnabled()) return false;
     return participant.videoTrackPublications.any((pub) =>
-        pub.isScreenShare &&
+    pub.isScreenShare &&
         (participant is LocalParticipant || pub.subscribed || pub.track != null));
   }
 
   static Participant? findScreenSharingParticipant(
-    List<Participant> participants,
-  ) {
+      List<Participant> participants,
+      ) {
     return participants.where(hasScreenShareVideo).firstOrNull;
   }
 
@@ -98,7 +98,7 @@ class ClassroomParticipantUtils {
     if (screenSharer != null) {
       main = screenSharer;
       isScreenShare = true;
-    } 
+    }
     // 2. إذا تم اختيار قناة كاميرا قاعة وكانت نشطة
     else if (selectedChannel != 'teacher' && isRoomCamActive(channelCam)) {
       main = channelCam;
@@ -111,8 +111,8 @@ class ClassroomParticipantUtils {
     else {
       main = participants
           .where((p) =>
-              p is RemoteParticipant &&
-              (hasCameraVideo(p) || hasScreenShareVideo(p)))
+      p is RemoteParticipant &&
+          (hasCameraVideo(p) || hasScreenShareVideo(p)))
           .firstOrNull;
     }
 
@@ -143,7 +143,7 @@ class ClassroomParticipantUtils {
   }) {
     final teacher = findTeacher(participants);
     if (teacher == null) return false;
-    
+
     // دائماً نظهر المدرس في كارت عائم إذا كانت السبورة مفتوحة
     if (isWhiteboardOpen) return true;
 

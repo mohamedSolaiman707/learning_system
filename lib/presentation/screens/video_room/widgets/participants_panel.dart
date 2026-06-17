@@ -19,7 +19,7 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctrl = context.read<VideoRoomController>();
       if (ctrl.seats.isEmpty) ctrl.loadAndExpandSeats();
@@ -58,7 +58,7 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
         child: Column(
           children: [
             _buildHeader(controller, participants.length + (localParticipant != null ? 1 : 0)),
-            
+
             if (controller.isTeacher) ...[
               TabBar(
                 controller: _tabController,
@@ -128,11 +128,11 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
             Icon(Icons.videocam_rounded, color: Colors.green, size: 18),
             SizedBox(width: 8),
             Text("كمبيوتر القاعة",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontFamily: 'Cairo',
-                fontSize: 13,
-              )),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Cairo',
+                  fontSize: 13,
+                )),
           ]),
           const SizedBox(height: 8),
           const Text(
@@ -194,18 +194,18 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
   }
 
   Widget _buildSeatingGrid(
-    BuildContext context,
-    VideoRoomController controller,
-  ) {
+      BuildContext context,
+      VideoRoomController controller,
+      ) {
     if (controller.seats.isEmpty) {
       return const Center(
-        child: CircularProgressIndicator());
+          child: CircularProgressIndicator());
     }
 
     final zones = controller.screenZones;
     final columnsPerRow = zones.length <= 3 ? zones.length
-      : zones.length <= 6 ? 3
-      : 4;
+        : zones.length <= 6 ? 3
+        : 4;
 
     final chunkedZones = _chunkList(zones, columnsPerRow);
 
@@ -218,16 +218,16 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
             child: Row(
               children: [
                 const Icon(Icons.info_outline,
-                  size: 14, color: Colors.blue),
+                    size: 14, color: Colors.blue),
                 const SizedBox(width: 6),
                 Text(
-                  "${zones.length} شاشات — "
-                  "${controller.seatsPerScreen} مقاعد/شاشة",
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12,
-                    color: Colors.blue,
-                  )),
+                    "${zones.length} شاشات — "
+                        "${controller.seatsPerScreen} مقاعد/شاشة",
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 12,
+                      color: Colors.blue,
+                    )),
               ],
             ),
           ),
@@ -257,7 +257,7 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
                       // إضافة مساحات فارغة إذا كان الصف الأخير غير مكتمل للحفاظ على العرض المتساوي
                       ...List.generate(
                         columnsPerRow - rowZones.length,
-                        (_) => const Expanded(child: SizedBox()),
+                            (_) => const Expanded(child: SizedBox()),
                       ),
                     ],
                   ),
@@ -271,16 +271,16 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
   }
 
   Widget _buildScreenColumn(
-    VideoRoomController controller,
-    String label,
-    String zoneKey,
-  ) {
+      VideoRoomController controller,
+      String label,
+      String zoneKey,
+      ) {
     final zoneSeats = controller.seats
-      .where((s) => s['zone'] == zoneKey)
-      .toList()
+        .where((s) => s['zone'] == zoneKey)
+        .toList()
       ..sort((a, b) =>
-        (a['seat_number'] as int)
-          .compareTo(b['seat_number'] as int));
+          (a['seat_number'] as int)
+              .compareTo(b['seat_number'] as int));
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -293,13 +293,13 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.blue,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Cairo',
-            )),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.blue,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Cairo',
+              )),
         ),
         const SizedBox(height: 12),
         ListView.builder(
@@ -310,65 +310,65 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
             final seat = zoneSeats[index];
             final int seatNum = seat['seat_number'];
             final String? studentId = seat['student_id'];
-            final String? studentName = 
-              seat['student_name'];
-            final bool isOccupied = 
-              studentId != null && 
-              studentId.isNotEmpty;
+            final String? studentName =
+            seat['student_name'];
+            final bool isOccupied =
+                studentId != null &&
+                    studentId.isNotEmpty;
 
             // Empty seat
             if (!isOccupied) {
               return DragTarget<int>(
                 onWillAcceptWithDetails: (details) =>
-                  details.data != seatNum,
+                details.data != seatNum,
                 onAcceptWithDetails: (details) {
                   controller.moveSeat(
-                    details.data, seatNum);
+                      details.data, seatNum);
                 },
                 builder: (context, candidate, _) {
                   return Container(
                     margin: const EdgeInsets.only(
-                      bottom: 8),
+                        bottom: 8),
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
-                      vertical: 10, horizontal: 4),
+                        vertical: 10, horizontal: 4),
                     decoration: BoxDecoration(
                       color: candidate.isNotEmpty
-                        ? Colors.blue.withOpacity(0.2)
-                        : Colors.grey.withOpacity(0.05),
-                      borderRadius: 
-                        BorderRadius.circular(10),
+                          ? Colors.blue.withOpacity(0.2)
+                          : Colors.grey.withOpacity(0.05),
+                      borderRadius:
+                      BorderRadius.circular(10),
                       border: Border.all(
                         color: candidate.isNotEmpty
-                          ? Colors.blue
-                          : Colors.grey.withOpacity(0.2),
+                            ? Colors.blue
+                            : Colors.grey.withOpacity(0.2),
                         width: 1,
                       ),
                     ),
                     child: Column(
                       mainAxisAlignment:
-                        MainAxisAlignment.center,
+                      MainAxisAlignment.center,
                       children: [
                         Icon(
                           candidate.isNotEmpty
-                            ? Icons.add_circle
-                            : Icons.add_circle_outline,
+                              ? Icons.add_circle
+                              : Icons.add_circle_outline,
                           color: candidate.isNotEmpty
-                            ? Colors.blue
-                            : Colors.grey.shade300,
+                              ? Colors.blue
+                              : Colors.grey.shade300,
                           size: 18,
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "مقعد $seatNum",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: candidate.isNotEmpty
-                              ? Colors.blue
-                              : Colors.grey.shade300,
-                            fontSize: 9,
-                            fontFamily: 'Cairo',
-                          )),
+                            "مقعد $seatNum",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: candidate.isNotEmpty
+                                  ? Colors.blue
+                                  : Colors.grey.shade300,
+                              fontSize: 9,
+                              fontFamily: 'Cairo',
+                            )),
                       ],
                     ),
                   );
@@ -380,7 +380,7 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
             final seatWidget = Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
-                vertical: 10, horizontal: 4),
+                  vertical: 10, horizontal: 4),
               decoration: BoxDecoration(
                 color: Colors.blue.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(10),
@@ -392,24 +392,24 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
               child: Column(
                 children: [
                   Text(
-                    studentName ?? "طالب",
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Cairo',
-                    )),
+                      studentName ?? "طالب",
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Cairo',
+                      )),
                   const SizedBox(height: 2),
                   Text(
-                    "مقعد $seatNum",
-                    style: const TextStyle(
-                      color: Colors.blue,
-                      fontSize: 8,
-                      fontFamily: 'Cairo',
-                    )),
+                      "مقعد $seatNum",
+                      style: const TextStyle(
+                        color: Colors.blue,
+                        fontSize: 8,
+                        fontFamily: 'Cairo',
+                      )),
                   const Icon(
                     Icons.drag_indicator,
                     size: 14,
@@ -423,10 +423,10 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
               padding: const EdgeInsets.only(bottom: 8),
               child: DragTarget<int>(
                 onWillAcceptWithDetails: (details) =>
-                  details.data != seatNum,
+                details.data != seatNum,
                 onAcceptWithDetails: (details) {
                   controller.moveSeat(
-                    details.data, seatNum);
+                      details.data, seatNum);
                 },
                 builder: (context, candidate, _) {
                   return Draggable<int>(
@@ -439,7 +439,7 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
                         decoration: BoxDecoration(
                           color: Colors.blue,
                           borderRadius:
-                            BorderRadius.circular(8),
+                          BorderRadius.circular(8),
                           boxShadow: const [
                             BoxShadow(
                               color: Colors.black38,
@@ -448,13 +448,13 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
                           ],
                         ),
                         child: Text(
-                          studentName ?? "طالب",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontFamily: 'Cairo',
-                            fontWeight: FontWeight.bold,
-                          )),
+                            studentName ?? "طالب",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.bold,
+                            )),
                       ),
                     ),
                     childWhenDragging: Opacity(
@@ -462,18 +462,18 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
                       child: seatWidget,
                     ),
                     child: candidate.isNotEmpty
-                      ? Container(
-                          decoration: BoxDecoration(
-                            borderRadius:
-                              BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.blue,
-                              width: 2,
-                            ),
-                          ),
-                          child: seatWidget,
-                        )
-                      : seatWidget,
+                        ? Container(
+                      decoration: BoxDecoration(
+                        borderRadius:
+                        BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.blue,
+                          width: 2,
+                        ),
+                      ),
+                      child: seatWidget,
+                    )
+                        : seatWidget,
                   );
                 },
               ),
@@ -485,9 +485,9 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
   }
 
   Widget _buildWallControls(
-    BuildContext context,
-    VideoRoomController controller,
-  ) {
+      BuildContext context,
+      VideoRoomController controller,
+      ) {
     final zones = controller.screenZones;
 
     return Container(
@@ -497,113 +497,113 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
         color: Colors.blue.withOpacity(0.05),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.blue.withOpacity(0.1)),
+            color: Colors.blue.withOpacity(0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(children: [
             Icon(Icons.desktop_windows_rounded,
-              color: Colors.blue, size: 18),
+                color: Colors.blue, size: 18),
             SizedBox(width: 8),
             Text("شاشات عرض القاعة (Wall Display)",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontFamily: 'Cairo',
-                fontSize: 13,
-              )),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Cairo',
+                  fontSize: 13,
+                )),
           ]),
           const SizedBox(height: 12),
           // Dynamic grid of screen links
           GridView.builder(
             shrinkWrap: true,
-            physics: 
-              const NeverScrollableScrollPhysics(),
+            physics:
+            const NeverScrollableScrollPhysics(),
             gridDelegate:
-              SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: zones.length <= 4 
+            SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: zones.length <= 4
                   ? zones.length : 4,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                childAspectRatio: 1.5,
-              ),
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 1.5,
+            ),
             itemCount: zones.length,
             itemBuilder: (context, index) {
               final zone = zones[index];
               final baseUrl = Uri.base.origin;
-              final wallUrl = 
-                "$baseUrl/#/wall-display"
-                "?sessionId=${controller.sessionId}"
-                "&zone=$zone"
-                "&roomName=${controller.roomName}";
+              final wallUrl =
+                  "$baseUrl/#/wall-display"
+                  "?sessionId=${controller.sessionId}"
+                  "&zone=$zone"
+                  "&roomName=${controller.roomName}";
 
               return Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: 
-                    BorderRadius.circular(10),
+                  borderRadius:
+                  BorderRadius.circular(10),
                   border: Border.all(
-                    color: Colors.blue
-                      .withOpacity(0.2)),
+                      color: Colors.blue
+                          .withOpacity(0.2)),
                 ),
                 child: Column(
                   mainAxisAlignment:
-                    MainAxisAlignment.center,
+                  MainAxisAlignment.center,
                   children: [
                     Text("شاشة ${index + 1}",
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      )),
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        )),
                     const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment:
-                        MainAxisAlignment.center,
+                      MainAxisAlignment.center,
                       children: [
                         IconButton(
                           icon: const Icon(
-                            Icons.open_in_new_rounded,
-                            color: Colors.blue,
-                            size: 18),
-                          onPressed: () => 
-                            launchUrl(
-                              Uri.parse(wallUrl)),
+                              Icons.open_in_new_rounded,
+                              color: Colors.blue,
+                              size: 18),
+                          onPressed: () =>
+                              launchUrl(
+                                  Uri.parse(wallUrl)),
                           tooltip: "فتح",
                           padding: EdgeInsets.zero,
-                          constraints: 
-                            const BoxConstraints(),
+                          constraints:
+                          const BoxConstraints(),
                         ),
                         const SizedBox(width: 4),
                         IconButton(
                           icon: const Icon(
-                            Icons.copy_rounded,
-                            color: Colors.grey,
-                            size: 16),
+                              Icons.copy_rounded,
+                              color: Colors.grey,
+                              size: 16),
                           onPressed: () {
                             Clipboard.setData(
-                              ClipboardData(
-                                text: wallUrl));
+                                ClipboardData(
+                                    text: wallUrl));
                             ScaffoldMessenger
-                              .of(context)
-                              .showSnackBar(
+                                .of(context)
+                                .showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    "تم نسخ رابط "
-                                    "شاشة ${index+1}",
-                                    style: const TextStyle(
-                                      fontFamily: 'Cairo'
-                                    )),
+                                      "تم نسخ رابط "
+                                          "شاشة ${index+1}",
+                                      style: const TextStyle(
+                                          fontFamily: 'Cairo'
+                                      )),
                                   backgroundColor:
-                                    Colors.green,
-                                  behavior: 
-                                    SnackBarBehavior
+                                  Colors.green,
+                                  behavior:
+                                  SnackBarBehavior
                                       .floating,
                                 ));
                           },
                           padding: EdgeInsets.zero,
                           constraints:
-                            const BoxConstraints(),
+                          const BoxConstraints(),
                           tooltip: "نسخ الرابط",
                         ),
                       ],
@@ -632,12 +632,12 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
           ),
           const Spacer(),
           IconButton(
-            onPressed: controller.toggleParticipants, 
-            icon: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
-              child: const Icon(Icons.close_rounded, color: Colors.black, size: 20)
-            )
+              onPressed: controller.toggleParticipants,
+              icon: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
+                  child: const Icon(Icons.close_rounded, color: Colors.black, size: 20)
+              )
           ),
         ],
       ),
@@ -657,10 +657,10 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
               children: [
                 IconButton(
                   icon: const Icon(Icons.tv_rounded,
-                    color: Colors.blue),
+                      color: Colors.blue),
                   tooltip: "إعداد الشاشات",
                   onPressed: () => _showScreenConfigDialog(
-                    context, controller),
+                      context, controller),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -689,9 +689,9 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
   }
 
   void _showScreenConfigDialog(
-    BuildContext context,
-    VideoRoomController controller,
-  ) {
+      BuildContext context,
+      VideoRoomController controller,
+      ) {
     int screenCount = controller.screenCount;
     int seatsPerScreen = controller.seatsPerScreen;
 
@@ -700,46 +700,46 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
       builder: (context) => StatefulBuilder(
         builder: (context, setDS) => AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
+              borderRadius: BorderRadius.circular(20)),
           title: const Text(
-            "إعداد شاشات القاعة",
-            style: TextStyle(
-              fontFamily: 'Cairo',
-              fontWeight: FontWeight.bold,
-            )),
+              "إعداد شاشات القاعة",
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.bold,
+              )),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Screen count
               Row(
                 mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
+                MainAxisAlignment.spaceBetween,
                 children: [
                   const Text("عدد الشاشات",
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontWeight: FontWeight.bold,
-                    )),
-                  Row(children: [
-                    IconButton(
-                      onPressed: screenCount > 1
-                        ? () => setDS(() => screenCount--)
-                        : null,
-                      icon: const Icon(
-                        Icons.remove_circle_outline,
-                        color: Colors.blue)),
-                    Text("$screenCount",
-                      style: const TextStyle(
-                        fontSize: 20,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
                         fontWeight: FontWeight.bold,
                       )),
+                  Row(children: [
                     IconButton(
-                      onPressed: screenCount < 20
-                        ? () => setDS(() => screenCount++)
-                        : null,
-                      icon: const Icon(
-                        Icons.add_circle_outline,
-                        color: Colors.blue)),
+                        onPressed: screenCount > 1
+                            ? () => setDS(() => screenCount--)
+                            : null,
+                        icon: const Icon(
+                            Icons.remove_circle_outline,
+                            color: Colors.blue)),
+                    Text("$screenCount",
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        )),
+                    IconButton(
+                        onPressed: screenCount < 20
+                            ? () => setDS(() => screenCount++)
+                            : null,
+                        icon: const Icon(
+                            Icons.add_circle_outline,
+                            color: Colors.blue)),
                   ]),
                 ],
               ),
@@ -747,35 +747,35 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
               // Seats per screen
               Row(
                 mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
+                MainAxisAlignment.spaceBetween,
                 children: [
                   const Text("طلاب لكل شاشة",
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontWeight: FontWeight.bold,
-                    )),
-                  Row(children: [
-                    IconButton(
-                      onPressed: seatsPerScreen > 4
-                        ? () => setDS(
-                            () => seatsPerScreen--)
-                        : null,
-                      icon: const Icon(
-                        Icons.remove_circle_outline,
-                        color: Colors.blue)),
-                    Text("$seatsPerScreen",
-                      style: const TextStyle(
-                        fontSize: 20,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
                         fontWeight: FontWeight.bold,
                       )),
+                  Row(children: [
                     IconButton(
-                      onPressed: seatsPerScreen < 16
-                        ? () => setDS(
-                            () => seatsPerScreen++)
-                        : null,
-                      icon: const Icon(
-                        Icons.add_circle_outline,
-                        color: Colors.blue)),
+                        onPressed: seatsPerScreen > 4
+                            ? () => setDS(
+                                () => seatsPerScreen--)
+                            : null,
+                        icon: const Icon(
+                            Icons.remove_circle_outline,
+                            color: Colors.blue)),
+                    Text("$seatsPerScreen",
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        )),
+                    IconButton(
+                        onPressed: seatsPerScreen < 16
+                            ? () => setDS(
+                                () => seatsPerScreen++)
+                            : null,
+                        icon: const Icon(
+                            Icons.add_circle_outline,
+                            color: Colors.blue)),
                   ]),
                 ],
               ),
@@ -789,19 +789,19 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
                 ),
                 child: Row(
                   mainAxisAlignment:
-                    MainAxisAlignment.center,
+                  MainAxisAlignment.center,
                   children: [
                     const Icon(Icons.people_alt_rounded,
-                      color: Colors.blue, size: 18),
+                        color: Colors.blue, size: 18),
                     const SizedBox(width: 8),
                     Text(
-                      "إجمالي المقاعد: "
-                      "${screenCount * seatsPerScreen} مقعد",
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
-                      )),
+                        "إجمالي المقاعد: "
+                            "${screenCount * seatsPerScreen} مقعد",
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        )),
                   ],
                 ),
               ),
@@ -809,29 +809,29 @@ class _ParticipantsPanelState extends State<ParticipantsPanel> with SingleTicker
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("إلغاء",
-                style: TextStyle(fontFamily: 'Cairo'))),
+                onPressed: () => Navigator.pop(context),
+                child: const Text("إلغاء",
+                    style: TextStyle(fontFamily: 'Cairo'))),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                shape: RoundedRectangleBorder(
-                  borderRadius: 
-                    BorderRadius.circular(10)),
-              ),
-              onPressed: () {
-                controller.updateScreenConfig(
-                  screenCount: screenCount,
-                  seatsPerScreen: seatsPerScreen,
-                );
-                Navigator.pop(context);
-              },
-              child: const Text("حفظ وتطبيق",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontFamily: 'Cairo',
-                  fontWeight: FontWeight.bold,
-                ))),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  shape: RoundedRectangleBorder(
+                      borderRadius:
+                      BorderRadius.circular(10)),
+                ),
+                onPressed: () {
+                  controller.updateScreenConfig(
+                    screenCount: screenCount,
+                    seatsPerScreen: seatsPerScreen,
+                  );
+                  Navigator.pop(context);
+                },
+                child: const Text("حفظ وتطبيق",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.bold,
+                    ))),
           ],
         ),
       ),
@@ -908,7 +908,7 @@ class _ParticipantTile extends StatelessWidget {
     final bool handRaised = controller.remoteHandStates[participant.identity] ?? false;
     final bool isSpotlight = controller.spotlightUserId == participant.identity;
     final bool hasPen = controller.authorizedStudentId == participant.identity;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -919,8 +919,8 @@ class _ParticipantTile extends StatelessWidget {
                 radius: 25,
                 backgroundColor: isMe ? const Color(0xFF102A43) : Colors.grey.shade200,
                 child: Text(
-                  (participant.identity.contains("teacher") ? "أ" : (participant.name.isNotEmpty ? participant.name[0] : "س")).toUpperCase(), 
-                   style: TextStyle(color: isMe ? Colors.white : Colors.black, fontWeight: FontWeight.bold)
+                    (participant.identity.contains("teacher") ? "أ" : (participant.name.isNotEmpty ? participant.name[0] : "س")).toUpperCase(),
+                    style: TextStyle(color: isMe ? Colors.white : Colors.black, fontWeight: FontWeight.bold)
                 ),
               ),
               if (isSpotlight)
@@ -945,7 +945,7 @@ class _ParticipantTile extends StatelessWidget {
                       ),
                   ],
                 ),
-                if (handRaised) 
+                if (handRaised)
                   const Text("يرفع يده ✋", style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'Cairo')),
                 if (participant.isMicrophoneEnabled() == false)
                   const Text("الميكروفون مغلق", style: TextStyle(color: Colors.red, fontSize: 11, fontFamily: 'Cairo')),
@@ -973,55 +973,55 @@ class _ParticipantTile extends StatelessWidget {
       },
       itemBuilder: (ctx) => [
         PopupMenuItem(
-          value: 'mute', 
-          child: Row(
-            children: [
-              const Icon(Icons.mic_none_rounded, size: 20),
-              const SizedBox(width: 12),
-              Text(participant.isMicrophoneEnabled() ? "كتم الصوت" : "تفعيل الصوت", style: const TextStyle(fontFamily: 'Cairo')),
-            ],
-          )
+            value: 'mute',
+            child: Row(
+              children: [
+                const Icon(Icons.mic_none_rounded, size: 20),
+                const SizedBox(width: 12),
+                Text(participant.isMicrophoneEnabled() ? "كتم الصوت" : "تفعيل الصوت", style: const TextStyle(fontFamily: 'Cairo')),
+              ],
+            )
         ),
         PopupMenuItem(
-          value: 'cam', 
-          child: Row(
-            children: [
-              const Icon(Icons.videocam_outlined, size: 20),
-              const SizedBox(width: 12),
-              Text(participant.isCameraEnabled() ? "تعطيل الكاميرا" : "تفعيل الكاميرا", style: const TextStyle(fontFamily: 'Cairo')),
-            ],
-          )
+            value: 'cam',
+            child: Row(
+              children: [
+                const Icon(Icons.videocam_outlined, size: 20),
+                const SizedBox(width: 12),
+                Text(participant.isCameraEnabled() ? "تعطيل الكاميرا" : "تفعيل الكاميرا", style: const TextStyle(fontFamily: 'Cairo')),
+              ],
+            )
         ),
         PopupMenuItem(
-          value: 'pen', 
-          child: Row(
-            children: [
-              Icon(hasPen ? Icons.edit_off_rounded : Icons.edit_rounded, size: 20, color: hasPen ? Colors.orange : Colors.green),
-              const SizedBox(width: 12),
-              Text(hasPen ? "سحب القلم" : "إعطاء القلم", style: const TextStyle(fontFamily: 'Cairo')),
-            ],
-          )
+            value: 'pen',
+            child: Row(
+              children: [
+                Icon(hasPen ? Icons.edit_off_rounded : Icons.edit_rounded, size: 20, color: hasPen ? Colors.orange : Colors.green),
+                const SizedBox(width: 12),
+                Text(hasPen ? "سحب القلم" : "إعطاء القلم", style: const TextStyle(fontFamily: 'Cairo')),
+              ],
+            )
         ),
         PopupMenuItem(
-          value: 'spotlight', 
-          child: Row(
-            children: [
-              const Icon(Icons.star_outline_rounded, size: 20),
-              const SizedBox(width: 12),
-              Text(controller.spotlightUserId == participant.identity ? "إلغاء التمييز" : "تمييز المشارك", style: const TextStyle(fontFamily: 'Cairo')),
-            ],
-          )
+            value: 'spotlight',
+            child: Row(
+              children: [
+                const Icon(Icons.star_outline_rounded, size: 20),
+                const SizedBox(width: 12),
+                Text(controller.spotlightUserId == participant.identity ? "إلغاء التمييز" : "تمييز المشارك", style: const TextStyle(fontFamily: 'Cairo')),
+              ],
+            )
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
-          value: 'kick', 
-          child: const Row(
-            children: [
-              Icon(Icons.gavel_rounded, color: Colors.red, size: 20),
-              SizedBox(width: 12),
-              Text("طرد من القاعة", style: TextStyle(color: Colors.red, fontFamily: 'Cairo')),
-            ],
-          )
+            value: 'kick',
+            child: const Row(
+              children: [
+                Icon(Icons.gavel_rounded, color: Colors.red, size: 20),
+                SizedBox(width: 12),
+                Text("طرد من القاعة", style: TextStyle(color: Colors.red, fontFamily: 'Cairo')),
+              ],
+            )
         ),
       ],
     );
@@ -1043,9 +1043,9 @@ class _ActionButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 15),
         decoration: BoxDecoration(
-          color: color, 
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
+            color: color,
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1075,9 +1075,9 @@ class _BreakoutStatus extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(child: Text("غرف التقسيم مفعلة (${controller.breakoutTimeLeft ~/ 60} د)", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            onPressed: controller.endBreakoutRooms, 
-            child: const Text("إنهاء", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+              onPressed: controller.endBreakoutRooms,
+              child: const Text("إنهاء", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Cairo'))
           ),
         ],
       ),

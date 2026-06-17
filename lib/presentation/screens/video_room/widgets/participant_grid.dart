@@ -30,9 +30,9 @@ class ParticipantGrid extends StatelessWidget {
                   room,
                 );
                 final screenSharer =
-                    ClassroomParticipantUtils.findScreenSharingParticipant(
-                      participants,
-                    );
+                ClassroomParticipantUtils.findScreenSharingParticipant(
+                  participants,
+                );
                 if (!controller.isTeacher) {
                   return _buildStudentLayout(
                     context,
@@ -64,11 +64,11 @@ class ParticipantGrid extends StatelessWidget {
   }
 
   Widget _buildProfessionalTeacherLayout(
-    BuildContext context,
-    VideoRoomController controller,
-    List<Participant> allParticipants,
-    Participant? screenSharingParticipant,
-  ) {
+      BuildContext context,
+      VideoRoomController controller,
+      List<Participant> allParticipants,
+      Participant? screenSharingParticipant,
+      ) {
     final isDesktop = Responsive.isDesktop(context);
     final resolution = ClassroomParticipantUtils.resolveMainStage(
       participants: allParticipants,
@@ -133,17 +133,17 @@ class ParticipantGrid extends StatelessWidget {
   }
 
   Widget _buildStudentLayout(
-    BuildContext context,
-    List<Participant> allParticipants,
-    Participant? screenSharingParticipant,
-    String selectedChannel,
-  ) {
+      BuildContext context,
+      List<Participant> allParticipants,
+      Participant? screenSharingParticipant,
+      String selectedChannel,
+      ) {
     if (screenSharingParticipant != null) {
       final channelParticipant =
-          ClassroomParticipantUtils.findChannelParticipant(
-            allParticipants,
-            selectedChannel,
-          );
+      ClassroomParticipantUtils.findChannelParticipant(
+        allParticipants,
+        selectedChannel,
+      );
       return _buildHybridStudentLayout(
         context,
         screenSharingParticipant,
@@ -168,11 +168,11 @@ class ParticipantGrid extends StatelessWidget {
   }
 
   Widget _buildTeacherVideoWall(
-    BuildContext context,
-    VideoRoomController controller,
-    List<Participant> allParticipants,
-    Participant? screenSharingParticipant,
-  ) {
+      BuildContext context,
+      VideoRoomController controller,
+      List<Participant> allParticipants,
+      Participant? screenSharingParticipant,
+      ) {
     final isDesktop = Responsive.isDesktop(context);
     return Selector<VideoRoomController, String>(
       selector: (_, c) => c.seatsLayoutKey,
@@ -235,10 +235,10 @@ class ParticipantGrid extends StatelessWidget {
                           borderRadius: BorderRadius.circular(20),
                           child: screenSharingParticipant != null
                               ? ParticipantTile(
-                                  participant: screenSharingParticipant,
-                                  isMainStage: true,
-                                  forceShowScreen: true,
-                                )
+                            participant: screenSharingParticipant,
+                            isMainStage: true,
+                            forceShowScreen: true,
+                          )
                               : const SizedBox.shrink(),
                         ),
                       ),
@@ -271,7 +271,7 @@ class ParticipantGrid extends StatelessWidget {
                             participant: participant,
                             isMainStage: false,
                             displayName:
-                                seat['student_name'] as String? ??
+                            seat['student_name'] as String? ??
                                 participant.name,
                           );
                         }
@@ -328,10 +328,10 @@ class ParticipantGrid extends StatelessWidget {
   }
 
   Widget _buildHybridStudentLayout(
-    BuildContext context,
-    Participant screenPart,
-    Participant? camPart,
-  ) {
+      BuildContext context,
+      Participant screenPart,
+      Participant? camPart,
+      ) {
     final bool isDesktop = Responsive.isDesktop(context);
     final controller = context.read<VideoRoomController>();
     return Stack(
@@ -440,12 +440,12 @@ class _ParticipantTileState extends State<ParticipantTile> {
     if (widget.forceHandRaised == null) {
       try {
         isHandRaised = context.select<VideoRoomController, bool>(
-          (c) => c.remoteHandStates[widget.participant.identity] ?? false,
+              (c) => c.remoteHandStates[widget.participant.identity] ?? false,
         );
       } catch (_) {}
     }
     final isSpotlighted = context.select<VideoRoomController, bool>(
-      (c) => c.spotlightUserId == widget.participant.identity,
+          (c) => c.spotlightUserId == widget.participant.identity,
     );
     return ListenableBuilder(
       listenable: widget.participant,
@@ -503,10 +503,10 @@ class _ParticipantTileState extends State<ParticipantTile> {
         } // Never render a blank video surface — avatar is always the safe fallback.
         final bool hasVideo =
             _showVideo &&
-            activeVideoTrack != null &&
-            (isScreen
-                ? ClassroomParticipantUtils.hasScreenShareVideo(widget.participant)
-                : ClassroomParticipantUtils.hasCameraVideo(widget.participant));
+                activeVideoTrack != null &&
+                (isScreen
+                    ? ClassroomParticipantUtils.hasScreenShareVideo(widget.participant)
+                    : ClassroomParticipantUtils.hasCameraVideo(widget.participant));
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           decoration: BoxDecoration(
@@ -517,13 +517,13 @@ class _ParticipantTileState extends State<ParticipantTile> {
             border: widget.isMainStage
                 ? null
                 : Border.all(
-                    color: isSpotlighted
-                        ? Colors.amber
-                        : (isSpeaking
-                              ? Colors.greenAccent
-                              : Colors.white.withOpacity(0.05)),
-                    width: (isSpotlighted || isSpeaking) ? 3 : 1,
-                  ),
+              color: isSpotlighted
+                  ? Colors.amber
+                  : (isSpeaking
+                  ? Colors.greenAccent
+                  : Colors.white.withOpacity(0.05)),
+              width: (isSpotlighted || isSpeaking) ? 3 : 1,
+            ),
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
@@ -533,13 +533,13 @@ class _ParticipantTileState extends State<ParticipantTile> {
                   duration: const Duration(milliseconds: 300),
                   child: hasVideo
                       ? VideoTrackRenderer(
-                          activeVideoTrack!,
-                          fit: VideoViewFit.contain,
-                          mirrorMode: isMe
-                              ? VideoViewMirrorMode.mirror
-                              : VideoViewMirrorMode.off,
-                          key: ValueKey(activeVideoTrack.sid),
-                        )
+                    activeVideoTrack!,
+                    fit: VideoViewFit.contain,
+                    mirrorMode: isMe
+                        ? VideoViewMirrorMode.mirror
+                        : VideoViewMirrorMode.off,
+                    key: ValueKey(activeVideoTrack.sid),
+                  )
                       : _buildAvatar(nameToShow, widget.isMainStage),
                 ),
               ),

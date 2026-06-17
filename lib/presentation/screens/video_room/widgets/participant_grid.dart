@@ -95,7 +95,7 @@ class ParticipantGrid extends StatelessWidget {
             .toList();
     return Container(
       color: const Color(0xFF0F1014),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Expanded(
@@ -107,7 +107,9 @@ class ParticipantGrid extends StatelessWidget {
               forceShowScreen: resolution!.isScreenShare,
             ),
           ),
-          if (otherParticipants.isNotEmpty)
+          if (otherParticipants.isNotEmpty) ...[
+            // إزاحة ناحية اليسار (في العربية) لزيادة المسافة بين الطالب والمعلم
+            const SizedBox(width: 32),
             Container(
               width:
                   Responsive.isDesktop(context)
@@ -115,12 +117,12 @@ class ParticipantGrid extends StatelessWidget {
                       : Responsive.isTablet(context)
                       ? 180
                       : 120,
-              margin: const EdgeInsets.only(left: 12),
               child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 itemCount: otherParticipants.length,
                 itemBuilder:
                     (context, index) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.only(bottom: 16),
                       child: AspectRatio(
                         aspectRatio: 1.5,
                         child: ParticipantTile(
@@ -131,6 +133,7 @@ class ParticipantGrid extends StatelessWidget {
                     ),
               ),
             ),
+          ],
         ],
       ),
     );
